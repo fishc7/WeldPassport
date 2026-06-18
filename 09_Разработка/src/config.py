@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 
@@ -39,6 +40,15 @@ class Settings:
             "user": self.db_user,
             "password": self.db_password,
         }
+
+    @property
+    def database_url(self) -> str:
+        user = quote_plus(self.db_user)
+        password = quote_plus(self.db_password)
+        return (
+            f"postgresql+psycopg://{user}:{password}"
+            f"@{self.host}:{self.port}/{self.db_name}"
+        )
 
 
 settings = Settings.from_env()

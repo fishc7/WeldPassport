@@ -1,0 +1,73 @@
+<svg viewBox="0 0 1060 700" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d" font-family="Segoe UI, ui-sans-serif, system-ui, sans-serif">
+  <title id="t">Схема связей таблиц WeldPassport</title>
+  <desc id="d">Две иерархии — проекты (объекты, изометрии, стыки, факты сварки, контроль) и работники (сварщики, документы, аттестации, допуски) — соединяются через таблицы-агрегаторы УЧАСТНИКИ_СВАРКИ и ДОПУСКИ_К_ОБЪЕКТУ.</desc>
+  <style>
+    .box { stroke-width: 1.5; }
+    .lbl { font-size: 13px; font-weight: 600; text-anchor: middle; dominant-baseline: middle; }
+    .proj  { fill:#e8f0fe; stroke:#4285f4; }
+    .proj-t{ fill:#174ea6; }
+    .work  { fill:#e6f4ea; stroke:#34a853; }
+    .work-t{ fill:#0d652d; }
+    .junc  { fill:#fef7e0; stroke:#f9ab00; stroke-width:2; }
+    .junc-t{ fill:#b06000; }
+    .edge-proj { stroke:#4285f4; stroke-width:1.6; fill:none; }
+    .edge-work { stroke:#34a853; stroke-width:1.6; fill:none; }
+    .edge-agg  { stroke:#f9ab00; stroke-width:1.6; fill:none; stroke-dasharray:6 4; }
+    .leg { font-size:12px; fill:#5f6368; }
+  </style>
+
+  <defs>
+    <marker id="ahp" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4285f4"/>
+    </marker>
+    <marker id="ahw" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#34a853"/>
+    </marker>
+    <marker id="aha" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f9ab00"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1060" height="700" fill="#ffffff"/>
+
+  <!-- ===== EDGES ===== -->
+  <path class="edge-proj" marker-end="url(#ahp)" d="M130,79 L130,146"/>
+  <path class="edge-proj" marker-end="url(#ahp)" d="M130,194 L130,261"/>
+  <path class="edge-proj" marker-end="url(#ahp)" d="M130,309 L130,376"/>
+  <path class="edge-proj" marker-end="url(#ahp)" d="M130,424 L75,496"/>
+  <path class="edge-proj" marker-end="url(#ahp)" d="M130,424 L245,496"/>
+  <path class="edge-work" marker-end="url(#ahw)" d="M840,79 L840,146"/>
+  <path class="edge-work" marker-end="url(#ahw)" d="M840,194 L600,276"/>
+  <path class="edge-work" marker-end="url(#ahw)" d="M840,194 L770,276"/>
+  <path class="edge-work" marker-end="url(#ahw)" d="M840,194 L940,276"/>
+  <path class="edge-agg" marker-end="url(#aha)" d="M205,170 C300,200 340,360 395,420"/>
+  <path class="edge-agg" marker-end="url(#aha)" d="M840,194 C760,330 640,400 548,432"/>
+  <path class="edge-agg" marker-end="url(#aha)" d="M75,544 C160,600 260,608 362,610"/>
+  <path class="edge-agg" marker-end="url(#aha)" d="M915,68 C990,300 720,560 518,602"/>
+  <path class="edge-agg" marker-end="url(#aha)" d="M840,194 C770,420 640,560 518,608"/>
+
+  <!-- ===== NODES ===== -->
+  <g><rect class="box proj" rx="10" ry="10" x="55" y="31" width="150" height="48"/><text class="lbl proj-t" x="130" y="55">ПРОЕКТЫ</text></g>
+  <g><rect class="box proj" rx="10" ry="10" x="55" y="146" width="150" height="48"/><text class="lbl proj-t" x="130" y="170">ОБЪЕКТЫ</text></g>
+  <g><rect class="box proj" rx="10" ry="10" x="55" y="261" width="150" height="48"/><text class="lbl proj-t" x="130" y="285">ИЗОМЕТРИИ</text></g>
+  <g><rect class="box proj" rx="10" ry="10" x="55" y="376" width="150" height="48"/><text class="lbl proj-t" x="130" y="400">СТЫКИ</text></g>
+  <g><rect class="box proj" rx="10" ry="10" x="0" y="496" width="150" height="48"/><text class="lbl proj-t" x="75" y="513">ФАКТЫ</text><text class="lbl proj-t" x="75" y="528">СВАРКИ</text></g>
+  <g><rect class="box proj" rx="10" ry="10" x="170" y="496" width="150" height="48"/><text class="lbl proj-t" x="245" y="520">КОНТРОЛЬ</text></g>
+
+  <g><rect class="box work" rx="10" ry="10" x="765" y="31" width="150" height="48"/><text class="lbl work-t" x="840" y="55">РАБОТНИКИ</text></g>
+  <g><rect class="box work" rx="10" ry="10" x="765" y="146" width="150" height="48"/><text class="lbl work-t" x="840" y="170">СВАРЩИКИ</text></g>
+  <g><rect class="box work" rx="10" ry="10" x="525" y="276" width="150" height="48"/><text class="lbl work-t" x="600" y="293">ДОКУМЕНТЫ</text><text class="lbl work-t" x="600" y="308">СВАРЩИКА</text></g>
+  <g><rect class="box work" rx="10" ry="10" x="695" y="276" width="150" height="48"/><text class="lbl work-t" x="770" y="293">АТТЕСТАЦИИ</text><text class="lbl work-t" x="770" y="308">СВАРЩИКОВ</text></g>
+  <g><rect class="box work" rx="10" ry="10" x="865" y="276" width="150" height="48"/><text class="lbl work-t" x="940" y="293">ВНУТРЕННИЕ</text><text class="lbl work-t" x="940" y="308">ДОПУСКИ</text></g>
+
+  <g><rect class="box junc" rx="10" ry="10" x="395" y="416" width="150" height="48"/><text class="lbl junc-t" x="470" y="433">ДОПУСКИ</text><text class="lbl junc-t" x="470" y="448">К ОБЪЕКТУ</text></g>
+  <g><rect class="box junc" rx="10" ry="10" x="365" y="586" width="150" height="48"/><text class="lbl junc-t" x="440" y="603">УЧАСТНИКИ</text><text class="lbl junc-t" x="440" y="618">СВАРКИ</text></g>
+
+  <!-- ===== LEGEND ===== -->
+  <g transform="translate(20,650)">
+    <rect class="box proj" rx="3" ry="3" x="0" y="0" width="22" height="14"/><text class="leg" x="28" y="11">проекты</text>
+    <rect class="box work" rx="3" ry="3" x="110" y="0" width="22" height="14"/><text class="leg" x="138" y="11">работники</text>
+    <rect class="box junc" rx="3" ry="3" x="230" y="0" width="22" height="14"/><text class="leg" x="258" y="11">таблицы-агрегаторы</text>
+    <line class="edge-agg" x1="430" y1="7" x2="470" y2="7"/><text class="leg" x="478" y="11">связь-агрегатор</text>
+  </g>
+</svg>
