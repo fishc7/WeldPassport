@@ -1,0 +1,18 @@
+.env
+**/.env
+
+# Ярлыки Google Drive (не хранят содержимое локально)
+*.gdoc
+*.gsheet
+*.gslides
+__pycache__/
+**/__pycache__/
+*.pyc
+.venv/
+**/.venv/
+
+# Локальные дампы и временные скрипты
+09_Разработка/scripts/_schema_dump.txt
+09_Разработка/scripts/_welder_tables.txt
+09_Разработка/scripts/_relations.json
+09_Разработка/scripts/_workers.json

@@ -1,0 +1,17 @@
+{
+  "sqltools.connections": [
+    {
+      "name": "WeldPassport",
+      "driver": "PostgreSQL",
+      "server": "localhost",
+      "port": 5432,
+      "database": "WeldPassport",
+      "username": "postgres",
+      "askForPassword": true,
+      "connectionTimeout": 15,
+      "pgOptions": {
+        "schema": "test"
+      }
+    }
+  ]
+}
