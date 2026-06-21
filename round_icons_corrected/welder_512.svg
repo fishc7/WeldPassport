@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <clipPath id="roundCrop">
+      <circle cx="256" cy="256" r="238"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#roundCrop)">
+    <circle cx="256" cy="256" r="238" fill="#fff"/>
+    <g fill="none" stroke="#123B91" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+
+    <path d="M178 190v-12c0-43 35-78 78-78s78 35 78 78v12"/>
+    <path d="M163 190h186"/>
+    <path d="M198 194h116l-12 79c-3 21-22 37-46 37s-43-16-46-37z"/>
+    <path d="M223 216h66v42h-66z"/>
+    <path d="M218 303v24l38 25 38-25v-24"/>
+    <path d="M218 319c-49 12-79 39-79 82v18h234v-18c0-43-30-70-79-82"/>
+    <path d="M242 101v45h28v-45"/>
+    <path d="M362 288l34-34"/>
+    <path d="M397 237v-18M414 254h18M407 244l13-13"/>
+
+    </g>
+  </g>
+  <circle cx="256" cy="256" r="238" fill="none" stroke="#123B91" stroke-width="10"/>
+</svg>
