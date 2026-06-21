@@ -1,6 +1,0 @@
-.env
-__pycache__/
-*.pyc
-.venv/
-scripts/_relations.json
-scripts/_schema_snapshot.json
