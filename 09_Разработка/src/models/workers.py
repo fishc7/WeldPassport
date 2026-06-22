@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import SCHEMA, Base
+
+if TYPE_CHECKING:
+    from models.spravochniki import DolzhnostETKS
 
 
 class Rabotnik(Base):
@@ -18,9 +22,15 @@ class Rabotnik(Base):
     fio: Mapped[str] = mapped_column("ФИО", String(255))
     tabelynyy_nomer: Mapped[str | None] = mapped_column("Табельный_Номер", String(50))
     dolzhnost: Mapped[str | None] = mapped_column("Должность", String(100))
+    id_dolzhnosti: Mapped[int | None] = mapped_column(
+        "ID_Должности",
+        ForeignKey(f"{SCHEMA}.СПРАВОЧНИК_ДОЛЖНОСТЕЙ.ID_Должности"),
+    )
     organizatsiya: Mapped[str | None] = mapped_column("Организация", String(255))
     data_priema: Mapped[date | None] = mapped_column("Дата_Приема", Date)
     status: Mapped[str | None] = mapped_column("Статус", String(50))
+
+    dolzhnost_ref: Mapped[DolzhnostETKS | None] = relationship("DolzhnostETKS", back_populates="rabotniki")
 
     svarshchiki: Mapped[list[Svarshchik]] = relationship(back_populates="rabotnik")
     uchastniki_svarки: Mapped[list[UchastnikSvarки]] = relationship(

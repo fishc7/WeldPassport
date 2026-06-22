@@ -1,6 +1,7 @@
 from models.base import Base
 from models.production import FaktSvarки, Kontrol, UchastnikSvarки
 from models.projects import Izometriya, Obekt, Proekt, Styk
+from models.spravochniki import DolzhnostETKS
 from models.welders import (
     AttestatsiyaSvarshchika,
     DokumentSvarshchika,
@@ -13,6 +14,7 @@ __all__ = [
     "AttestatsiyaSvarshchika",
     "Base",
     "DokumentSvarshchika",
+    "DolzhnostETKS",
     "DopuskKObektu",
     "FaktSvarки",
     "Izometriya",
