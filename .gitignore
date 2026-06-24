@@ -7,6 +7,7 @@ __pycache__/
 *.pyc
 .venv/
 **/.venv/
+.worktrees/
 
 # Google Drive ярлыки
 *.gdoc
