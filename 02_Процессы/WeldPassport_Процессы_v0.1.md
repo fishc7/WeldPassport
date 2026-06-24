@@ -1,6 +1,6 @@
 # WeldPassport — Процессы v0.1
 
-Источник: [Google Docs](https://docs.google.com/document/d/173gnWKrV4Bt9V2kFhww26nojz5UEDv8h1R8WlgMw1bE)
+Источник: [D:\WeldPassport]
 
 ## 1. Подготовка сварщика
 
