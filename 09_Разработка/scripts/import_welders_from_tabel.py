@@ -96,6 +96,13 @@ def _get_existing(conn) -> dict[str, int]:
         return {row["ФИО"]: row["ID_Работника"] for row in cur.fetchall()}
 
 
+def _get_svarshchik_ids(conn) -> set[int]:
+    """Вернуть множество ID_Работника у которых уже есть запись СВАРЩИКИ."""
+    with conn.cursor() as cur:
+        cur.execute(f'SELECT "ID_Работника" FROM "{settings.db_schema}"."СВАРЩИКИ"')
+        return {row["ID_Работника"] for row in cur.fetchall()}
+
+
 def _insert_rabotnik(conn, fio: str, dolzhnost: str, organizatsiya: str) -> int:
     with conn.cursor() as cur:
         cur.execute(
@@ -189,10 +196,17 @@ def main() -> int:
     # --- Сравнить с БД ---
     with get_connection() as conn:
         existing = _get_existing(conn)
+        existing_svar_ids = _get_svarshchik_ids(conn)
 
     existing_fio = set(existing.keys())
 
+    # Точные совпадения: уже в РАБОТНИКИ. Среди них — кому нужна СВАРЩИКИ
     exact_dupes = {fio for fio in unique if fio in existing_fio}
+    need_svar_only = {
+        fio: existing[fio]
+        for fio in exact_dupes
+        if existing[fio] not in existing_svar_ids
+    }
     to_add = {fio: dol for fio, dol in unique.items() if fio not in existing_fio}
 
     # Найти похожие (возможные дубли из-за опечаток)
@@ -204,9 +218,11 @@ def main() -> int:
 
     # --- Вывод отчёта ---
     if exact_dupes:
-        print(f"\nТочные совпадения в базе ({len(exact_dupes)} чел.) — пропущены:")
+        print(f"\nТочные совпадения в базе ({len(exact_dupes)} чел.) — РАБОТНИКИ уже есть:")
         for fio in sorted(exact_dupes):
-            print(f"  = {fio}")
+            marker = "+" if fio in need_svar_only else "="
+            suffix = " (нет СВАРЩИКИ — создадим)" if fio in need_svar_only else ""
+            print(f"  {marker} {fio}{suffix}")
 
     if similar_warnings:
         print(f"\nПохожие имена — возможные опечатки ({len(similar_warnings)} чел.):")
@@ -218,11 +234,14 @@ def main() -> int:
         marker = "⚠" if fio in similar_warnings else "+"
         print(f"  {marker} {fio} ({dol})")
 
+    if need_svar_only:
+        print(f"\nДозаписать СВАРЩИКИ (уже в РАБОТНИКИ): {len(need_svar_only)} чел.")
+
     if dry_run:
         print("\n[--dry-run] Запись в БД не выполнялась.")
         return 0
 
-    if not to_add:
+    if not to_add and not need_svar_only:
         print("Новых записей нет.")
         return 0
 
@@ -233,11 +252,18 @@ def main() -> int:
 
     # --- Запись в БД ---
     inserted = 0
+    svar_backfilled = 0
     skipped_by_user = 0
 
     with get_connection() as conn:
+        # Дозаполнить СВАРЩИКИ для тех кто уже в РАБОТНИКИ
+        for fio, id_rab in need_svar_only.items():
+            _insert_svarshchik(conn, id_rab)
+            print(f"  СВАРЩИКИ дозаписан: {fio}")
+            svar_backfilled += 1
+
+        # Добавить новых работников + сварщиков
         for fio, dol in to_add.items():
-            # Если есть похожее — спросить
             if fio in similar_warnings:
                 decision = _ask_duplicate(fio, similar_warnings[fio])
                 if decision == "skip":
@@ -250,7 +276,12 @@ def main() -> int:
             print(f"  ДОБАВЛЕН: {fio}")
             inserted += 1
 
-    print(f"\nГотово. Добавлено: {inserted}, пропущено вами: {skipped_by_user}.")
+    parts = [f"добавлено новых: {inserted}"]
+    if svar_backfilled:
+        parts.append(f"СВАРЩИКИ дозаписано: {svar_backfilled}")
+    if skipped_by_user:
+        parts.append(f"пропущено вами: {skipped_by_user}")
+    print(f"\nГотово. {', '.join(parts)}.")
     return 0
 
 

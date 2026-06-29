@@ -89,7 +89,8 @@ def main() -> int:
             copied += 1
             continue
 
-        shutil.copy2(src, dst)
+        import subprocess
+        subprocess.run(["powershell", "-Command", f'Copy-Item "{src}" "{dst}"'], check=True)
         print(f"  скопировано: {dst_name}")
         copied += 1
 
