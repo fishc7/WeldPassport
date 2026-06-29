@@ -39,6 +39,8 @@ docs/                      каноничная документация (чит
     models/                ORM-модели (base, workers, welders, projects,
                            production, spravochniki)
   scripts/                 разовые/служебные скрипты (импорт, схема, проверки)
+  backend/                 каркас FastAPI (app/ по модулям, migrations/, tests/,
+                           alembic.ini) — целевой backend MVP
   requirements.txt         зависимости Python
   .env.example             шаблон переменных окружения
 00_Паспорт_проекта/        паспорт, ТЗ, миссия
