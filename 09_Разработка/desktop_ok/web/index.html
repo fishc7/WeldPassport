@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ОК · Персонал</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">ОК</span>
+      <span class="brand-title">Персонал · WeldPassport</span>
+    </div>
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="workers">Персонал</button>
+      <button class="nav-tab" data-tab="import">Импорт табеля</button>
+      <button class="nav-tab" data-tab="ok1c">Импорт из 1С</button>
+    </nav>
+    <div id="workers-toolbar" class="toolbar">
+      <input id="search" type="search" placeholder="Быстрый поиск по всем полям…" />
+      <button id="btn-add" class="btn btn-primary">+ Добавить работника</button>
+    </div>
+    <div id="import-toolbar" class="toolbar" hidden></div>
+  </header>
+
+  <!-- ── Вкладка: Персонал ── -->
+  <div id="tab-workers" class="tab-pane">
+    <main class="content">
+      <div id="status" class="status"></div>
+      <div class="table-wrap">
+        <table class="grid">
+          <thead>
+            <tr class="head-row">
+              <th style="width:48px">#</th>
+              <th>ФИО</th>
+              <th style="width:120px">Табельный</th>
+              <th>Должность</th>
+              <th>Организация</th>
+              <th style="width:120px">Дата приёма</th>
+              <th style="width:120px">Дата увольн.</th>
+              <th style="width:110px">Статус</th>
+              <th style="width:90px">Сварщик</th>
+            </tr>
+            <tr class="filter-row">
+              <th><button id="filters-clear" class="filters-clear" title="Сбросить фильтры">✕</button></th>
+              <th><input class="col-filter" data-col="fio" placeholder="фильтр…" /></th>
+              <th><input class="col-filter" data-col="tabelynyy_nomer" placeholder="фильтр…" /></th>
+              <th><select class="col-filter col-select" data-col="dolzhnost"></select></th>
+              <th><input class="col-filter" data-col="organizatsiya" placeholder="фильтр…" /></th>
+              <th><input class="col-filter" data-col="data_priema" placeholder="фильтр…" /></th>
+              <th><input class="col-filter" data-col="data_uvolneniya" placeholder="фильтр…" /></th>
+              <th><select class="col-filter col-select" data-col="status"></select></th>
+              <th>
+                <select class="col-filter col-select" data-col="is_welder">
+                  <option value="">все</option>
+                  <option value="yes">да</option>
+                  <option value="no">нет</option>
+                </select>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <div id="empty" class="empty" hidden>Ничего не найдено</div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ── Вкладка: Импорт табеля ── -->
+  <div id="tab-import" class="tab-pane" hidden>
+    <div class="import-wrap">
+
+      <!-- Шаг 1: выбор файлов -->
+      <section class="import-card">
+        <h3 class="import-card-title">Шаг 1 — Выберите файлы табеля</h3>
+        <div class="import-row">
+          <button id="btn-pick" class="btn btn-primary">Выбрать файлы…</button>
+          <span id="pick-label" class="pick-label muted">Файлы не выбраны</span>
+        </div>
+        <div class="import-row" style="margin-top:12px">
+          <label class="field-label-sm">Организация</label>
+          <input id="imp-org" class="imp-input" placeholder="М КРАН ООО" />
+        </div>
+        <div class="import-row" style="margin-top:16px">
+          <button id="btn-analyze" class="btn btn-primary" disabled>Анализировать</button>
+          <span id="imp-feedback" class="imp-feedback" style="margin-left:12px"></span>
+        </div>
+      </section>
+
+      <!-- Шаг 2: результат -->
+      <section id="imp-result" hidden>
+
+        <!-- Уволенные в табеле — предупреждение -->
+        <div id="imp-dismissed" hidden>
+          <div class="imp-group-title warn-title">
+            ⚠ В табеле есть уволенные — проверьте с ОК
+          </div>
+          <ul id="imp-dismissed-list" class="imp-list imp-list-warn"></ul>
+        </div>
+
+        <!-- Уже в базе -->
+        <div id="imp-exact" hidden>
+          <div class="imp-group-title ok-title">
+            ✓ Уже есть в базе
+          </div>
+          <ul id="imp-exact-list" class="imp-list imp-list-ok"></ul>
+        </div>
+
+        <!-- Нечёткие совпадения -->
+        <div id="imp-fuzzy" hidden>
+          <div class="imp-group-title fuzzy-title">
+            ? Похожие имена — нужно решить каждый случай
+          </div>
+          <div id="imp-fuzzy-list"></div>
+        </div>
+
+        <!-- Новые -->
+        <div id="imp-new" hidden>
+          <div class="imp-group-title new-title">
+            + Будут добавлены
+          </div>
+          <ul id="imp-new-list" class="imp-list imp-list-new"></ul>
+        </div>
+
+        <div id="imp-empty" class="empty" hidden>Все работники уже есть в базе</div>
+
+        <!-- Применить -->
+        <div class="import-row" style="margin-top:24px">
+          <button id="btn-apply" class="btn btn-primary" disabled>Применить импорт</button>
+          <span id="imp-status" class="muted" style="margin-left:12px"></span>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ── Вкладка: Импорт из 1С ── -->
+  <div id="tab-ok1c" class="tab-pane" hidden>
+    <div class="import-wrap">
+
+      <section class="import-card">
+        <h3 class="import-card-title">Шаг 1 — Выберите файл выгрузки 1С</h3>
+        <div class="import-row">
+          <button id="ok1c-pick" class="btn btn-primary">Выбрать файл…</button>
+          <span id="ok1c-pick-label" class="pick-label muted">Файл не выбран</span>
+        </div>
+        <div class="import-row" style="margin-top:12px">
+          <label class="field-label-sm">Организация (для новых записей)</label>
+          <input id="ok1c-org" class="imp-input" placeholder="М КРАН ООО" value="М КРАН ООО" />
+        </div>
+        <div class="import-row" style="margin-top:16px">
+          <button id="ok1c-analyze" class="btn btn-primary" disabled>Анализировать</button>
+          <span id="ok1c-feedback" class="imp-feedback" style="margin-left:12px"></span>
+        </div>
+        <p class="muted" style="margin-top:10px; max-width:640px">
+          Из 1С обновляются: Должность, Дата приёма, Дата увольнения, Статус.
+          Клеймо, разряд, табельный номер и организация существующих записей не трогаются.
+        </p>
+      </section>
+
+      <section id="ok1c-result" hidden>
+
+        <!-- Будут обновлены -->
+        <div id="ok1c-update" hidden>
+          <div class="imp-group-title">↻ Будут обновлены</div>
+          <ul id="ok1c-update-list" class="imp-list"></ul>
+        </div>
+
+        <!-- Будут добавлены -->
+        <div id="ok1c-new" hidden>
+          <div class="imp-group-title new-title">+ Будут добавлены</div>
+          <ul id="ok1c-new-list" class="imp-list imp-list-new"></ul>
+        </div>
+
+        <!-- Активны в БД, нет в 1С -->
+        <div id="ok1c-missing" hidden>
+          <div class="imp-group-title warn-title">
+            ⚠ Активны в базе, но отсутствуют в выгрузке — проверьте с ОК
+          </div>
+          <ul id="ok1c-missing-list" class="imp-list imp-list-warn"></ul>
+        </div>
+
+        <div id="ok1c-empty" class="empty" hidden>
+          База уже синхронизирована с выгрузкой — изменений нет
+        </div>
+
+        <div class="import-row" style="margin-top:24px">
+          <button id="ok1c-apply" class="btn btn-primary" disabled>Применить обновление</button>
+          <span id="ok1c-status" class="muted" style="margin-left:12px"></span>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Боковая панель: карточка / форма -->
+  <div id="overlay" class="overlay" hidden></div>
+  <aside id="panel" class="panel" hidden>
+    <div class="panel-head">
+      <h2 id="panel-title">Карточка работника</h2>
+      <button id="panel-close" class="btn-icon" title="Закрыть">×</button>
+    </div>
+    <div id="panel-body" class="panel-body"></div>
+  </aside>
+
+  <script src="app.js"></script>
+</body>
+</html>

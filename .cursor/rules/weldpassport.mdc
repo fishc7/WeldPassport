@@ -9,11 +9,9 @@ alwaysApply: true
 
 Перед изменением архитектуры, БД или кода всегда учитывай файлы:
 
-- docs/00_PROJECT_CONTEXT.md
-- docs/01_WELDPASSPORT_LIFECYCLE.md
-- docs/02_DATABASE_ARCHITECTURE.md
-- docs/03_ROLES_AND_WORKFLOW.md
-- docs/04_DEVELOPMENT_TASKS.md
+- AGENTS.md — единое руководство для AI-агентов проекта
+- docs/00_PROJECT_CONTEXT.md — назначение, жизненный цикл, модули
+- docs/ARCHITECTURE.md — архитектура, модель данных, API, деплой MVP
 
 Главный принцип системы:
 

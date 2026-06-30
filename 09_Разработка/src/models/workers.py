@@ -28,6 +28,7 @@ class Rabotnik(Base):
     )
     organizatsiya: Mapped[str | None] = mapped_column("Организация", String(255))
     data_priema: Mapped[date | None] = mapped_column("Дата_Приема", Date)
+    data_uvolneniya: Mapped[date | None] = mapped_column("Дата_Увольнения", Date)
     status: Mapped[str | None] = mapped_column("Статус", String(50))
 
     dolzhnost_ref: Mapped[DolzhnostETKS | None] = relationship("DolzhnostETKS", back_populates="rabotniki")
