@@ -1,1 +1,0 @@
-# Архитектура WeldPassport
