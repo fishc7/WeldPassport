@@ -1,21 +1,23 @@
 @echo off
-chcp 65001 >nul
-rem ── Запуск приложения ОК · Персонал (WeldPassport) ──
-rem Двойной клик по этому файлу открывает окно программы.
+rem ============================================================
+rem  WeldPassport - OK / Personnel
+rem  Dvoynoy klik po etomu faylu otkryvaet okno programmy.
+rem  (Tekst tut latinitsey namerenno - chtoby cmd ne lomalsya
+rem   na kirillice. Na rabotu programmy eto ne vliyaet.)
+rem ============================================================
 
-rem Переходим в папку, где лежит сам .bat (09_Разработка)
+rem Perehodim v papku, gde lezhit etot .bat (09_Razrabotka)
 cd /d "%~dp0"
 
-rem Корректная работа с кириллицей
+rem Podderzhka UTF-8 dlya Python
 set PYTHONUTF8=1
 
-echo Запуск приложения ОК · Персонал...
+echo Starting OK / Personnel app...
 python desktop_ok\main.py
 
-rem Если запуск завершился ошибкой — не закрывать окно сразу,
-rem чтобы можно было прочитать сообщение.
+rem Esli oshibka - ne zakryvat okno srazu, chtoby prochitat tekst
 if errorlevel 1 (
   echo.
-  echo [Ошибка запуска] Текст ошибки — выше. Нажмите любую клавишу для выхода.
+  echo [Launch error] See the message above. Press any key to exit.
   pause >nul
 )

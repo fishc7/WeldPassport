@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WeldPassport · Navbar — превью</title>
+  <link rel="stylesheet" href="./src/components/Navbar/Navbar.css" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "PT Sans", Arial, sans-serif; background: #fff; }
+    .demo { padding: 40px 24px; color: #6b7280; }
+  </style>
+</head>
+<body>
+  <!-- Статичное превью навбара без сборки. Рабочая версия — React-компонент
+       src/components/Navbar/Navbar.tsx. Активна роль «Сварщик» для примера. -->
+  <header class="wp-navbar">
+    <button type="button" class="wp-brand" aria-label="WeldPassport — на главную">
+      <img class="wp-brand__logo" src="./src/assets/icons/logo.png" alt="WeldPassport" />
+      <span class="wp-brand__title">WeldPassport</span>
+    </button>
+
+    <nav class="wp-roles-wrap" aria-label="Разделы системы">
+      <div class="wp-roles">
+        <button class="wp-role" title="Отдел кадров">
+          <span class="wp-role__icon"><img src="./src/assets/icons/hr.png" alt="ОК" /></span>
+          <span class="wp-role__code">ОК</span>
+        </button>
+        <button class="wp-role" title="Отдел подготовки производства">
+          <span class="wp-role__icon"><img src="./src/assets/icons/pto.png" alt="ПТО" /></span>
+          <span class="wp-role__code">ПТО</span>
+        </button>
+        <button class="wp-role" title="Производственный персонал">
+          <span class="wp-role__icon"><img src="./src/assets/icons/master.png" alt="Мастер / прораб" /></span>
+          <span class="wp-role__code">Мастер / прораб</span>
+        </button>
+        <button class="wp-role wp-role--active" title="Исполнитель" aria-pressed="true">
+          <span class="wp-role__icon"><img src="./src/assets/icons/welder.png" alt="Сварщик" /></span>
+          <span class="wp-role__code">Сварщик</span>
+        </button>
+        <button class="wp-role" title="ОГС">
+          <span class="wp-role__icon"><img src="./src/assets/icons/chief.png" alt="Главный сварщик" /></span>
+          <span class="wp-role__code">Главный сварщик</span>
+        </button>
+        <button class="wp-role" title="ОТК / НК">
+          <span class="wp-role__icon"><img src="./src/assets/icons/qc.png" alt="Контроль качества" /></span>
+          <span class="wp-role__code">Контроль качества</span>
+        </button>
+        <button class="wp-role" title="Материалы">
+          <span class="wp-role__icon"><img src="./src/assets/icons/mto.png" alt="МТО / кладовщик" /></span>
+          <span class="wp-role__code">МТО / кладовщик</span>
+        </button>
+      </div>
+    </nav>
+
+    <button type="button" class="wp-login">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+        <polyline points="10 17 15 12 10 7"></polyline>
+        <line x1="15" y1="12" x2="3" y2="12"></line>
+      </svg>
+      <span>Войти</span>
+    </button>
+  </header>
+
+  <div class="demo">Превью статично. Наведите курсор на разделы — видны hover-состояния. Рабочая интерактивная версия — в React (npm run dev).</div>
+</body>
+</html>

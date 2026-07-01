@@ -1,0 +1,11 @@
+/* Базовые стили приложения. Шрифт PT Sans подключается в Navbar.css. */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "PT Sans", Arial, sans-serif;
+  background: #ffffff;
+  color: #1f3a5f;
+}
