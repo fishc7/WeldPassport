@@ -1,5 +1,8 @@
+# Environment
 .env
 **/.env
+.env.local
+**/.env.local
 
 # Python
 __pycache__/
@@ -7,25 +10,34 @@ __pycache__/
 *.pyc
 .venv/
 **/.venv/
-.worktrees/
 
-# Google Drive ярлыки
-*.gdoc
-*.gsheet
-*.gslides
+# Node / frontend
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+*.tsbuildinfo
 
-# Obsidian и системные файлы Windows
+# IDE / system
+.vscode/
+.cursor/
 .obsidian/
 **/.obsidian/
 desktop.ini
 **/desktop.ini
 
-# Исходные данные с ПДн (табеля сотрудников) — хранятся локально
+# Git worktrees
+.worktrees/
+
+# Google Drive shortcuts
+*.gdoc
+*.gsheet
+*.gslides
+
+# Local incoming / personal data
+_Входящее/
 Работники/
 
-# Временные артефакты прогонов (импорт, проверки)
+# Temporary artifacts
 tools/
 09_Разработка/scripts/_*.txt
-
-# Входящее на разбор (черновики, выгрузки, в т.ч. с ПДн) — хранится локально
-_Входящее/
