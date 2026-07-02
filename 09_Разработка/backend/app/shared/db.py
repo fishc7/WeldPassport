@@ -13,7 +13,7 @@ engine = create_engine(settings.database_url)
 @event.listens_for(engine, "connect")
 def _set_search_path(dbapi_connection, _record):
     cursor = dbapi_connection.cursor()
-    cursor.execute(f'SET search_path TO "{SCHEMA}", public')
+    cursor.execute(f'SET search_path TO "{SCHEMA}", hr, public')
     cursor.close()
 
 

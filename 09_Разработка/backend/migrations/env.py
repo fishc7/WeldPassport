@@ -8,16 +8,17 @@ from sqlalchemy import create_engine, pool, text
 
 from app.shared.config import settings
 from app.shared.db import Base
-import app.workforce.models  # noqa: F401 — регистрирует модели в Base.metadata
+import app.hr.models  # noqa: F401
+import app.workforce.models  # noqa: F401
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# ConfigParser трактует '%' как синтаксис интерполяции, поэтому экранируем его.
+# Без этого любой alembic-вызов падает, если в пароле БД есть '%'.
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 
-# Таблицы, которыми управляет Alembic (только workforce на первом этапе).
-# Остальные таблицы в схеме (СТЫКИ, ОБЪЕКТЫ и т.д.) не трогаем.
-_MANAGED_TABLES = {
+WORKFORCE_MANAGED_TABLES = {
     "СПРАВОЧНИК_ДОЛЖНОСТЕЙ",
     "РАБОТНИКИ",
     "СВАРЩИКИ",
@@ -27,10 +28,19 @@ _MANAGED_TABLES = {
     "ДОПУСКИ_К_ОБЪЕКТУ",
 }
 
+HR_MANAGED_TABLES = {
+    "departments",
+    "positions",
+    "workers",
+}
+
 
 def include_object(obj, name, type_, reflected, compare_to):
     if type_ == "table":
-        return name in _MANAGED_TABLES
+        schema = getattr(obj, "schema", None)
+        if schema == "hr":
+            return name in HR_MANAGED_TABLES
+        return name in WORKFORCE_MANAGED_TABLES
     return True
 
 
@@ -53,7 +63,9 @@ def run_migrations_online() -> None:
     connectable = create_engine(settings.database_url, poolclass=pool.NullPool)
     with connectable.connect() as connection:
         connection.execute(
-            text(f'SET search_path TO "{settings.postgres_schema}", public')
+            text(
+                f'SET search_path TO "{settings.postgres_schema}", hr, public'
+            )
         )
         context.configure(
             connection=connection,
