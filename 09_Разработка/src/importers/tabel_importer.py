@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pandas as pd
 
-WELDER_TITLES = {"эл/сварщик", "эл/сварщик тт"}
+from importers.import_report import empty_import_report
+from importers.welder_titles import is_welder_dolzhnost
 
 
 def _norm(s: str) -> str:
@@ -17,7 +18,7 @@ def _norm(s: str) -> str:
 
 
 def _is_welder(title: str) -> bool:
-    return _norm(title) in WELDER_TITLES
+    return is_welder_dolzhnost(title)
 
 
 def _looks_like_name(value: str) -> bool:
@@ -53,8 +54,8 @@ def _extract_from_sheet(df: pd.DataFrame) -> list[tuple[str, str]]:
     return results
 
 
-def load_from_files(paths: list[Path]) -> tuple[dict[str, str], list[str]]:
-    """Читает Excel-файлы. Возвращает ({fio: dolzhnost}, [ошибки])."""
+def load_from_files(paths: list[Path]) -> tuple[dict[str, str], list[str], dict[str, int]]:
+    """Читает Excel-файлы. Возвращает ({fio: dolzhnost}, [ошибки], {файл: кол-во})."""
     found: list[tuple[str, str]] = []
     errors: list[str] = []
     file_counts: dict[str, int] = {}
@@ -64,8 +65,6 @@ def load_from_files(paths: list[Path]) -> tuple[dict[str, str], list[str]]:
             errors.append(f"Файл не найден: {p.name}")
             continue
         count = 0
-        # Контекст-менеджер обязателен: иначе хендл файла висит до сборки
-        # мусора и на Windows блокирует последующий перенос/удаление файла.
         with pd.ExcelFile(p) as xl:
             for sheet in xl.sheet_names:
                 df = pd.read_excel(xl, sheet_name=sheet, header=None, dtype=str)
@@ -83,19 +82,12 @@ def load_from_files(paths: list[Path]) -> tuple[dict[str, str], list[str]]:
 
 
 def analyze(unique: dict[str, str], conn) -> dict:
-    """Сравнивает со списком БД. Возвращает категоризированный diff.
-
-    Структура результата:
-        exact              — уже есть в РАБОТНИКИ (активные)
-        dismissed_in_tabel — есть в табеле, но статус 'уволен'
-        fuzzy              — похожие имена (нечёткое совпадение)
-        new                — новые, совпадений нет
-    """
+    """Сравнивает со списком БД. Возвращает категоризированный diff."""
     from config import settings
 
     with conn.cursor() as cur:
         cur.execute(
-            f'SELECT "ID_Работника", "ФИО", "Статус" '
+            f'SELECT "ID_Работника", "ФИО", "Должность", "Организация", "Статус" '
             f'FROM "{settings.db_schema}"."РАБОТНИКИ"'
         )
         db_rows = cur.fetchall()
@@ -104,7 +96,7 @@ def analyze(unique: dict[str, str], conn) -> dict:
         cur.execute(f'SELECT "ID_Работника" FROM "{settings.db_schema}"."СВАРЩИКИ"')
         svar_ids = {row["ID_Работника"] for row in cur.fetchall()}
 
-    existing = {row["ФИО"]: row["ID_Работника"] for row in db_rows}
+    existing = {row["ФИО"]: dict(row) for row in db_rows}
     dismissed_fio = {row["ФИО"] for row in db_rows if row["Статус"] == "уволен"}
     existing_fio = set(existing.keys())
 
@@ -116,15 +108,25 @@ def analyze(unique: dict[str, str], conn) -> dict:
         if fio in dismissed_fio
     ]
 
-    exact = [
-        {
+    exact = []
+    for fio in sorted(exact_dupes):
+        if fio in dismissed_fio:
+            continue
+        rec = existing[fio]
+        worker_id = rec["ID_Работника"]
+        dol_tabel = unique[fio]
+        changes: dict[str, object] = {}
+        if dol_tabel and dol_tabel != (rec["Должность"] or ""):
+            changes["Должность"] = dol_tabel
+        need_svar = is_welder_dolzhnost(dol_tabel) and worker_id not in svar_ids
+        db_org = rec["Организация"] or ""
+        exact.append({
             "fio": fio,
-            "id": existing[fio],
-            "need_svar": existing[fio] not in svar_ids,
-        }
-        for fio in sorted(exact_dupes)
-        if fio not in dismissed_fio
-    ]
+            "id": worker_id,
+            "need_svar": need_svar,
+            "changes": changes,
+            "db_organizatsiya": db_org,
+        })
 
     to_add_fio = {fio for fio in unique if fio not in existing_fio}
 
@@ -152,26 +154,56 @@ def apply(
     analysis: dict,
     fuzzy_decisions: dict[str, str],
     conn,
+    *,
+    read_errors: list[str] | None = None,
 ) -> dict:
     """Применяет импорт. fuzzy_decisions: {fio_new: 'add'|'skip'}."""
     from config import settings
 
-    inserted = 0
-    svar_backfilled = 0
-    skipped = 0
+    report = empty_import_report()
+    if read_errors:
+        report["errors"].extend(read_errors)
+
+    if analysis.get("dismissed_in_tabel"):
+        report["warnings"].append(
+            f"В табеле есть уволенные, уже присутствующие в базе: "
+            f"{len(analysis['dismissed_in_tabel'])}"
+        )
 
     with conn.cursor() as cur:
-        # Дозаполнить СВАРЩИКИ для тех кто уже в РАБОТНИКИ
         for item in analysis["exact"]:
+            worker_id = item["id"]
+            set_parts: list[str] = []
+            params: list[object] = []
+            for field, value in item.get("changes", {}).items():
+                set_parts.append(f'"{field}" = %s')
+                params.append(value)
+            if organizatsiya and organizatsiya != item.get("db_organizatsiya", ""):
+                set_parts.append('"Организация" = %s')
+                params.append(organizatsiya)
+            worker_changed = bool(set_parts)
+            if worker_changed:
+                params.append(worker_id)
+                cur.execute(
+                    f'UPDATE "{settings.db_schema}"."РАБОТНИКИ" '
+                    f'SET {", ".join(set_parts)} WHERE "ID_Работника" = %s',
+                    params,
+                )
+                report["updated"] += 1
+
             if item["need_svar"]:
                 cur.execute(
                     f'INSERT INTO "{settings.db_schema}"."СВАРЩИКИ" '
                     f'("ID_Работника","Статус_Сварщика") VALUES (%s,%s)',
-                    (item["id"], "активный"),
+                    (worker_id, "активный"),
                 )
-                svar_backfilled += 1
+                report["svar_backfilled"] += 1
+                if not worker_changed:
+                    report["updated"] += 1
 
-        # Новые работники без нечётких совпадений
+            if not worker_changed and not item["need_svar"]:
+                report["skipped"] += 1
+
         for item in analysis["new"]:
             cur.execute(
                 f'INSERT INTO "{settings.db_schema}"."РАБОТНИКИ" '
@@ -180,14 +212,15 @@ def apply(
                 (item["fio"], item["dolzhnost"], organizatsiya, "активный"),
             )
             id_rab = cur.fetchone()["ID_Работника"]
-            cur.execute(
-                f'INSERT INTO "{settings.db_schema}"."СВАРЩИКИ" '
-                f'("ID_Работника","Статус_Сварщика") VALUES (%s,%s)',
-                (id_rab, "активный"),
-            )
-            inserted += 1
+            if is_welder_dolzhnost(item["dolzhnost"]):
+                cur.execute(
+                    f'INSERT INTO "{settings.db_schema}"."СВАРЩИКИ" '
+                    f'("ID_Работника","Статус_Сварщика") VALUES (%s,%s)',
+                    (id_rab, "активный"),
+                )
+                report["svar_backfilled"] += 1
+            report["added"] += 1
 
-        # Нечёткие совпадения — по решению пользователя
         for item in analysis["fuzzy"]:
             decision = fuzzy_decisions.get(item["fio_new"], "skip")
             if decision == "add":
@@ -198,13 +231,15 @@ def apply(
                     (item["fio_new"], item["dolzhnost"], organizatsiya, "активный"),
                 )
                 id_rab = cur.fetchone()["ID_Работника"]
-                cur.execute(
-                    f'INSERT INTO "{settings.db_schema}"."СВАРЩИКИ" '
-                    f'("ID_Работника","Статус_Сварщика") VALUES (%s,%s)',
-                    (id_rab, "активный"),
-                )
-                inserted += 1
+                if is_welder_dolzhnost(item["dolzhnost"]):
+                    cur.execute(
+                        f'INSERT INTO "{settings.db_schema}"."СВАРЩИКИ" '
+                        f'("ID_Работника","Статус_Сварщика") VALUES (%s,%s)',
+                        (id_rab, "активный"),
+                    )
+                    report["svar_backfilled"] += 1
+                report["added"] += 1
             else:
-                skipped += 1
+                report["skipped"] += 1
 
-    return {"inserted": inserted, "svar_backfilled": svar_backfilled, "skipped": skipped}
+    return report

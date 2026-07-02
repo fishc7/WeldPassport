@@ -8,7 +8,7 @@
 
 Поля, управляемые 1С (перезаписываются при изменении):
   РАБОТНИКИ: Должность, Дата_Приема, Дата_Увольнения, Статус
-  СВАРЩИКИ:  Статус_Сварщика
+  СВАРЩИКИ:  Статус_Сварщика (только для сварщиков)
 Поля, управляемые вручную (не трогаются):
   РАБОТНИКИ: Табельный_Номер, Организация
   СВАРЩИКИ:  Клеймо, Разряд, Основной_Способ_Сварки
@@ -20,6 +20,9 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
+
+from importers.import_report import empty_import_report
+from importers.welder_titles import is_welder_dolzhnost
 
 _PATRONYMIC_RE = re.compile(
     r"(о|е)в(ич|на)$|ич$|(ин)а$|овна$|евна$|ична$|иевна$|ьевич$|ьевна$",
@@ -67,10 +70,7 @@ def _status_from_uv(uv: date | None) -> str:
 
 
 def load_1c(path: Path) -> dict[str, dict]:
-    """Читает 1С-файл → {clean_fio: {raw, dolzhnost, data_priema, data_uv}}.
-
-    Для людей с несколькими периодами берём период с наибольшей Дата_Приема.
-    """
+    """Читает 1С-файл → {clean_fio: {raw, dolzhnost, data_priema, data_uv}}."""
     xl = pd.ExcelFile(path)
     sheet = "Лист_1" if "Лист_1" in xl.sheet_names else xl.sheet_names[0]
     df = pd.read_excel(path, sheet_name=sheet, header=None, dtype=str)
@@ -88,7 +88,7 @@ def load_1c(path: Path) -> dict[str, dict]:
             "Не найден заголовок «Сотрудник» — это точно выгрузка 1С по сотрудникам?"
         )
 
-    data = df.iloc[header_row + 1:].copy()
+    data = df.iloc[header_row + 1 :].copy()
     data.columns = range(len(data.columns))
     rows = data[data[1].notna() & (data[1] != "nan")]
 
@@ -120,13 +120,7 @@ def load_1c(path: Path) -> dict[str, dict]:
 
 
 def analyze(ok1c: dict[str, dict], conn) -> dict:
-    """Сравнивает 1С-снимок с БД. Возвращает категоризированный diff.
-
-    Структура (даты — объекты date, сериализуются на уровне api.py):
-        update          — есть в БД, изменились 1С-поля (или нет профиля СВАРЩИКИ)
-        add             — новых, совпадений нет
-        missing_from_1c — активные в БД, которых нет в выгрузке (предупреждение)
-    """
+    """Сравнивает 1С-снимок с БД. Возвращает категоризированный diff."""
     from config import settings
 
     with conn.cursor() as cur:
@@ -153,8 +147,8 @@ def analyze(ok1c: dict[str, dict], conn) -> dict:
 
     for clean_fio, info in ok1c.items():
         computed_status = _status_from_uv(info["data_uv"])
+        is_welder = is_welder_dolzhnost(info["dolzhnost"])
 
-        # Матчинг: точное → нечёткое (единственный кандидат)
         db_fio = clean_fio if clean_fio in db_all else None
         if db_fio is None:
             key = _first_two(clean_fio)
@@ -166,7 +160,7 @@ def analyze(ok1c: dict[str, dict], conn) -> dict:
             matched_db.add(db_fio)
             db_rec = db_all[db_fio]
             worker_id = db_rec["ID_Работника"]
-            need_svar = worker_id not in svar_map
+            need_svar = is_welder and worker_id not in svar_map
 
             fields: dict[str, object] = {}
             if info["dolzhnost"] and info["dolzhnost"] != (db_rec["Должность"] or ""):
@@ -179,7 +173,9 @@ def analyze(ok1c: dict[str, dict], conn) -> dict:
                 fields["Статус"] = computed_status
 
             need_svar_status_upd = (
-                not need_svar and svar_map.get(worker_id) != computed_status
+                is_welder
+                and not need_svar
+                and svar_map.get(worker_id) != computed_status
             )
 
             if fields or need_svar or need_svar_status_upd:
@@ -188,6 +184,7 @@ def analyze(ok1c: dict[str, dict], conn) -> dict:
                     "fio_ok": clean_fio,
                     "matched": "exact" if db_fio == clean_fio else "fuzzy",
                     "id": worker_id,
+                    "is_welder": is_welder,
                     "need_svar": need_svar,
                     "need_svar_status_upd": need_svar_status_upd,
                     "computed_status": computed_status,
@@ -201,6 +198,7 @@ def analyze(ok1c: dict[str, dict], conn) -> dict:
                 "data_priema": info["data_priema"],
                 "data_uv": info["data_uv"],
                 "status": computed_status,
+                "is_welder": is_welder,
             })
 
     missing_from_1c = sorted(
@@ -217,16 +215,21 @@ def analyze(ok1c: dict[str, dict], conn) -> dict:
 
 
 def apply(organizatsiya: str, analysis: dict, conn) -> dict:
-    """Применяет diff к БД. Возвращает счётчики."""
+    """Применяет diff к БД. Возвращает единый отчёт импорта."""
     from config import settings
 
-    updated = 0
-    svar_created = 0
-    added = 0
+    report = empty_import_report()
     today = date.today()
+
+    if analysis.get("missing_from_1c"):
+        report["warnings"].append(
+            f"Активные работники в базе, но отсутствуют в выгрузке 1С: "
+            f"{len(analysis['missing_from_1c'])}"
+        )
 
     with conn.cursor() as cur:
         for u in analysis["update"]:
+            worker_changed = False
             if u["fields"]:
                 set_parts = [f'"{k}" = %s' for k in u["fields"]]
                 params = list(u["fields"].values()) + [u["id"]]
@@ -235,37 +238,50 @@ def apply(organizatsiya: str, analysis: dict, conn) -> dict:
                     f'SET {", ".join(set_parts)} WHERE "ID_Работника" = %s',
                     params,
                 )
+                worker_changed = True
+
             if u["need_svar"]:
                 cur.execute(
                     f'INSERT INTO "{settings.db_schema}"."СВАРЩИКИ" '
                     f'("ID_Работника","Статус_Сварщика") VALUES (%s,%s)',
                     (u["id"], u["computed_status"]),
                 )
-                svar_created += 1
+                report["svar_backfilled"] += 1
             elif u["need_svar_status_upd"]:
                 cur.execute(
                     f'UPDATE "{settings.db_schema}"."СВАРЩИКИ" '
                     f'SET "Статус_Сварщика" = %s WHERE "ID_Работника" = %s',
                     (u["computed_status"], u["id"]),
                 )
-            if u["fields"] or u["need_svar"] or u["need_svar_status_upd"]:
-                updated += 1
+
+            if worker_changed or u["need_svar"] or u["need_svar_status_upd"]:
+                report["updated"] += 1
 
         for a in analysis["add"]:
             cur.execute(
                 f'INSERT INTO "{settings.db_schema}"."РАБОТНИКИ" '
                 f'("ФИО","Должность","Организация","Дата_Приема","Дата_Увольнения","Статус") '
                 f'VALUES (%s,%s,%s,%s,%s,%s) RETURNING "ID_Работника"',
-                (a["fio"], a["dolzhnost"], organizatsiya,
-                 a["data_priema"], a["data_uv"], a["status"]),
+                (
+                    a["fio"],
+                    a["dolzhnost"],
+                    organizatsiya,
+                    a["data_priema"],
+                    a["data_uv"],
+                    a["status"],
+                ),
             )
             id_rab = cur.fetchone()["ID_Работника"]
-            svar_status = "уволен" if (a["data_uv"] and a["data_uv"] <= today) else "активный"
-            cur.execute(
-                f'INSERT INTO "{settings.db_schema}"."СВАРЩИКИ" '
-                f'("ID_Работника","Статус_Сварщика") VALUES (%s,%s)',
-                (id_rab, svar_status),
-            )
-            added += 1
+            if a["is_welder"]:
+                svar_status = (
+                    "уволен" if (a["data_uv"] and a["data_uv"] <= today) else "активный"
+                )
+                cur.execute(
+                    f'INSERT INTO "{settings.db_schema}"."СВАРЩИКИ" '
+                    f'("ID_Работника","Статус_Сварщика") VALUES (%s,%s)',
+                    (id_rab, svar_status),
+                )
+                report["svar_backfilled"] += 1
+            report["added"] += 1
 
-    return {"updated": updated, "added": added, "svar_created": svar_created}
+    return report
