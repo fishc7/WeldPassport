@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.workforce.models import (
     AttestatsiyaSvarshchika,
@@ -23,7 +23,10 @@ class RabotnikRepo:
     def list(self, skip: int = 0, limit: int = 100) -> list[Rabotnik]:
         return (
             self.db.query(Rabotnik)
-            .options(joinedload(Rabotnik.dolzhnost_ref))
+            .options(
+                joinedload(Rabotnik.dolzhnost_ref),
+                selectinload(Rabotnik.svarshchiki),
+            )
             .offset(skip)
             .limit(limit)
             .all()
@@ -32,7 +35,10 @@ class RabotnikRepo:
     def get(self, id: int) -> Rabotnik | None:
         return (
             self.db.query(Rabotnik)
-            .options(joinedload(Rabotnik.dolzhnost_ref))
+            .options(
+                joinedload(Rabotnik.dolzhnost_ref),
+                selectinload(Rabotnik.svarshchiki),
+            )
             .filter(Rabotnik.id_rabotnika == id)
             .first()
         )

@@ -21,6 +21,7 @@ class RabotnikBase(BaseModel):
     id_dolzhnosti: int | None = None
     organizatsiya: str | None = None
     data_priema: date | None = None
+    data_uvolneniya: date | None = None
     status: str | None = None
 
 
@@ -34,6 +35,7 @@ class RabotnikUpdate(BaseModel):
     id_dolzhnosti: int | None = None
     organizatsiya: str | None = None
     data_priema: date | None = None
+    data_uvolneniya: date | None = None
     status: str | None = None
 
 
