@@ -2,7 +2,57 @@
 
 **Дата:** 2026-07-02  
 **Ветка:** `feature/ok-workers-mvp`  
-**Режим анализа:** только чтение, без изменений кода и без commit
+**Режим:** снимок на 2026-07-02; этап `feature/ok-workers-mvp` закрыт 2026-07-02
+
+---
+
+## Итог этапа `feature/ok-workers-mvp` (закрыт 2026-07-02)
+
+**Статус этапа:** завершён. Код закоммичен и отправлен на GitHub.
+
+| Параметр | Значение |
+|---|---|
+| Ветка | `feature/ok-workers-mvp` |
+| Remote | `origin/feature/ok-workers-mvp` @ `b64f5d0` |
+| Рабочее дерево | чистое (`nothing to commit, working tree clean`) |
+| Опережение `main` | 14 commit |
+| Backend tests | `3 passed` (`python -m pytest`, `test_hr_schemas.py`) |
+
+### Commit этапа
+
+| Hash | Сообщение |
+|---|---|
+| `b64f5d0` | feat(importers): improve OK imports reporting and welder detection |
+| `61e6b84` | feat(workforce): expose worker dismissal date and welders relation |
+| `8f77e64` | docs: add local project status report |
+| `7bf3a6c` | feat(hr): add OK workers MVP core |
+
+### Что сделано
+
+- **HR core ОК / Работники** — модуль `backend/app/hr/`, миграция `20260702_02_hr_core.py`, API `/api/v1/hr`, unit-тесты схем.
+- **Отчёт состояния** — этот файл добавлен в репозиторий.
+- **Legacy workforce** — дата увольнения и подгрузка связи работника со сварщиками.
+- **Импортёры ОК** — `import_report.py`, обработка ошибок/предупреждений, `welder_titles.py` для сварочных должностей.
+- **Уборка** — удалены `welder_roles.py` и PDF-отчёт из корня.
+
+### Текущий этап проекта
+
+`ОК → Работники`: HR core в Git и на GitHub. **Не завершён полностью:** миграция не применена на PostgreSQL, `desktop_ok` на legacy `WorkforceService`, интеграционные тесты API отсутствуют.
+
+### Следующий этап
+
+1. Применить миграцию Alembic:
+
+   ```text
+   cd 09_Разработка/backend
+   alembic upgrade head
+   ```
+
+2. Проверить HR API через Swagger: `/docs` → `/api/v1/hr`.
+
+3. Перевести `desktop_ok` на `HrService` (после проверки API).
+
+4. Добавить интеграционные тесты HR API.
 
 ---
 
@@ -11,42 +61,22 @@
 | Параметр | Значение |
 |---|---|
 | Текущая ветка | `feature/ok-workers-mvp` |
-| Базовая ветка | `main` (ветка опережает main на 10 коммитов) |
-| Стадия | Активная разработка модуля ОК / Работники; HR core закоммичен отдельным commit |
+| Remote | `origin/feature/ok-workers-mvp` (синхронизирована) |
+| Рабочее дерево | чистое |
+| Опережение `main` | 14 commit |
 
-### Последние 5 коммитов
+### Последние commit (этап + база)
 
-| Hash | Дата | Сообщение |
-|---|---|---|
-| `d94863e` | 2026-07-02 | docs: add WeldPassport design hubs and cross-links |
-| `7e54dda` | 2026-07-02 | docs: add project governance and chat index |
-| `e6b42ec` | 2026-07-01 | docs: prioritize workforce admission lifecycle |
-| `f35e671` | 2026-07-01 | docs: accept backend architecture baseline |
-| `e196773` | 2026-07-01 | gpt_00_2 |
+| Hash | Сообщение |
+|---|---|
+| `b64f5d0` | feat(importers): improve OK imports reporting and welder detection |
+| `61e6b84` | feat(workforce): expose worker dismissal date and welders relation |
+| `8f77e64` | docs: add local project status report |
+| `7bf3a6c` | feat(hr): add OK workers MVP core |
+| `d94863e` | docs: add WeldPassport design hubs and cross-links |
+| `7e54dda` | docs: add project governance and chat index |
 
-### Незакоммиченные изменения
-
-**Изменённые файлы (9):**
-
-- `09_Разработка/backend/app/main.py` — подключение HR-роутера
-- `09_Разработка/backend/app/shared/db.py` — поддержка схемы `hr`
-- `09_Разработка/backend/app/workforce/repository.py`
-- `09_Разработка/backend/app/workforce/schemas.py`
-- `09_Разработка/backend/migrations/env.py` — регистрация HR-моделей
-- `09_Разработка/backend/requirements.txt`
-- `09_Разработка/desktop_ok/api.py` — доработки моста для десктопа ОК
-- `09_Разработка/src/importers/ok1c_importer.py`
-- `09_Разработка/src/importers/tabel_importer.py`
-
-**Новые (untracked) файлы:**
-
-- `09_Разработка/backend/app/hr/` — полный HR-модуль (api, models, schemas, repository, services)
-- `09_Разработка/backend/migrations/versions/20260702_02_hr_core.py` — миграция схемы `hr`
-- `09_Разработка/backend/tests/test_hr_schemas.py`
-- `09_Разработка/src/importers/import_report.py`, `welder_roles.py`, `welder_titles.py`
-- `10_Проектирование_WeldPassport/03_Работники_и_сварщики/03_HR_модуль_workers_v0.1.md`
-
-**Вывод:** в Git зафиксированы документация и каркас backend (`workforce`), а текущая работа по новому HR-модулю ОК находится только на локальном диске.
+**Вывод:** HR core и сопутствующие доработки закоммичены и отправлены на GitHub. См. [Итог этапа](#итог-этапа-featureok-workers-mvp-закрыт-2026-07-02) выше.
 
 ---
 
@@ -83,7 +113,7 @@
 
 | Компонент | Путь | Статус |
 |---|---|---|
-| FastAPI backend | `09_Разработка/backend/` | Каркас + модули `workforce` (в Git), `hr` (локально) |
+| FastAPI backend | `09_Разработка/backend/` | Каркас + модули `workforce` и `hr` (в Git) |
 | Legacy ORM | `09_Разработка/src/models/` | Модели на кириллических таблицах (`РАБОТНИКИ`, `СВАРЩИКИ` и др.) |
 | React frontend | `09_Разработка/frontend/` | Vite + TS, демо-навбар, встроенный модуль ОК |
 | Desktop ОК | `09_Разработка/desktop_ok/` | pywebview + JS UI, мост к `WorkforceService` |
@@ -114,18 +144,16 @@
   - Слои: api → services → repository → SQLAlchemy
   - Заглушка auth: заголовок `X-User-Id`
 - **Legacy ORM** в `src/models/`: workers, welders, production, projects, spravochniki
-- **Alembic** настроен (`backend/migrations/env.py`), но ревизий в Git нет (только `.gitkeep`)
+- **HR-модуль** `backend/app/hr/` — целевая модель ОК в схеме PostgreSQL `hr`
+  - API `/api/v1/hr`: departments, positions, workers (CRUD + dismiss/activate)
+  - Миграция `20260702_02_hr_core.py` — `hr.departments`, `hr.positions`, `hr.workers`
+  - Unit-тесты Pydantic-схем (`test_hr_schemas.py`, `3 passed`)
+- **Alembic** настроен (`backend/migrations/env.py`), ревизия `20260702_02_hr_core` в Git
+- **Доработки импорта** табелей и 1С: `import_report.py`, `welder_titles.py`
+- **Документ** `03_HR_модуль_workers_v0.1.md`
 - **Скрипты**: создание таблиц, импорт сварщиков/табелей, проверка FK, seed должностей
 - **Frontend**: React-оболочка с навбаром ролей и встроенным `OkModule`
 - **Desktop ОК**: pywebview-приложение с UI и мостом к `WorkforceService`
-
-### Код (локально, не в Git)
-
-- **Новый HR-модуль** `backend/app/hr/` — целевая модель ОК в схеме PostgreSQL `hr`
-- **Миграция** `20260702_02_hr_core.py` — `hr.departments`, `hr.positions`, `hr.workers`
-- **Тесты** Pydantic-схем HR (без PostgreSQL)
-- **Доработки импорта** табелей и 1С
-- **Документ** `03_HR_модуль_workers_v0.1.md`
 
 ---
 
@@ -160,7 +188,7 @@
 | `03_База_данных/Модель_организаций_и_проектов.md` | Есть |
 | `10_Проектирование_WeldPassport/03_.../01_Модель_данных_Работники_и_сварщики_v0.1.md` | Есть |
 | `10_Проектирование_WeldPassport/03_.../02_План_реализации_...v0.1.md` | Есть (детальный план, большинство задач не выполнено) |
-| `10_Проектирование_WeldPassport/03_.../03_HR_модуль_workers_v0.1.md` | Есть (локально, untracked) |
+| `10_Проектирование_WeldPassport/03_.../03_HR_модуль_workers_v0.1.md` | Есть (в Git) |
 
 ### По модулям (только проектирование, без кода)
 
@@ -181,9 +209,8 @@
 
 | Файл | Статус |
 |---|---|
-| `backend/migrations/env.py` | В Git, доработан локально под `hr` |
-| `backend/migrations/versions/.gitkeep` | В Git (пусто) |
-| `backend/migrations/versions/20260702_02_hr_core.py` | **Только локально** — создаёт схему `hr` и 3 таблицы |
+| `backend/migrations/env.py` | В Git, поддержка схемы `hr` |
+| `backend/migrations/versions/20260702_02_hr_core.py` | В Git — создаёт схему `hr` и 3 таблицы; **не применена** на PostgreSQL |
 
 Отдельных SQL-файлов (`.sql`) в репозитории **нет**.
 
@@ -200,7 +227,7 @@
 | Схема | В коде / миграциях | Комментарий |
 |---|---|---|
 | `test` (или из `.env` `POSTGRES_SCHEMA`) | Да — legacy-таблицы | Основная рабочая схема через `create_tables.py` |
-| `hr` | Да — миграция `20260702_02_hr_core` (локально) | Новая целевая схема ОК |
+| `hr` | Да — миграция `20260702_02_hr_core` (в Git) | Новая целевая схема ОК; **не применена** на PostgreSQL |
 | `welding` | Нет | Только в архитектурных планах |
 | `norms` | Нет | Описано в документации (`base_norms`, `org_norms`) |
 | `periodic_kss` | Нет | Описано в документации (`kss_parties`) |
@@ -209,7 +236,7 @@
 
 | Таблица | Где | Статус |
 |---|---|---|
-| `workers` | `hr.workers` (миграция) | Описана, код готов, **не применена в Git** |
+| `workers` | `hr.workers` (миграция) | Код и миграция в Git; **не применена** на PostgreSQL |
 | `departments` | `hr.departments` | То же |
 | `positions` | `hr.positions` | То же |
 | `РАБОТНИКИ` | схема `test` | Создаётся скриптом, используется workforce + desktop_ok |
@@ -231,8 +258,7 @@
 ### FastAPI-приложение
 
 - Точка входа: `09_Разработка/backend/app/main.py`
-- В **Git**: подключён только `workforce_router` (`/api/v1`)
-- **Локально**: добавлен `hr_router` (`/api/v1/hr`)
+- В **Git**: подключены `workforce_router` (`/api/v1`) и `hr_router` (`/api/v1/hr`)
 
 ### Endpoints
 
@@ -247,7 +273,7 @@
 | GET | `/welders/{id}/admissions/internal` | Внутренние допуски |
 | GET | `/welders/{id}/admissions/site` | Допуски к объекту |
 
-#### HR (локально) — prefix `/api/v1/hr`
+#### HR (в Git) — prefix `/api/v1/hr`
 
 | Метод | Путь | Назначение |
 |---|---|---|
@@ -268,11 +294,11 @@
 | Модуль | Service | Repository | Статус |
 |---|---|---|---|
 | workforce | `WorkforceService` | `RabotnikRepo`, `SvarshchikRepo` | В Git, рабочий слой |
-| hr | `HrService` | `HrRepo` | Локально, полный CRUD + бизнес-правила |
+| hr | `HrService` | `HrRepo` | В Git, полный CRUD + бизнес-правила |
 
 ### Тесты
 
-- `backend/tests/test_hr_schemas.py` — 3 unit-теста Pydantic (локально)
+- `backend/tests/test_hr_schemas.py` — 3 unit-теста Pydantic (в Git, `3 passed`)
 - Интеграционных тестов API/БД для HR **нет**
 - План в `02_План_реализации_...` предусматривает pytest + Alembic — **не выполнен**
 
@@ -297,7 +323,7 @@
 **Legacy ORM и импорт:**
 
 - `src/models/workers.py`, `src/models/welders.py`
-- `src/importers/tabel_importer.py`, `ok1c_importer.py`, `welder_roles.py`, `welder_titles.py`
+- `src/importers/tabel_importer.py`, `ok1c_importer.py`, `import_report.py`, `welder_titles.py`
 - `scripts/import_welders.py`, `collect_tabeli.py`, `backfill_svarshchiki.py`
 
 **Desktop / Frontend:**
@@ -319,7 +345,7 @@
 | HR CRUD departments/positions/workers | Да (код) | Только FastAPI, **не desktop_ok** |
 | Импорт табелей Excel | Да | desktop_ok, scripts |
 | UI рабочего места ОК | Да (базовый) | desktop_ok + frontend |
-| Миграция `hr` | Файл есть | Не в Git, применение не подтверждено |
+| Миграция `hr` | Файл в Git | **Не применена** на PostgreSQL (`alembic upgrade head`) |
 
 ### Что только в документации
 
@@ -332,8 +358,8 @@
 
 ### Чего не хватает для первого рабочего CRUD (целевая модель `hr`)
 
-1. **Применить миграцию** HR-модуля и проверить CRUD через FastAPI
-2. **Применить миграцию** `alembic upgrade head` на PostgreSQL
+1. **Применить миграцию** `alembic upgrade head` на PostgreSQL
+2. **Проверить HR API** через Swagger (`/docs` → `/api/v1/hr`)
 3. **Переключить desktop_ok** с `WorkforceService` на `HrService` (или прокси-слой)
 4. **Интеграционные тесты** с реальной БД
 5. **Модуль companies** — сейчас `company_id` без FK
@@ -343,10 +369,10 @@
 
 ### Завершён ли модуль Работники?
 
-**Нет.** Модуль находится в состоянии **перехода**:
+**Частично.** HR core закоммичен и на GitHub, но полный цикл не закрыт:
 
 - Legacy-слой (`workforce` + `desktop_ok`) — **работает на старых таблицах**, даёт базовый CRUD
-- Целевой HR-слой (`hr`) — **код написан локально**, но не интегрирован, не в Git, миграция не зафиксирована
+- Целевой HR-слой (`hr`) — **код в Git**, миграция **не применена**, `desktop_ok` ещё не переведён
 - Документация и план реализации опережают код (people core, welder qualifications — не сделаны)
 
 ---
@@ -360,27 +386,28 @@
 | ТЗ ролей ОК и ОГС | Есть v0.1 |
 | Backend-каркас FastAPI | Есть |
 | Legacy workforce API + ORM | Рабочий каркас в Git |
-| HR API + ORM + миграция | Код готов локально, не завершён цикл |
+| HR API + ORM + миграция (`hr`) | В Git и на GitHub; миграция и проверка API — следующий шаг |
 | Desktop ОК (прототип) | Базовый UI + импорт табелей |
 | Frontend React | Оболочка + встраивание ОК |
-| Импорт Excel (табели, 1С) | Скрипты и доработки |
-| Alembic | Настроен, первая ревизия только локально |
+| Импорт Excel (табели, 1С) | Скрипты и доработки в Git |
+| Alembic | Настроен, ревизия `20260702_02_hr_core` в Git |
 | Производственные модули (стыки, НК, КСС) | Только документация и частичные ORM |
 
 ---
 
 ## 9. Что не завершено
 
-1. **Два источника истины** по работникам (legacy vs `hr`) без стратегии миграции
-2. **HR-модуль уже в Git**, но ещё не прошёл проверку миграции и интеграционное тестирование на БД
-3. **Миграции Alembic** — в Git пустая папка versions (кроме локального файла)
-4. **Модуль companies** — не реализован
-5. **План реализации v0.1** (people core, duplicates, eligibility) — не начат в коде
-6. **ОГС / допуски** — API read-only для legacy, нет команд проверки допуска
-7. **Identity / RBAC** — заглушка
-8. **Frontend** — только ОК, остальные роли — заглушки
-9. **Docker, CI/CD, деплой** — не реализованы
-10. **Схемы welding, norms, periodic_kss** — только в документации
+1. **Миграция `hr` не применена** на PostgreSQL (`alembic upgrade head`)
+2. **desktop_ok на legacy** `WorkforceService`, не на `HrService`
+3. **Два источника истины** по работникам (legacy vs `hr`) без стратегии миграции
+4. **HR API не проверен** end-to-end через Swagger после миграции
+5. **Модуль companies** — не реализован
+6. **План реализации v0.1** (people core, duplicates, eligibility) — не начат в коде
+7. **ОГС / допуски** — API read-only для legacy, нет команд проверки допуска
+8. **Identity / RBAC** — заглушка
+9. **Frontend** — только ОК, остальные роли — заглушки
+10. **Docker, CI/CD, деплой** — не реализованы
+11. **Схемы welding, norms, periodic_kss** — только в документации
 
 ---
 
@@ -389,7 +416,6 @@
 | Риск | Описание | Критичность |
 |---|---|---|
 | Дублирование модели работника | `РАБОТНИКИ` и `hr.workers` без связи | Высокая |
-| Незакоммиченный код | Потеря при сбое, нет истории решений | Средняя |
 | desktop_ok на legacy | UI не использует целевой HR API | Высокая |
 | `company_id` без FK | Нет валидации организации на уровне БД | Средняя |
 | Два `/workers` endpoint | Путаница для клиентов API | Средняя |
@@ -412,13 +438,12 @@
 
 ### Конкретные шаги (1–2 спринта)
 
-1. **Зафиксировать решение** legacy vs `hr` в `docs/project/DECISIONS.md` (миграция или bridge-таблица)
-2. **HR core уже закоммичен**; следующий шаг — применить миграцию и проверить API
-3. **Применить миграцию** и проверить CRUD через Swagger (`/docs`)
-4. **Перевести desktop_ok** на `HrService` для списка/карточки/приёма/увольнения
-5. **Добавить интеграционные тесты** HR API
-6. **Минимальный модуль companies** (таблица + FK) или явный seed `company_id=1`
-7. **После стабильного CRUD работников** — слой ОГС: связь `hr.workers` → `welder_profile`, команды допуска
+1. **Применить миграцию** `alembic upgrade head` и проверить `/api/v1/hr` через Swagger (`/docs`)
+2. **Зафиксировать решение** legacy vs `hr` в `docs/project/DECISIONS.md` (миграция или bridge-таблица)
+3. **Перевести desktop_ok** на `HrService` для списка/карточки/приёма/увольнения
+4. **Добавить интеграционные тесты** HR API
+5. **Минимальный модуль companies** (таблица + FK) или явный seed `company_id=1`
+6. **После стабильного CRUD работников** — слой ОГС: связь `hr.workers` → `welder_profile`, команды допуска
 
 ### Можно ли переходить к ОГС → сварочные допуски?
 
