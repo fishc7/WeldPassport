@@ -10,11 +10,11 @@
 
 Источником истины являются проектные файлы:
 
-- `docs/ARCHITECTURE.md`
-- `docs/project/DECISIONS.md`
-- `docs/project/PROJECT_SUMMARY.md`
-- `docs/project/ROADMAP.md`
-- `AGENTS.md`
+- [[docs/ARCHITECTURE|docs/ARCHITECTURE]]
+- [[docs/project/DECISIONS|docs/project/DECISIONS]]
+- [[docs/project/PROJECT_SUMMARY|docs/project/PROJECT_SUMMARY]]
+- [[docs/project/ROADMAP|docs/project/ROADMAP]]
+- [[AGENTS|AGENTS]]
 
 ## Главное правило
 
