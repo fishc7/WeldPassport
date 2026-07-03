@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.hr.models import Worker, WorkerRole
 from app.main import app
 from app.shared.db import SessionLocal, get_db
-from app.welding.models import Welder
+from app.welding.models import Welder, WelderAdmission
 
 
 def _db_available() -> bool:
@@ -118,6 +118,9 @@ def _cleanup_test_data(db: Session) -> Generator[None, None, None]:
         .all()
     ]
     if worker_ids:
+        db.query(WelderAdmission).filter(
+            WelderAdmission.worker_id.in_(worker_ids)
+        ).delete(synchronize_session=False)
         db.query(Welder).filter(Welder.worker_id.in_(worker_ids)).delete(
             synchronize_session=False
         )
@@ -136,6 +139,9 @@ def _cleanup_test_data(db: Session) -> Generator[None, None, None]:
         .all()
     ]
     if worker_ids:
+        db.query(WelderAdmission).filter(
+            WelderAdmission.worker_id.in_(worker_ids)
+        ).delete(synchronize_session=False)
         db.query(Welder).filter(Welder.worker_id.in_(worker_ids)).delete(
             synchronize_session=False
         )

@@ -11,3 +11,8 @@ class NotFoundError(HTTPException):
 class ConflictError(HTTPException):
     def __init__(self, detail: str) -> None:
         super().__init__(status_code=409, detail=detail)
+
+
+class ValidationError(HTTPException):
+    def __init__(self, detail: str) -> None:
+        super().__init__(status_code=422, detail=detail)
