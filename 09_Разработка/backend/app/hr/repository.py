@@ -185,3 +185,15 @@ class HrRepo:
         self.db.commit()
         self.db.refresh(role)
         return role
+
+    def has_active_worker_role(self, worker_id: int, role_code: str) -> bool:
+        return (
+            self.db.query(WorkerRole)
+            .filter(
+                WorkerRole.worker_id == worker_id,
+                WorkerRole.role_code == role_code,
+                WorkerRole.is_active.is_(True),
+            )
+            .first()
+            is not None
+        )

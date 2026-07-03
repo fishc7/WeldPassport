@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, event, pool
 from app.shared.config import settings
 from app.shared.db import Base
 import app.hr.models  # noqa: F401
+import app.welding.models  # noqa: F401
 import app.workforce.models  # noqa: F401
 
 config = context.config
@@ -35,12 +36,18 @@ HR_MANAGED_TABLES = {
     "worker_roles",
 }
 
+WELDING_MANAGED_TABLES = {
+    "welders",
+}
+
 
 def include_object(obj, name, type_, reflected, compare_to):
     if type_ == "table":
         schema = getattr(obj, "schema", None)
         if schema == "hr":
             return name in HR_MANAGED_TABLES
+        if schema == "welding":
+            return name in WELDING_MANAGED_TABLES
         return name in WORKFORCE_MANAGED_TABLES
     return True
 
@@ -70,7 +77,9 @@ def run_migrations_online() -> None:
     @event.listens_for(connectable, "connect")
     def _set_search_path(dbapi_connection, _record):
         cursor = dbapi_connection.cursor()
-        cursor.execute(f'SET search_path TO "{settings.postgres_schema}", hr, public')
+        cursor.execute(
+            f'SET search_path TO "{settings.postgres_schema}", hr, welding, public'
+        )
         cursor.close()
 
     with connectable.connect() as connection:
