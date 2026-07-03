@@ -1,0 +1,131 @@
+project: WeldPassport
+current_stage: ogs_welder_admissions
+current_branch: feature/ogs-welder-admissions-mvp
+updated_at: 2026-07-03
+
+summary:
+  total_progress: 38
+  current_focus: "ОГС → Допуски сварщика v0.1"
+  next_action: "Спроектировать таблицы допусков сварщика и связь с worker_id"
+
+modules:
+  - code: architecture
+    name: "Архитектура"
+    owner: "Архитектура / план"
+    status: stable
+    progress: 90
+    visible: true
+    note: "Цепочка ответственности и базовая модель закреплены."
+
+  - code: hr_workers
+    name: "ОК → Работники"
+    owner: "ОК"
+    status: done
+    progress: 100
+    branch: feature/ok-workers-mvp
+    visible: true
+    note: "hr.workers — базовая кадровая карточка. Роли вынесены в hr.worker_roles."
+
+  - code: ogs_welder_admissions
+    name: "ОГС → Допуски сварщика"
+    owner: "ОГС"
+    status: in_progress
+    progress: 15
+    branch: feature/ogs-welder-admissions-mvp
+    visible: true
+    note: "Текущий этап. Нужно отделить кадровую карточку от сварочных допусков."
+    inner_steps:
+      - code: domain_rules
+        name: "Правила предметной области"
+        status: in_progress
+        progress: 40
+        result: "Зафиксировано: сварщик = worker_id + клеймо + аттестация + проектный допуск."
+        next: "Уточнить минимальный состав допусков v0.1."
+
+      - code: db_design
+        name: "Архитектура таблиц"
+        status: next
+        progress: 10
+        result: "Пока только концепция."
+        next: "Определить таблицы welding.stamps, welding.certifications, welding.welder_admissions."
+
+      - code: migration
+        name: "Alembic-миграция"
+        status: planned
+        progress: 0
+        result: ""
+        next: "Создать миграцию после утверждения ER-схемы."
+
+      - code: models
+        name: "SQLAlchemy-модели"
+        status: planned
+        progress: 0
+        result: ""
+        next: "Добавить модели после миграции."
+
+      - code: schemas
+        name: "Pydantic-схемы"
+        status: planned
+        progress: 0
+        result: ""
+        next: "Описать create/read/update-схемы."
+
+      - code: api
+        name: "API endpoints"
+        status: planned
+        progress: 0
+        result: ""
+        next: "Добавить CRUD endpoints для допусков."
+
+      - code: tests
+        name: "Проверки и тесты"
+        status: planned
+        progress: 0
+        result: ""
+        next: "Проверить миграции, compileall, pytest."
+
+      - code: docs
+        name: "Документация"
+        status: planned
+        progress: 0
+        result: ""
+        next: "Обновить ER-схему и описание модуля."
+
+      - code: git
+        name: "Commit / push"
+        status: planned
+        progress: 0
+        result: ""
+        next: "Сделать commit после зелёных проверок."
+
+  - code: smp_fact
+    name: "СМР → Факт выполнения"
+    owner: "Мастер / прораб"
+    status: planned
+    progress: 0
+    visible: true
+    note: "Будущий этап: фиксация факта сварки и исполнителей."
+
+  - code: pto_docs
+    name: "ПТО → Исполнительная"
+    owner: "ПТО"
+    status: planned
+    progress: 0
+    visible: true
+    note: "Будущий этап: исполнительная документация."
+
+  - code: quality
+    name: "ОТК → Контроль качества"
+    owner: "ОТК / НК"
+    status: planned
+    progress: 0
+    visible: true
+    note: "Будущий этап: контроль, брак, НК, КСС."
+
+  - code: closure
+    name: "Закрытие истории стыка"
+    owner: "WeldPassport"
+    status: planned
+    progress: 0
+    visible: true
+    note: "Финальная цель: полная история стыка."
