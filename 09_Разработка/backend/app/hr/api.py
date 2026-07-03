@@ -14,6 +14,9 @@ from app.hr.schemas import (
     WorkerDismiss,
     WorkerListFilters,
     WorkerOut,
+    WorkerRoleCreate,
+    WorkerRoleOut,
+    WorkerRoleUpdate,
     WorkerUpdate,
 )
 from app.hr.services import HrService, to_worker_card, to_worker_out
@@ -169,3 +172,68 @@ def activate_worker(
     _uid: int = Depends(get_current_user_id),
 ):
     return to_worker_card(svc.activate_worker(worker_id))
+
+
+# ── Роли работника ───────────────────────────────────────────────────────────
+
+@router.get("/workers/{worker_id}/roles", response_model=list[WorkerRoleOut])
+def list_worker_roles(
+    worker_id: int,
+    svc: HrService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_worker_roles(worker_id)
+
+
+@router.post(
+    "/workers/{worker_id}/roles",
+    response_model=WorkerRoleOut,
+    status_code=201,
+)
+def assign_worker_role(
+    worker_id: int,
+    data: WorkerRoleCreate,
+    svc: HrService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.assign_worker_role(worker_id, data)
+
+
+@router.patch(
+    "/workers/{worker_id}/roles/{role_id}",
+    response_model=WorkerRoleOut,
+)
+def update_worker_role(
+    worker_id: int,
+    role_id: int,
+    data: WorkerRoleUpdate,
+    svc: HrService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.update_worker_role(worker_id, role_id, data)
+
+
+@router.post(
+    "/workers/{worker_id}/roles/{role_id}/deactivate",
+    response_model=WorkerRoleOut,
+)
+def deactivate_worker_role(
+    worker_id: int,
+    role_id: int,
+    svc: HrService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.deactivate_worker_role(worker_id, role_id)
+
+
+@router.post(
+    "/workers/{worker_id}/roles/{role_id}/activate",
+    response_model=WorkerRoleOut,
+)
+def activate_worker_role(
+    worker_id: int,
+    role_id: int,
+    svc: HrService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.activate_worker_role(worker_id, role_id)

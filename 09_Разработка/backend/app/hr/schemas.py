@@ -5,6 +5,19 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validat
 
 EmploymentStatus = Literal["active", "dismissed", "suspended"]
 
+WorkerRoleCode = Literal[
+    "WELDER",
+    "FOREMAN",
+    "PTO_ENGINEER",
+    "OTK_INSPECTOR",
+    "NDT_SPECIALIST",
+    "OGS_ENGINEER",
+    "CONFIRMING_PERSON",
+    "CLOSING_RESPONSIBLE",
+]
+
+ScopeType = Literal["GLOBAL", "COMPANY", "PROJECT", "SITE"]
+
 
 class DepartmentBase(BaseModel):
     company_id: int
@@ -123,10 +136,43 @@ class WorkerOut(WorkerBase):
         return " ".join(parts)
 
 
+class WorkerRoleBase(BaseModel):
+    role_code: WorkerRoleCode
+    scope_type: ScopeType = "GLOBAL"
+    scope_id: int | None = None
+    valid_from: date | None = None
+    valid_to: date | None = None
+    note: str | None = None
+
+
+class WorkerRoleCreate(WorkerRoleBase):
+    pass
+
+
+class WorkerRoleUpdate(BaseModel):
+    scope_type: ScopeType | None = None
+    scope_id: int | None = None
+    valid_from: date | None = None
+    valid_to: date | None = None
+    is_active: bool | None = None
+    note: str | None = None
+
+
+class WorkerRoleOut(WorkerRoleBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    worker_id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 class WorkerCard(WorkerOut):
     department: DepartmentOut | None = None
     position: PositionOut | None = None
     company: CompanyRef
+    roles: list[WorkerRoleOut] = Field(default_factory=list)
 
 
 class WorkerListFilters(BaseModel):

@@ -1,7 +1,7 @@
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.hr.models import Department, Position, Worker
+from app.hr.models import Department, Position, Worker, WorkerRole
 from app.hr.schemas import WorkerListFilters
 
 
@@ -113,7 +113,11 @@ class HrRepo:
     def get_worker(self, worker_id: int) -> Worker | None:
         return (
             self.db.query(Worker)
-            .options(joinedload(Worker.department), joinedload(Worker.position))
+            .options(
+                joinedload(Worker.department),
+                joinedload(Worker.position),
+                selectinload(Worker.worker_roles),
+            )
             .filter(Worker.id == worker_id)
             .first()
         )
@@ -130,3 +134,54 @@ class HrRepo:
         result = self.get_worker(worker.id)
         assert result is not None
         return result
+
+    # --- worker roles ---
+
+    def list_worker_roles(self, worker_id: int) -> list[WorkerRole]:
+        return (
+            self.db.query(WorkerRole)
+            .filter(WorkerRole.worker_id == worker_id)
+            .order_by(WorkerRole.role_code, WorkerRole.scope_type)
+            .all()
+        )
+
+    def get_worker_role(self, worker_id: int, role_id: int) -> WorkerRole | None:
+        return (
+            self.db.query(WorkerRole)
+            .filter(WorkerRole.worker_id == worker_id, WorkerRole.id == role_id)
+            .first()
+        )
+
+    def find_active_role_duplicate(
+        self,
+        *,
+        worker_id: int,
+        role_code: str,
+        scope_type: str,
+        scope_id: int | None,
+        exclude_role_id: int | None = None,
+    ) -> WorkerRole | None:
+        q = self.db.query(WorkerRole).filter(
+            WorkerRole.worker_id == worker_id,
+            WorkerRole.role_code == role_code,
+            WorkerRole.scope_type == scope_type,
+            WorkerRole.is_active.is_(True),
+        )
+        if scope_id is None:
+            q = q.filter(WorkerRole.scope_id.is_(None))
+        else:
+            q = q.filter(WorkerRole.scope_id == scope_id)
+        if exclude_role_id is not None:
+            q = q.filter(WorkerRole.id != exclude_role_id)
+        return q.first()
+
+    def create_worker_role(self, role: WorkerRole) -> WorkerRole:
+        self.db.add(role)
+        self.db.commit()
+        self.db.refresh(role)
+        return role
+
+    def save_worker_role(self, role: WorkerRole) -> WorkerRole:
+        self.db.commit()
+        self.db.refresh(role)
+        return role

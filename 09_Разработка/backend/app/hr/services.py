@@ -3,7 +3,7 @@ from datetime import date
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.hr.models import Department, Position, Worker
+from app.hr.models import Department, Position, Worker, WorkerRole
 from app.hr.repository import HrRepo
 from app.hr.schemas import (
     CompanyRef,
@@ -18,6 +18,9 @@ from app.hr.schemas import (
     WorkerDismiss,
     WorkerListFilters,
     WorkerOut,
+    WorkerRoleCreate,
+    WorkerRoleOut,
+    WorkerRoleUpdate,
     WorkerUpdate,
 )
 from app.shared.errors import ConflictError, NotFoundError
@@ -28,6 +31,10 @@ def to_worker_out(worker: Worker) -> WorkerOut:
 
 
 def to_worker_card(worker: Worker) -> WorkerCard:
+    roles = sorted(
+        worker.worker_roles,
+        key=lambda r: (r.role_code, r.scope_type, r.scope_id or 0),
+    )
     return WorkerCard(
         **to_worker_out(worker).model_dump(),
         department=(
@@ -39,6 +46,7 @@ def to_worker_card(worker: Worker) -> WorkerCard:
             PositionOut.model_validate(worker.position) if worker.position else None
         ),
         company=CompanyRef(id=worker.company_id),
+        roles=[WorkerRoleOut.model_validate(r) for r in roles],
     )
 
 
@@ -194,6 +202,124 @@ class HrService:
         worker.employment_status = "active"
         worker.dismissal_date = None
         return self._repo.save_worker(worker)
+
+    # --- worker roles ---
+
+    def list_worker_roles(self, worker_id: int) -> list[WorkerRole]:
+        self.get_worker(worker_id)
+        return self._repo.list_worker_roles(worker_id)
+
+    def assign_worker_role(self, worker_id: int, data: WorkerRoleCreate) -> WorkerRole:
+        worker = self.get_worker(worker_id)
+        if worker.employment_status == "dismissed":
+            raise ConflictError(
+                "Нельзя назначить активную роль уволенному работнику (dismissed)"
+            )
+        scope_type = data.scope_type
+        scope_id = data.scope_id
+        self._validate_role_scope(scope_type, scope_id)
+        if self._repo.find_active_role_duplicate(
+            worker_id=worker_id,
+            role_code=data.role_code,
+            scope_type=scope_type,
+            scope_id=scope_id,
+        ):
+            raise ConflictError(
+                "Активная роль с таким role_code уже есть в этом scope"
+            )
+        role = WorkerRole(
+            worker_id=worker_id,
+            role_code=data.role_code,
+            scope_type=scope_type,
+            scope_id=scope_id,
+            valid_from=data.valid_from or date.today(),
+            valid_to=data.valid_to,
+            is_active=True,
+            note=data.note,
+        )
+        try:
+            return self._repo.create_worker_role(role)
+        except IntegrityError as exc:
+            raise ConflictError(
+                "Активная роль с таким role_code уже есть в этом scope"
+            ) from exc
+
+    def update_worker_role(
+        self, worker_id: int, role_id: int, data: WorkerRoleUpdate
+    ) -> WorkerRole:
+        role = self._get_worker_role(worker_id, role_id)
+        payload = data.model_dump(exclude_unset=True)
+        scope_type = payload.get("scope_type", role.scope_type)
+        scope_id = payload.get("scope_id", role.scope_id)
+        is_active = payload.get("is_active", role.is_active)
+        self._validate_role_scope(scope_type, scope_id)
+        if is_active:
+            duplicate = self._repo.find_active_role_duplicate(
+                worker_id=worker_id,
+                role_code=role.role_code,
+                scope_type=scope_type,
+                scope_id=scope_id,
+                exclude_role_id=role.id,
+            )
+            if duplicate:
+                raise ConflictError(
+                    "Активная роль с таким role_code уже есть в этом scope"
+                )
+        for field, value in payload.items():
+            setattr(role, field, value)
+        try:
+            return self._repo.save_worker_role(role)
+        except IntegrityError as exc:
+            raise ConflictError(
+                "Активная роль с таким role_code уже есть в этом scope"
+            ) from exc
+
+    def deactivate_worker_role(self, worker_id: int, role_id: int) -> WorkerRole:
+        role = self._get_worker_role(worker_id, role_id)
+        role.is_active = False
+        if role.valid_to is None:
+            role.valid_to = date.today()
+        return self._repo.save_worker_role(role)
+
+    def activate_worker_role(self, worker_id: int, role_id: int) -> WorkerRole:
+        worker = self.get_worker(worker_id)
+        if worker.employment_status == "dismissed":
+            raise ConflictError(
+                "Нельзя активировать роль уволенному работнику (dismissed)"
+            )
+        role = self._get_worker_role(worker_id, role_id)
+        if self._repo.find_active_role_duplicate(
+            worker_id=worker_id,
+            role_code=role.role_code,
+            scope_type=role.scope_type,
+            scope_id=role.scope_id,
+            exclude_role_id=role.id,
+        ):
+            raise ConflictError(
+                "Активная роль с таким role_code уже есть в этом scope"
+            )
+        role.is_active = True
+        role.valid_to = None
+        try:
+            return self._repo.save_worker_role(role)
+        except IntegrityError as exc:
+            raise ConflictError(
+                "Активная роль с таким role_code уже есть в этом scope"
+            ) from exc
+
+    def _get_worker_role(self, worker_id: int, role_id: int) -> WorkerRole:
+        role = self._repo.get_worker_role(worker_id, role_id)
+        if role is None:
+            raise NotFoundError("Роль работника", role_id)
+        return role
+
+    def _validate_role_scope(self, scope_type: str, scope_id: int | None) -> None:
+        if scope_type == "GLOBAL" and scope_id is not None:
+            raise ConflictError("Для scope_type=GLOBAL поле scope_id должно быть null")
+        if scope_type != "GLOBAL" and scope_id is None:
+            raise ConflictError(
+                f"Для scope_type={scope_type} поле scope_id обязательно"
+            )
 
     def _get_department(self, department_id: int) -> Department:
         department = self._repo.get_department(department_id)

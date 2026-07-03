@@ -129,3 +129,52 @@ class Worker(Base):
 
     department: Mapped[Department | None] = relationship(back_populates="workers")
     position: Mapped[Position | None] = relationship(back_populates="workers")
+    worker_roles: Mapped[list[WorkerRole]] = relationship(
+        back_populates="worker",
+        order_by="WorkerRole.role_code",
+    )
+
+
+class WorkerRole(Base):
+    __tablename__ = "worker_roles"
+    __table_args__ = (
+        CheckConstraint(
+            "role_code IN ("
+            "'WELDER', 'FOREMAN', 'PTO_ENGINEER', 'OTK_INSPECTOR', "
+            "'NDT_SPECIALIST', 'OGS_ENGINEER', 'CONFIRMING_PERSON', 'CLOSING_RESPONSIBLE'"
+            ")",
+            name="ck_hr_worker_roles_role_code",
+        ),
+        CheckConstraint(
+            "scope_type IN ('GLOBAL', 'COMPANY', 'PROJECT', 'SITE')",
+            name="ck_hr_worker_roles_scope_type",
+        ),
+        {"schema": HR_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    worker_id: Mapped[int] = mapped_column(
+        ForeignKey(f"{HR_SCHEMA}.workers.id"),
+        nullable=False,
+        index=True,
+    )
+    role_code: Mapped[str] = mapped_column(String(50), nullable=False)
+    scope_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="GLOBAL"
+    )
+    scope_id: Mapped[int | None] = mapped_column(Integer)
+    valid_from: Mapped[date | None] = mapped_column(Date)
+    valid_to: Mapped[date | None] = mapped_column(Date)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    worker: Mapped[Worker] = relationship(back_populates="worker_roles")

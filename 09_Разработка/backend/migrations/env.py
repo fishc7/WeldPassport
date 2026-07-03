@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from alembic import context
-from sqlalchemy import create_engine, pool, text
+from sqlalchemy import create_engine, event, pool
 
 from app.shared.config import settings
 from app.shared.db import Base
@@ -32,6 +32,7 @@ HR_MANAGED_TABLES = {
     "departments",
     "positions",
     "workers",
+    "worker_roles",
 }
 
 
@@ -61,12 +62,18 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     connectable = create_engine(settings.database_url, poolclass=pool.NullPool)
+
+    # search_path выставляем на сыром DBAPI-соединении при подключении, а не через
+    # connection.execute(): иначе SQLAlchemy 2.0 открывает транзакцию до
+    # context.begin_transaction(), Alembic считает её внешней, не коммитит, и на
+    # выходе миграции откатываются (upgrade проходит, но таблицы не создаются).
+    @event.listens_for(connectable, "connect")
+    def _set_search_path(dbapi_connection, _record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute(f'SET search_path TO "{settings.postgres_schema}", hr, public')
+        cursor.close()
+
     with connectable.connect() as connection:
-        connection.execute(
-            text(
-                f'SET search_path TO "{settings.postgres_schema}", hr, public'
-            )
-        )
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
