@@ -30,10 +30,10 @@ modules:
     name: "ОГС → Допуски сварщика"
     owner: "ОГС"
     status: in_progress
-    progress: 15
+    progress: 25
     branch: feature/ogs-welder-admissions-mvp
     visible: true
-    note: "Текущий этап. Нужно отделить кадровую карточку от сварочных допусков."
+    note: "Текущий этап. ER-схема допусков сварщика создана: клейма, аттестации, внутренние проектные допуски."
     inner_steps:
       - code: domain_rules
         name: "Правила предметной области"
@@ -44,10 +44,10 @@ modules:
 
       - code: db_design
         name: "Архитектура таблиц"
-        status: next
-        progress: 10
-        result: "Пока только концепция."
-        next: "Определить таблицы welding.stamps, welding.certifications, welding.welder_admissions."
+        status: done
+        progress: 100
+        result: "Создана ER-схема docs/diagrams/ogs_welder_admissions_er.mmd."
+        next: "Перейти к Alembic-миграции."
 
       - code: migration
         name: "Alembic-миграция"
