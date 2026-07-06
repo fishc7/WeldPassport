@@ -4,7 +4,8 @@
 
 Статус: принято
 
-Связано: [[docs/project/CONSTITUTION|Конституция §4]] · [[docs/ARCHITECTURE#15. Владельцы данных по доменам|ARCHITECTURE §15]] ·
+Связано: [[docs/project/CONSTITUTION|Конституция §8]] · [[docs/project/ARCHITECTURE_GOVERNANCE|AGF]] ·
+[[docs/ARCHITECTURE#15. Владельцы данных по доменам|ARCHITECTURE §15]] ·
 [[docs/project/ADR-004-ogs-model-stabilization|ADR-004]] · [[docs/project/ADR-002-double-welder-accounting|ADR-002]].
 
 ---

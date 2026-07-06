@@ -2,11 +2,23 @@
 
 > Связанные документы: [[docs/project/CONSTITUTION|Конституция]] · [[docs/ARCHITECTURE|Архитектура]] ·
 > [[docs/00_PROJECT_CONTEXT|Контекст проекта]] · [[docs/project/DECISIONS|Решения (ADR)]] ·
+> [[docs/project/ARCHITECTURE_GOVERNANCE|Architecture Governance (AGF)]] ·
+> [[docs/project/ARCHITECTURE_SESSIONS|Architecture Sessions]] ·
+> [[docs/project/UBIQUITOUS_LANGUAGE|Ubiquitous Language]] ·
 > [[docs/project/ROADMAP|Дорожная карта]] · [[docs/project/PROJECT_EXECUTION_MAP|Карта выполнения]].
 
 ## Назначение
 
 WeldPassport — внутренняя система для отдела главного сварщика и участников сварочного производства.
+
+> **Сначала производство. Потом архитектура. Потом код.**
+
+Управление архитектурой — [[docs/project/ARCHITECTURE_GOVERNANCE|AGF]] ·
+[[docs/project/CONSTITUTION#5. Architecture Governance|Конституция §5]] ·
+[[docs/project/CONSTITUTION#6. Архитектурные сессии|§6 (Sessions)]] ·
+канонический язык — [[docs/project/CONSTITUTION#4. Архитектурный принцип №2. Канонический язык проекта|§4 (принцип №2)]] ·
+[[docs/project/UBIQUITOUS_LANGUAGE|Ubiquitous Language]] ·
+совместное проектирование — [[docs/project/CONSTITUTION#3. Архитектурный принцип №1. Эксперт предметной области + архитектор|§3 (принцип №1)]].
 
 Цель системы — обеспечить электронный учёт, контроль и прослеживаемость сварочного производства: от организации проекта и персонала до сварных соединений, контроля, исполнительной документации и закрытия работ.
 
@@ -44,7 +56,8 @@ WeldPassport — внутренняя система для отдела гла�
 - **ОТК** — контроль качества;
 - **Закрытие** — полная история стыка.
 
-Границы доменов — [[docs/project/CONSTITUTION|Конституция §4]] · [[docs/project/ADR-006-domain-ownership-matrix|ADR-006: матрица владения]].
+Границы доменов — [[docs/project/CONSTITUTION|Конституция §8]] · [[docs/project/ADR-006-domain-ownership-matrix|ADR-006: матрица владения]] ·
+[[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007: жизненный цикл стыка]].
 
 ## Текущее состояние backend (2026-07-06)
 
@@ -97,17 +110,28 @@ docs/ARCHITECTURE.md
 
 ## Базовая иерархия данных
 
+Каноническая иерархия (ADR-007):
+
 ```text
-Организация / фирма
-  ↕
-Проект / объект
-  ↓
-Участок / линия / система
-  ↓
-Изометрия / чертеж
-  ↓
-Стык / сварное соединение
+Проект
+  → Титул / Установка / Блок
+    → Объект / Участок
+      → Линия
+        → Изометрия / чертёж
+          → Стык (Joint)
 ```
+
+Стык создаётся из утверждённой рабочей документации и является **центральным объектом
+производственного процесса** (инженерная сущность, ADR-007). Системный идентификатор —
+`joint_id` (неизменяемый); проектный номер стыка (`project_joint_no`) — отдельное поле.
+
+События жизненного цикла стыка — WeldOperation, Inspection, NDTInspection,
+RepairOperation, ExecutiveDocumentation — привязаны к Joint; модули `production` и
+`quality` **работают со стыком**, а не вместо него.
+
+Сварщики — участники операций (`production.weld_operations`), не атрибуты карточки стыка.
+
+Подробности — [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007]].
 
 ## Ключевые проектные файлы
 
@@ -139,7 +163,25 @@ docs/ARCHITECTURE.md
 docs/project/DECISIONS.md
 ```
 
-Журнал архитектурных и проектных решений.
+Журнал архитектурных и проектных решений (ADR).
+
+```text
+docs/project/ARCHITECTURE_GOVERNANCE.md
+```
+
+Architecture Governance Framework — регламент управления архитектурой (AGF).
+
+```text
+docs/project/UBIQUITOUS_LANGUAGE.md
+```
+
+Ubiquitous Language — официальный словарь терминов предметной области.
+
+```text
+docs/project/ARCHITECTURE_SESSIONS.md
+```
+
+Журнал Architecture Sessions — процесс принятия фундаментальных архитектурных решений.
 
 ```text
 docs/project/ROADMAP.md
@@ -162,5 +204,11 @@ docs/project/PROJECT_SUMMARY.md
 ```text
 Обсудили → приняли решение → зафиксировали в документации → сделали commit
 ```
+
+Фундаментальные архитектурные решения — **только** по [[docs/project/ARCHITECTURE_GOVERNANCE|AGF]]
+([[docs/project/CONSTITUTION#5. Architecture Governance|Конституция §5]] ·
+[[docs/project/ARCHITECTURE_SESSIONS|журнал сессий]]).
+Новые бизнес-термины — сначала [[docs/project/UBIQUITOUS_LANGUAGE|UBIQUITOUS_LANGUAGE]] (принцип №2, §4).
+Код не опережает документацию.
 
 Чат не является единственным источником истины. Источником истины являются файлы проекта.
