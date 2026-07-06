@@ -1,21 +1,29 @@
 project: WeldPassport
-current_stage: ogs_welder_admissions
+current_stage: ok_ogs_architecture_stabilized
 current_branch: feature/ogs-welder-admissions-mvp
-updated_at: 2026-07-03
+updated_at: 2026-07-06
 
 summary:
-  total_progress: 38
-  current_focus: "ОГС → Допуски сварщика v0.1"
-  next_action: "Спроектировать таблицы допусков сварщика и связь с worker_id"
+  total_progress: 45
+  current_focus: "Стабилизация архитектуры ОК/ОГС завершена"
+  next_action: "Спроектировать production.joints и жизненный цикл стыка"
 
 modules:
+  - code: constitution
+    name: "Конституция проекта"
+    owner: "Архитектура"
+    status: done
+    progress: 100
+    visible: true
+    note: "docs/project/CONSTITUTION.md — главный архитектурный документ."
+
   - code: architecture
     name: "Архитектура"
     owner: "Архитектура / план"
     status: stable
-    progress: 90
+    progress: 100
     visible: true
-    note: "Цепочка ответственности и базовая модель закреплены."
+    note: "ADR-004, ADR-005; синхронизация ARCHITECTURE, ROADMAP, tracking."
 
   - code: hr_workers
     name: "ОК → Работники"
@@ -24,79 +32,33 @@ modules:
     progress: 100
     branch: feature/ok-workers-mvp
     visible: true
-    note: "hr.workers — базовая кадровая карточка. Роли вынесены в hr.worker_roles."
+    note: "hr.workers, hr.worker_roles, API /api/v1/hr."
+
+  - code: ogs_welders
+    name: "ОГС → Профиль сварщика"
+    owner: "ОГС"
+    status: done
+    progress: 100
+    branch: feature/ogs-welder-admissions-mvp
+    visible: true
+    note: "welding.welders, API /api/v1/ogs/welders."
 
   - code: ogs_welder_admissions
     name: "ОГС → Допуски сварщика"
     owner: "ОГС"
-    status: in_progress
-    progress: 25
+    status: done
+    progress: 100
     branch: feature/ogs-welder-admissions-mvp
     visible: true
-    note: "Текущий этап. ER-схема допусков сварщика создана: клейма, аттестации, внутренние проектные допуски."
-    inner_steps:
-      - code: domain_rules
-        name: "Правила предметной области"
-        status: in_progress
-        progress: 40
-        result: "Зафиксировано: сварщик = worker_id + клеймо + аттестация + проектный допуск."
-        next: "Уточнить минимальный состав допусков v0.1."
+    note: "welding.welder_admissions v0.1; правила create_admission по ADR-004."
 
-      - code: db_design
-        name: "Архитектура таблиц"
-        status: done
-        progress: 100
-        result: "Создана ER-схема docs/diagrams/ogs_welder_admissions_er.mmd."
-        next: "Перейти к Alembic-миграции."
-
-      - code: migration
-        name: "Alembic-миграция"
-        status: planned
-        progress: 0
-        result: ""
-        next: "Создать миграцию после утверждения ER-схемы."
-
-      - code: models
-        name: "SQLAlchemy-модели"
-        status: planned
-        progress: 0
-        result: ""
-        next: "Добавить модели после миграции."
-
-      - code: schemas
-        name: "Pydantic-схемы"
-        status: planned
-        progress: 0
-        result: ""
-        next: "Описать create/read/update-схемы."
-
-      - code: api
-        name: "API endpoints"
-        status: planned
-        progress: 0
-        result: ""
-        next: "Добавить CRUD endpoints для допусков."
-
-      - code: tests
-        name: "Проверки и тесты"
-        status: planned
-        progress: 0
-        result: ""
-        next: "Проверить миграции, compileall, pytest."
-
-      - code: docs
-        name: "Документация"
-        status: planned
-        progress: 0
-        result: ""
-        next: "Обновить ER-схему и описание модуля."
-
-      - code: git
-        name: "Commit / push"
-        status: planned
-        progress: 0
-        result: ""
-        next: "Сделать commit после зелёных проверок."
+  - code: legacy_workforce
+    name: "Legacy workforce"
+    owner: "Переходный"
+    status: deprecated
+    progress: 100
+    visible: false
+    note: "ADR-005. Не расширять; вывод через desktop_ok и импортёры."
 
   - code: smp_fact
     name: "СМР → Факт выполнения"
@@ -104,7 +66,7 @@ modules:
     status: planned
     progress: 0
     visible: true
-    note: "Будущий этап: фиксация факта сварки и исполнителей."
+    note: "Следующий вертикальный этап после стабилизации ОК/ОГС."
 
   - code: pto_docs
     name: "ПТО → Исполнительная"

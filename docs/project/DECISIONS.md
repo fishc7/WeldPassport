@@ -14,7 +14,8 @@ ADR нужен, чтобы через время было понятно:
 - какие последствия у решения;
 - где находится каноническое описание.
 
-Канон архитектуры — [[docs/ARCHITECTURE|docs/ARCHITECTURE]]; контекст домена —
+Канон архитектуры — [[docs/ARCHITECTURE|docs/ARCHITECTURE]]; **главный документ** —
+[[docs/project/CONSTITUTION|CONSTITUTION]]. Контекст домена —
 [[docs/00_PROJECT_CONTEXT|docs/00_PROJECT_CONTEXT]]. Краткая сводка — [[docs/project/PROJECT_SUMMARY|PROJECT_SUMMARY]];
 план работ — [[docs/project/ROADMAP|ROADMAP]]. Карта чатов — [[docs/project/CHAT_INDEX|CHAT_INDEX]].
 Тематические узлы производства: [[02_Процессы/Сварочные_операции|Сварочные операции]] ·
@@ -269,6 +270,62 @@ Backend v0.1 модуля допусков сварщика от ОГС реал
 docs/project/DECISIONS.md
 09_Разработка/backend/app/welding/
 ```
+
+> **Дополнено ADR-004 (2026-07-06):** добавлена таблица `welding.welders`; правила
+> `stamp_code` и предусловия допуска — см. [[docs/project/ADR-004-ogs-model-stabilization|ADR-004]].
+
+---
+
+## ADR-004. Стабилизация модели ОГС (welders, admissions, stamp_code)
+
+Дата: 2026-07-06
+
+Статус: принято
+
+Полный текст: [[docs/project/ADR-004-ogs-model-stabilization|ADR-004-ogs-model-stabilization.md]].
+
+### Суть
+
+- `welding.welders` — профиль сварщика ОГС; **каноническое клеймо** — `welders.stamp_code`.
+- `welding.welder_admissions` — допуск; `stamp_code` — копия для поиска/аудита, при
+  создании совпадает с профилем.
+- Создание допуска требует: работник HR + роль `WELDER` + активный профиль сварщика.
+
+---
+
+## ADR-005. Вывод legacy-модуля workforce из эксплуатации
+
+Дата: 2026-07-06
+
+Статус: принято
+
+Полный текст: [[docs/project/ADR-005-legacy-workforce-deprecation|ADR-005-legacy-workforce-deprecation.md]].
+
+### Суть
+
+- `app.workforce` — **deprecated**; новые функции не добавляются.
+- Целевые API: `/api/v1/hr` (ОК), `/api/v1/ogs` (ОГС).
+- Постепенный вывод: desktop_ok → импортёры → снятие роутера.
+
+---
+
+## ADR-006. Матрица владения доменами
+
+Дата: 2026-07-06
+
+Статус: принято
+
+Полный текст: [[docs/project/ADR-006-domain-ownership-matrix|ADR-006-domain-ownership-matrix.md]].
+
+### Суть
+
+- Стык — центральная производственная сущность; точка схода доменов.
+- WPS, PQR, технология сварки — **только ОГС**; ПТО не принимает технологических решений.
+- СМР владеет фактом выполнения; ОТК — статусом качества и приёмкой; НК — протоколами и результатами методов НК.
+- МТО владеет поставками, партиями, сертификатами; ОГС задаёт технологические требования к материалам.
+- ИД — структурированный результат процесса (комплект + связи с фактами), не файловый архив.
+
+Канон границ доменов для всех последующих модулей (`production`, `quality`, `documents`, `mto`).
 
 ---
 
