@@ -38,6 +38,7 @@ HR_MANAGED_TABLES = {
 
 WELDING_MANAGED_TABLES = {
     "welders",
+    "welder_admissions",
 }
 
 

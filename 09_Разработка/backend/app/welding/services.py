@@ -110,9 +110,25 @@ class WeldingService:
         if worker is None:
             raise NotFoundError("Работник", data.worker_id)
 
+        if not self._hr.has_active_worker_role(data.worker_id, WELDER_ROLE_CODE):
+            raise ConflictError("У работника нет активной роли WELDER")
+
+        welder = self._repo.get_welder_by_worker_id(data.worker_id)
+        if welder is None:
+            raise ConflictError("Сварочный профиль не оформлен ОГС")
+
+        if welder.status != "active":
+            raise ConflictError("Сварочный профиль сварщика неактивен")
+
+        stamp_code = data.stamp_code.strip()
+        if stamp_code != welder.stamp_code:
+            raise ConflictError(
+                "stamp_code допуска должен совпадать с клеймом профиля сварщика"
+            )
+
         admission = WelderAdmission(
             worker_id=data.worker_id,
-            stamp_code=data.stamp_code.strip(),
+            stamp_code=stamp_code,
             admission_status=data.admission_status,
             welding_methods=data.welding_methods,
             material_groups=data.material_groups,

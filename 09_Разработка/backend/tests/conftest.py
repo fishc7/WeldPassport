@@ -109,6 +109,31 @@ def worker_without_welder_role(db: Session) -> Worker:
     return worker
 
 
+@pytest.fixture
+def worker_with_welder_profile(db: Session, worker_with_welder_role: Worker) -> Worker:
+    """Работник с ролью WELDER и оформленным профилем сварщика ОГС."""
+    welder = Welder(
+        worker_id=worker_with_welder_role.id,
+        stamp_code="W-001",
+        status="active",
+    )
+    db.add(welder)
+    db.commit()
+    db.refresh(worker_with_welder_role)
+    return worker_with_welder_role
+
+
+def create_welder_profile(db: Session, worker_id: int, stamp_code: str) -> Welder:
+    welder = Welder(
+        worker_id=worker_id,
+        stamp_code=stamp_code,
+        status="active",
+    )
+    db.add(welder)
+    db.flush()
+    return welder
+
+
 @pytest.fixture(autouse=True)
 def _cleanup_test_data(db: Session) -> Generator[None, None, None]:
     worker_ids = [

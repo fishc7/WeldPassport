@@ -2,7 +2,7 @@ from fastapi import FastAPI
 
 from app.hr.api import router as hr_router
 from app.welding.api import router as ogs_router
-from app.workforce.api import router as workforce_router
+from app.workforce.api import router as workforce_router  # deprecated — ADR-005
 
 app = FastAPI(
     title="WeldPassport API",
