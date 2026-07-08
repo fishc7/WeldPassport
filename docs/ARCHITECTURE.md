@@ -188,6 +188,46 @@ stateDiagram-v2
 оформляется отдельной командой с проверкой условий.
 
 Полный текст решений — [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007]].
+Каноническое ядро engineering-модели для MVP уточнено в
+[[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008]]
+([[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 003|Session 003]]).
+
+### 5.1. Каноническое ядро engineering-модели (Session 003)
+
+Joint остаётся центральным объектом производственного процесса (ADR-007). Для MVP
+инженерный контур строится вокруг универсального источника **EngineeringDocument**
+и самостоятельной сущности **Line**; изометрия — тип документа, а не корневая
+сущность.
+
+```text
+Project
+ ├── DocumentationPackage → EngineeringDocument
+ ├── EngineeringDocument (document_type, document_number, revision, status)
+ ├── Line (line_number, DN, среда, давление, …)
+ ├── EngineeringDocumentLine (engineering_document_id ↔ line_id)
+ └── Joint
+      ├── project_id, line_id, source_engineering_document_id, joint_number
+      ├── тип соединения (WeldShapeType / WeldJointDesignType / ProjectJointType)
+      ├── геометрия (diameter_dn, diameter_outer, thickness)
+      ├── материал (material_id + material_text_source)
+      ├── engineering_status (draft | confirmed)
+      └── status (производственный жизненный цикл)
+```
+
+Ключевые правила (детали — ADR-008):
+
+| Правило | Суть |
+|---------|------|
+| Инженерное основание | Joint создаётся через `EngineeringDocument`, не «в проекте» напрямую |
+| Рабочая привязка | Допускается `engineering_status = draft` по данным СМР; до закрытия ИД — `confirmed` (ПТО и/или ОГС) |
+| Основной источник | Один `source_engineering_document_id` на Joint |
+| Уникальность номера | `UNIQUE(project_id, line_id, source_engineering_document_id, joint_number)` |
+| Line и документ | Связь many-to-many через `EngineeringDocumentLine`; у Joint всегда одна конкретная Line |
+| Пакеты | `DocumentationPackage` учитывает передачу документации (частичный / полный комплект) |
+| СМР / FOREMAN | СМР — производственный контур; факт сварки подтверждает роль FOREMAN (ADR-008, 003-A) |
+| Материалы | `Material` → `MaterialGroup`; связь с `WelderAdmission.allowed_material_groups` |
+
+Цепочка ответственности: **ОК → ОГС → СМР → ПТО → ОТК/НК → Закрытие**.
 
 ## 6. Ключевые правила модели данных
 
@@ -294,9 +334,11 @@ erDiagram
     REPAIR ||--o{ INSPECTION : rechecked_by
 ```
 
-> Каноническая иерархия и правила `joint_id` / `project_joint_no` — ADR-007.
+> Каноническая иерархия и правила `joint_id` — ADR-007; engineering-ядро и уникальность
+> `joint_number` — [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008]].
 > Уровни `TITLE_BLOCK` и `LINE` обязательны в целевой модели; на ранних этапах
-> могут быть свёрнуты во временные поля.
+> могут быть свёрнуты во временные поля. Целевая ER-диаграмма engineering-контура
+> — §5.1.
 
 Для числовых характеристик нельзя использовать строки:
 
@@ -307,7 +349,9 @@ erDiagram
 
 Идентификаторы рекомендуется хранить как UUID, а человекочитаемые номера
 проекта, изометрии и стыка — как отдельные бизнес-атрибуты. Для стыка: неизменяемый
-`joint_id` (PK) и `project_joint_no` (уникален только внутри иерархии проекта, см.
+`joint_id` (PK) и `joint_number` (уникален в составе
+`project_id + line_id + source_engineering_document_id`, см.
+[[docs/project/DECISIONS#003-I. Уникальность JointNumber|ADR-008, 003-I]] и
 [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007]]).
 
 ## Активное ядро MVP и отложенные модули
@@ -600,7 +644,7 @@ frontend/
 | Статус качества, приёмка, дефекты | ОТК | `quality` — acceptance |
 | Протоколы и результаты НК | НК | `quality` — ndt |
 | Поставки, партии, сертификаты | МТО | `mto.*` |
-| Стык (центральный объект, инженерная модель) | `engineering` | `joints`, параметры по РД, ревизии |
+| Стык (центральный объект, инженерная модель) | `engineering` | `joints`, `engineering_documents`, `lines`, материалы, ревизии |
 | События жизненного цикла стыка | `production`, `quality`, `documents` | WeldOperation, Inspection, NDTInspection, RepairOperation, ИД |
 | Нормирование | ОГС (отложено) | [[docs/project/DECISIONS#ADR-003. Исключение модуля нормирования из активного MVP|ADR-003]] |
 | Справочники | Администратор | — |
@@ -710,7 +754,7 @@ backend или оставить отдельным слоём до миграц�
 ## Связанные документы
 
 - [[docs/00_PROJECT_CONTEXT|Контекст проекта]] — назначение, жизненный цикл, 7 модулей
-- [[docs/project/DECISIONS|Журнал решений (ADR)]] — [[docs/project/DECISIONS#ADR-001. Модель организаций и проектов|ADR-001]] · [[docs/project/ADR-002-double-welder-accounting|ADR-002: двойной учёт сварщика]] · [[docs/project/DECISIONS#ADR-003. Исключение модуля нормирования из активного MVP|ADR-003: нормирование в backlog]] · [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007: жизненный цикл стыка]]
+- [[docs/project/DECISIONS|Журнал решений (ADR)]] — [[docs/project/DECISIONS#ADR-001. Модель организаций и проектов|ADR-001]] · [[docs/project/ADR-002-double-welder-accounting|ADR-002: двойной учёт сварщика]] · [[docs/project/DECISIONS#ADR-003. Исключение модуля нормирования из активного MVP|ADR-003: нормирование в backlog]] · [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007: жизненный цикл стыка]] · [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008: каноническая модель предметной области]]
 - [[03_База_данных/Модель_организаций_и_проектов|Модель организаций и проектов]] · [[03_База_данных/WeldPassport_Реестр_сущностей_БД_v0.1|Реестр сущностей БД]]
 - [[05_Роли_и_права/00_Ролевая_цепочка_ответственности|Ролевая цепочка ответственности]] · [[02_Процессы/WeldPassport_Процессы_v0.1|Процессы v0.1]]
 - [[10_Проектирование_WeldPassport/03_Работники_и_сварщики/01_Модель_данных_Работники_и_сварщики_v0.1|Модель данных: работники и сварщики]] · [[10_Проектирование_WeldPassport/03_Работники_и_сварщики/02_План_реализации_Работники_и_сварщики_v0.1|План реализации]]

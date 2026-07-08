@@ -161,6 +161,117 @@
 
 ---
 
+## Architecture Session 003
+
+| | |
+|---|---|
+| **Номер** | 003 |
+| **Дата** | 2026-07-08 |
+| **Тема** | Каноническая модель предметной области WeldPassport |
+| **Статус** | В работе |
+
+### Краткое описание
+
+Третья архитектурная сессия. Цель — зафиксировать каноническое ядро
+engineering-модели: роли СМР и FOREMAN, инженерную привязку Joint,
+универсальный инженерный источник EngineeringDocument, сущность Line,
+пакеты документации, правила создания и идентификации стыка, многоуровневую
+классификацию типа соединения, геометрию и материалы Joint.
+
+Сессия уточняет и развивает выводы Session 001 (ADR-007) и Session 002
+без отмены центральной роли Joint и разделения инженерной / производственной
+моделей.
+
+### Принятые решения (блок 003-A — 003-L)
+
+| ID | Тема |
+|----|------|
+| **003-A** | СМР — производственный контур, не системная роль; факт сварки подтверждает **FOREMAN** |
+| **003-B** | Минимальная инженерная привязка Joint: `draft` / `confirmed`; ПТО и/или ОГС подтверждают до закрытия ИД |
+| **003-C** | **EngineeringDocument** — минимальный инженерный источник Joint в MVP |
+| **003-D** | **Line** — самостоятельная инженерная сущность, не текстовое поле документа |
+| **003-E** | **Isometric** — тип EngineeringDocument; связь с Line через **EngineeringDocumentLine** |
+| **003-F** | **DocumentationPackage** — учёт передачи документации (частичный / полный комплект) |
+| **003-G** | Joint создаётся из любого подходящего EngineeringDocument, не только из изометрии |
+| **003-H** | Один основной `source_engineering_document_id` на Joint |
+| **003-I** | Уникальность: `(project_id, line_id, source_engineering_document_id, joint_number)` |
+| **003-J** | Многоуровневая классификация типа соединения: WeldShapeType, WeldJointDesignType, ProjectJointType, WeldJointTypeAlias |
+| **003-K** | Геометрия и материал — атрибуты Joint (могут подтягиваться из источников, но хранятся на стыке) |
+| **003-L** | **Material** / **MaterialGroup** / **MaterialAlias**; связь с допуском сварщика |
+
+### Обновлённое ядро engineering-модели
+
+```text
+Project
+ ├── DocumentationPackage
+ │    └── EngineeringDocument
+ │
+ ├── EngineeringDocument
+ │    ├── document_type
+ │    ├── document_number
+ │    ├── revision
+ │    └── status
+ │
+ ├── Line
+ │    ├── line_number
+ │    ├── material
+ │    ├── medium
+ │    ├── dn
+ │    ├── pressure
+ │    ├── temperature
+ │    ├── category
+ │    └── status
+ │
+ ├── EngineeringDocumentLine
+ │    ├── engineering_document_id
+ │    └── line_id
+ │
+ └── Joint
+      ├── project_id
+      ├── line_id
+      ├── source_engineering_document_id
+      ├── joint_number
+      ├── weld_shape_type_id
+      ├── weld_joint_design_type_id
+      ├── project_joint_type_id
+      ├── source_joint_type_text
+      ├── joint_type_mapping_status
+      ├── diameter_dn
+      ├── diameter_outer
+      ├── thickness
+      ├── material_id
+      ├── material_text_source
+      ├── size_text_source
+      ├── engineering_status
+      └── status
+```
+
+### Цепочка ответственности (уточнение 003-A)
+
+```text
+ОК → ОГС → СМР → ПТО → ОТК/НК → Закрытие
+```
+
+- ОК создаёт работника.
+- ОГС допускает сварщика.
+- СМР выполняет производство.
+- FOREMAN подтверждает факт сварки от имени СМР.
+- ПТО оформляет исполнительную документацию.
+- ОТК/НК подтверждают качество.
+- Закрытие собирает полную историю стыка.
+
+### Связанные ADR
+
+- [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008 — каноническая модель предметной области (003-A — 003-L)]]
+- Уточняет [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007]] и [[docs/project/ADR-006-domain-ownership-matrix|ADR-006]]
+
+### Синхронизированные документы
+
+- `docs/project/DECISIONS.md` (ADR-008)
+- `docs/ARCHITECTURE.md` (краткое описание engineering/joint ядра)
+
+---
+
 ## Шаблон новой сессии
 
 ```markdown
@@ -192,4 +303,4 @@
 
 ---
 
-*Версия журнала: 2026-07-07. Записей: 2.*
+*Версия журнала: 2026-07-08. Записей: 3.*
