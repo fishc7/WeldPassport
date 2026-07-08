@@ -32,16 +32,18 @@ docs/                      каноничная документация (чит
   00_PROJECT_CONTEXT.md    жизненный цикл и модули системы
   ARCHITECTURE.md          архитектура, модель данных, API, деплой MVP
 09_Разработка/             исходный код
-  src/                     модули приложения (запускается с src в PYTHONPATH)
-    config.py              чтение .env, объект settings
+  backend/                 основной backend (FastAPI): app/main.py, модули app/,
+                           migrations/, tests/, alembic.ini (см. docs/ARCHITECTURE.md §16)
+  src/                     legacy / импортный / переходный слой (ранние ORM, config,
+                           db); не основная реализация backend — не развивать без
+                           отдельного архитектурного решения
+    config.py              чтение .env, объект settings (для scripts/)
     db.py                  низкоуровневый доступ через psycopg
     database.py            SQLAlchemy engine + сессии
-    models/                ORM-модели (base, workers, welders, projects,
+    models/                ранние ORM-модели (base, workers, welders, projects,
                            production, spravochniki)
-  scripts/                 разовые/служебные скрипты (импорт, схема, проверки)
-  backend/                 каркас FastAPI (app/ по модулям, migrations/, tests/,
-                           alembic.ini) — целевой backend MVP, принят как основная
-                           архитектурная база (см. docs/ARCHITECTURE.md §16)
+  scripts/                 разовые/служебные скрипты (импорт, схема, проверки);
+                           используют src/ в PYTHONPATH
   frontend/                React + TypeScript + Vite
   desktop_ok/              прототип отдельного рабочего места ОК (десктоп)
   requirements.txt         зависимости Python
@@ -64,8 +66,21 @@ Context/                   AboutMe / BusinessBrain / WorkingPreferences
 
 ## 3. Технологический стек
 
-**Текущее состояние кода:** Python + SQLAlchemy 2 + psycopg (raw) + python-dotenv,
-PostgreSQL. Это пока модели и служебные скрипты, без HTTP-слоя.
+**Текущее состояние кода:** основной backend — FastAPI в `09_Разработка/backend/`
+(`app/main.py`). HTTP-слой уже есть: маршруты `/api/v1/hr` (ОК) и `/api/v1/ogs`
+(ОГС, модуль `app.welding`). PostgreSQL, SQLAlchemy 2, Alembic, Pydantic.
+
+Каталог `09_Разработка/src/` — legacy / импортный / переходный слой; новую
+функциональность разрабатывать в `backend/app/`, не в `src/`.
+
+Модуль `backend/app/workforce/` — legacy (ADR-005): не развивать и не использовать
+как основу для новых модулей. Функции ОК/ОГС — через актуальные модули `hr` и
+`welding`. Снятие legacy workforce — только отдельным архитектурным решением.
+
+**Следующий архитектурный рубеж:** перед полноценным `production/joints` нужен
+минимальный контур `projects` / `engineering`, потому что Joint рождается из
+инженерной структуры: `Project → Engineering Document / Isometric → Joint`
+(см. ADR-007).
 
 **Целевой стек MVP** (см. `docs/ARCHITECTURE.md`):
 
@@ -80,8 +95,9 @@ PostgreSQL. Это пока модели и служебные скрипты, �
 SQLite в качестве основной БД.**
 
 Архитектура backend — модульный монолит. Предметные модули (`identity`, `projects`,
-`engineering`, `workforce`, `admissions`, `production`, `quality`, `documents`,
-`reporting`, `audit`) не лезут напрямую в таблицы друг друга — только через сервисы.
+`engineering`, `hr`, `welding`, `production`, `quality`, `documents`, `reporting`,
+`audit`; legacy: `workforce`) не лезут напрямую в таблицы друг друга — только через
+сервисы.
 Слои: API → Application services → Domain rules → Repository → SQLAlchemy → PostgreSQL.
 
 ---
@@ -250,8 +266,9 @@ AI-агенты не должны считать чат или длинную п
 | Назначение, жизненный цикл, модули | `docs/00_PROJECT_CONTEXT.md` |
 | Архитектура, модель данных, API, деплой | `docs/ARCHITECTURE.md` |
 | Правила проекта для агента (alwaysApply) | `.cursor/rules/weldpassport.mdc` |
-| Конфигурация и доступ к БД | `09_Разработка/src/config.py`, `db.py`, `database.py` |
-| ORM-модели | `09_Разработка/src/models/` |
+| Backend (основной) | `09_Разработка/backend/app/main.py`, модули `hr`, `welding` |
+| Конфигурация и доступ к БД (legacy/scripts) | `09_Разработка/src/config.py`, `db.py`, `database.py` |
+| ORM-модели (legacy) | `09_Разработка/src/models/` |
 | Служебные скрипты | `09_Разработка/scripts/` |
 | Профиль владельца и предпочтения | `Context/AboutMe.md`, `Context/WorkingPreferences.md` |
 
@@ -320,7 +337,8 @@ AI-агенты не должны считать чат или длинную п
 ## 12. Приоритет разработки
 
 При отсутствии иных указаний порядок работы: архитектура → база данных →
-backend → frontend → desktop-рабочие места → аналитика.
+backend → frontend → desktop-рабочие места → аналитика. Следующий рубеж после
+ОК/ОГС: минимальный контур `projects` / `engineering` перед `production/joints`.
 
 > Разделы 10–12 объединены из `PROJECT_RULES.md` 01.07.2026 (файл перенесён в
 > `_archive/2026-07-01_docs_consolidation/`, см.
