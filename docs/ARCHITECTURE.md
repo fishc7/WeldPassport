@@ -229,6 +229,40 @@ Project
 
 Цепочка ответственности: **ОК → ОГС → СМР → ПТО → ОТК/НК → Закрытие**.
 
+### 5.2. Каноническое lifecycle-ядро Joint (Session 003, продолжение)
+
+Продолжение Session 003 (блок `003-M` — `003-Z`) уточняет, что `Joint` хранит
+инженерную идентичность, а жизненный цикл фиксируется отдельными событиями и
+проверками качества/технологии (детали — ADR-008).
+
+```text
+Project
+ └── Line
+      └── Joint
+           ├── WeldOperation (включая operation_type = repair)
+           ├── Inspection
+           │    ├── NDTInspection
+           │    └── HardnessInspection
+           ├── Defect
+           ├── RepairOperation
+           ├── HeatTreatmentOperationJoint → HeatTreatmentOperation
+           ├── Attachment → DocumentFile
+           └── closure_status
+```
+
+Ключевые правила:
+
+| Правило | Суть |
+|---|---|
+| Joint и операции | Один Joint может иметь несколько WeldOperation (слои, ремонт, переварка) |
+| Комбинированная сварка | RAD + RD хранится как несколько WeldOperation, а не одно объединённое событие |
+| WPS и допуск | Факт сварки может быть зафиксирован до верификации; до закрытия нужен review ОГС |
+| Контроль и ремонт | `Inspection`/`NDTInspection`/`HardnessInspection` и `Defect`/`RepairOperation` разделяются |
+| Термообработка | `HeatTreatmentOperation` — технологическое событие; возможны many-to-many с Joint и повторы |
+| Файлы | Единый механизм `DocumentFile` + `Attachment` для всех доменов |
+| Статусы | Статусы Joint разделяются по контурам (`production`, `inspection`, `documentation`, `closure` и др.) |
+| Закрытие | Финальный контур — роль `CLOSURE_RESPONSIBLE` после проверки обязательных условий |
+
 ## 6. Ключевые правила модели данных
 
 ### Разделять человека и системного пользователя

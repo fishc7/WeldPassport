@@ -199,6 +199,25 @@ engineering-модели: роли СМР и FOREMAN, инженерную пр�
 | **003-K** | Геометрия и материал — атрибуты Joint (могут подтягиваться из источников, но хранятся на стыке) |
 | **003-L** | **Material** / **MaterialGroup** / **MaterialAlias**; связь с допуском сварщика |
 
+### Принятые решения (продолжение блока 003-M — 003-Z)
+
+| ID | Тема |
+|----|------|
+| **003-M** | Один Joint может иметь несколько WeldOperation; Joint и WeldOperation не тождественны |
+| **003-N** | Комбинированная сварка RAD + RD хранится как несколько WeldOperation на один Joint |
+| **003-O** | WeldOperation допускает первичную фиксацию без подтверждённой WPS; технологическое подтверждение обязательно до закрытия |
+| **003-P** | Факт сварки не блокируется из-за непроверенного допуска; для таких операций обязателен статус `requires_ogs_review` |
+| **003-Q** | Defect и RepairOperation разделяются: дефект, ремонт и контроль после ремонта — разные сущности |
+| **003-R** | RepairOperation и ремонтная WeldOperation (`operation_type = repair`) фиксируются раздельно |
+| **003-S** | Inspection и NDTInspection разделяются: общий факт контроля и специализированная НК-детализация |
+| **003-T** | HeatTreatmentOperation — отдельное производственно-технологическое событие, не вид Inspection |
+| **003-U** | Одна HeatTreatmentOperation может включать несколько Joint через HeatTreatmentOperationJoint |
+| **003-V** | Один Joint может иметь несколько HeatTreatmentOperation с явной причиной повтора |
+| **003-W** | HardnessInspection — отдельная детализация Inspection для контроля твёрдости |
+| **003-X** | Единый файловый механизм: DocumentFile + Attachment вместо `*_file_id` в бизнес-сущностях |
+| **003-Y** | Статусы Joint разделяются по контурам (`production_status`, `inspection_status`, `closure_status` и др.) |
+| **003-Z** | Финальное закрытие подтверждает роль CLOSURE_RESPONSIBLE после проверки обязательных контуров |
+
 ### Обновлённое ядро engineering-модели
 
 ```text
@@ -246,6 +265,25 @@ Project
       └── status
 ```
 
+### Обновлённое ядро жизненного цикла Joint (дополнение 003-M — 003-Z)
+
+```text
+Project
+ └── Line
+      └── Joint
+           ├── WeldOperation
+           ├── Inspection
+           │    ├── NDTInspection
+           │    └── HardnessInspection
+           ├── Defect
+           ├── RepairOperation
+           │    └── WeldOperation (operation_type = repair)
+           ├── HeatTreatmentOperationJoint
+           │    └── HeatTreatmentOperation
+           ├── DocumentFile / Attachment
+           └── closure_status
+```
+
 ### Цепочка ответственности (уточнение 003-A)
 
 ```text
@@ -262,13 +300,13 @@ Project
 
 ### Связанные ADR
 
-- [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008 — каноническая модель предметной области (003-A — 003-L)]]
+- [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008 — каноническая модель предметной области (003-A — 003-Z)]]
 - Уточняет [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007]] и [[docs/project/ADR-006-domain-ownership-matrix|ADR-006]]
 
 ### Синхронизированные документы
 
 - `docs/project/DECISIONS.md` (ADR-008)
-- `docs/ARCHITECTURE.md` (краткое описание engineering/joint ядра)
+- `docs/ARCHITECTURE.md` (краткое описание engineering/joint и lifecycle ядра)
 
 ---
 

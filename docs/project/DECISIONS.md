@@ -392,7 +392,7 @@ Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 
 
 Дата: 2026-07-08
 
-Статус: принято (блок 003-A — 003-L)
+Статус: принято (блок 003-A — 003-Z)
 
 Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 003|Session 003]]
 
@@ -668,11 +668,282 @@ Joint хранит материал как нормализованную ссы
 
 ---
 
+### 003-M. Один Joint может иметь несколько WeldOperation
+
+Один `Joint` может иметь несколько `WeldOperation`.
+
+`Joint` — инженерно-производственная сущность стыка, объект учёта.  
+`WeldOperation` — производственное событие выполнения сварки над Joint.
+
+`Joint ≠ WeldOperation`.
+
+На один Joint могут приходиться: первичная сварка, корень, заполнение, облицовка,
+комбинированный процесс RAD + RD, ремонтная заварка, повторная заварка после
+дефекта, сварка после вырезки / переварки.
+
+---
+
+### 003-N. Комбинированная сварка RAD + RD
+
+Для комбинированной сварки RAD + RD используется модель нескольких `WeldOperation`
+на один Joint.
+
+Корень, заполнение и облицовка фиксируются как отдельные события, если различаются
+по способу сварки, сварщику, клейму, дате, WPS или технологическому этапу.
+
+RAD + RD может отображаться как комбинированный способ в UI, но внутри модели
+раскладывается на отдельные операции.
+
+Пример:
+
+```text
+Joint W-001
+- WeldOperation #1: layer_type = root, welding_process = RAD
+- WeldOperation #2: layer_type = fill_cap, welding_process = RD
+```
+
+Минимальные `layer_type` для MVP: `root`, `fill_cap`, `repair`.
+
+---
+
+### 003-O. WPS при фиксации WeldOperation
+
+`WeldOperation` может быть создана СМР без подтверждённой WPS/технологической карты
+на этапе первичной фиксации факта.
+
+На старте WPS может быть:
+
+- не указана;
+- указана предварительно;
+- указана как предполагаемая;
+- добавлена позже ОГС.
+
+СМР фиксирует факт. ОГС подтверждает технологическую корректность.
+
+WPS не обязательна для фиксации факта `WeldOperation`, но технологическое
+подтверждение обязательно для закрытия Joint, исполнительной документации и
+финального паспорта соединения.
+
+Минимальные статусы WPS: `not_assigned`, `proposed`, `assigned`, `approved`, `rejected`.
+
+Минимальные статусы технологической проверки ОГС:
+`pending`, `approved`, `rejected`, `requires_fix`.
+
+---
+
+### 003-P. Факт сварки, выработка, брак и проверка допуска
+
+СМР может фиксировать факт сварки без мгновенной проверки допуска сварщика.
+Такая `WeldOperation` используется для производственного учёта, выработки,
+статистики брака и отчётности.
+
+Факт сварки нельзя терять или блокировать, но факт сварки не равен технологически
+подтверждённой сварке.
+
+Если допуск/WPS/проектные требования ещё не проверены, операция получает статус
+проверки `requires_ogs_review`.
+
+Без проверки ОГС `WeldOperation` не используется для финального закрытия Joint,
+исполнительной документации и паспорта сварного соединения.
+
+Разделяются четыре уровня проверки:
+
+1. внутренний допуск ОГС;
+2. аттестация/удостоверение сварщика;
+3. допуск заказчика на проект;
+4. соответствие конкретному Joint (материал, способ, диаметр, толщина, тип).
+
+---
+
+### 003-Q. Defect и журнал ремонта
+
+При выявлении брака создаётся отдельная сущность `Defect`.
+
+Журнал ремонта фиксирует не сам факт брака, а действия по устранению дефекта через
+`RepairOperation`, которая должна ссылаться на `Defect`.
+
+Источник истины:
+
+- `Defect` — что обнаружено;
+- `RepairOperation` — что сделано для устранения;
+- `Inspection` / `NDTInspection` — контроль до и после ремонта.
+
+---
+
+### 003-R. RepairOperation и ремонтная WeldOperation
+
+Ремонт дефекта фиксируется отдельной сущностью `RepairOperation`.
+
+Если ремонт включает сварку, внутри `RepairOperation` создаётся отдельная
+`WeldOperation` с `operation_type = repair`.
+
+`RepairOperation ≠ WeldOperation`.
+
+`RepairOperation` отвечает за контекст ремонта (какой дефект, каким способом, с
+каким результатом), `WeldOperation` — за сварочную часть (кто, чем, когда, каким
+клеймом).
+
+---
+
+### 003-S. Inspection и NDTInspection
+
+Контроль качества разделяется на общий `Inspection` и специализированный
+`NDTInspection`.
+
+- `Inspection` — событие контроля;
+- `NDTInspection` — детализация НК;
+- `Defect` — обнаруженный брак.
+
+Повторный контроль после ремонта фиксируется как новый `Inspection`/`NDTInspection`.
+
+Примеры `inspection_type`: `visual`, `ndt`, `pmi`, `hardness`, `operational`, `acceptance`.
+
+Примеры `ndt_method`: `RT`, `UT`, `PT`, `MT`, `VT` (если проект относит ВИК к НК).
+
+---
+
+### 003-T. HeatTreatmentOperation
+
+Термообработка фиксируется как отдельная сущность `HeatTreatmentOperation`.
+
+Это производственно-технологическое событие жизненного цикла Joint; оно не является
+видом `Inspection`.
+
+Журнал термообработки строится на основании `HeatTreatmentOperation`.
+
+---
+
+### 003-U. HeatTreatmentOperation может включать несколько Joint
+
+Одна `HeatTreatmentOperation` может быть связана с одним или несколькими Joint.
+
+Одна диаграмма/цикл термообработки может относиться к группе стыков.
+Связь реализуется через `HeatTreatmentOperationJoint`.
+
+---
+
+### 003-V. Один Joint может иметь несколько HeatTreatmentOperation
+
+Один Joint может участвовать в нескольких `HeatTreatmentOperation`
+(после ремонта, после неудовлетворительной твёрдости, при отклонении режима и др.).
+
+Причина повторной термообработки фиксируется явно в `reason`:
+`initial_required`, `after_repair`, `hardness_failed`, `mode_deviation`,
+`customer_requirement`, `ogs_decision`, `other`.
+
+Допускаются ссылки:
+
+- `previous_heat_treatment_operation_id` (nullable),
+- `triggered_by_inspection_id` (nullable),
+- `triggered_by_repair_operation_id` (nullable).
+
+---
+
+### 003-W. HardnessInspection
+
+Замер твёрдости — вид `Inspection` с отдельной детализацией в сущности
+`HardnessInspection`.
+
+Минимальные поля:
+
+```text
+inspection_id
+heat_treatment_operation_id (nullable)
+method
+unit (HB / HRC / HV)
+measured_value
+acceptance_limit_min
+acceptance_limit_max
+result
+conclusion
+```
+
+Позже может быть добавлена сущность `HardnessMeasurementPoint` для точек измерения
+(`weld` / `haz` / `base_metal`).
+
+Неудовлетворительный `HardnessInspection` может быть основанием для повторной
+`HeatTreatmentOperation`.
+
+---
+
+### 003-X. Общий механизм файлов: DocumentFile + Attachment
+
+В системе используется общий механизм файлов:
+
+- `DocumentFile` — описание файла;
+- `Attachment` — привязка файла к конкретной бизнес-сущности.
+
+Отдельные поля `*_file_id` в каждой сущности не используются.
+
+Примеры связей: изометрия → `EngineeringDocument`, заключение РК → `NDTInspection`,
+диаграмма ТО → `HeatTreatmentOperation`, протокол твёрдости → `HardnessInspection`,
+фото дефекта → `Defect`, акт ремонта → `RepairOperation`, WPS → `WPS`,
+скан допуска → `WelderAdmission/Certification`, исполнительный PDF → `DocumentationPackage`.
+
+Роли вложений: `source_document`, `report`, `diagram`, `photo`, `scan`, `act`,
+`certificate`, `wps_document`, `as_built`, `other`.
+
+---
+
+### 003-Y. Статусы Joint разделяются по контурам
+
+Один универсальный статус для Joint не используется.
+
+Для MVP вводятся отдельные контуры статусов:
+
+- `production_status`;
+- `ogs_review_status`;
+- `inspection_status`;
+- `repair_status`;
+- `heat_treatment_status`;
+- `documentation_status`;
+- `closure_status`.
+
+Примеры:
+
+- `production_status`: `not_started`, `in_progress`, `welded`, `foreman_confirmed`, `cancelled`;
+- `ogs_review_status`: `not_required`, `requires_review`, `approved`, `rejected`, `requires_fix`;
+- `inspection_status`: `not_required`, `pending`, `in_progress`, `accepted`, `defect_found`, `reinspection_required`;
+- `repair_status`: `not_required`, `open_defect`, `repair_in_progress`, `repaired`, `closed`;
+- `heat_treatment_status`: `not_required`, `required`, `planned`, `completed`, `accepted`, `rejected`, `repeat_required`;
+- `documentation_status`: `not_started`, `in_progress`, `ready_for_review`, `accepted`, `returned_for_fix`;
+- `closure_status`: `open`, `blocked`, `ready_to_close`, `closed`.
+
+---
+
+### 003-Z. Финальное закрытие Joint
+
+Финальное закрытие подтверждает отдельная роль `CLOSURE_RESPONSIBLE`.
+
+Роль не заменяет ПТО, ОТК, НК, ОГС или СМР; она подтверждает, что все обязательные
+контуры завершены и Joint готов к финальному закрытию.
+
+Перед `closure_status = closed` система проверяет:
+
+- есть инженерная привязка Joint;
+- зафиксирован факт сварки;
+- факт подтверждён FOREMAN;
+- ОГС проверил WPS/допуск/технологическую корректность;
+- выполнен контроль качества;
+- дефекты, если были, закрыты;
+- ремонт и повторный контроль после ремонта завершены;
+- термообработка и контроль твёрдости (если требуются) приняты;
+- исполнительная документация ПТО готова/принята;
+- обязательные файлы и заключения приложены.
+
+---
+
 ### Последствия
 
 - Целевая схема `engineering.*` должна включать `engineering_documents`,
   `lines`, `engineering_document_lines`, `documentation_packages`, `joints`,
   справочники типов соединения и материалов.
+- Целевая lifecycle-модель вокруг Joint должна включать: `weld_operations`,
+  `inspections`, `ndt_inspections`, `hardness_inspections`, `defects`,
+  `repair_operations`, `heat_treatment_operations`, `heat_treatment_operation_joints`,
+  `document_files`, `attachments`.
+- Для закрытия стыка вводится отдельный контур `closure_status` и роль
+  `CLOSURE_RESPONSIBLE` как финальный подтверждающий контур.
 - ADR-007 сохраняет силу по `joint_id`, жизненному циклу и неизменяемости истории;
   правила появления Joint и иерархия уточняются через `EngineeringDocument` и
   статусы `draft` / `confirmed`.
