@@ -57,7 +57,16 @@ WeldPassport — внутренняя система для отдела гла�
 - **Закрытие** — полная история стыка.
 
 Границы доменов — [[docs/project/CONSTITUTION|Конституция §8]] · [[docs/project/ADR-006-domain-ownership-matrix|ADR-006: матрица владения]] ·
-[[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007: жизненный цикл стыка]].
+[[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007: жизненный цикл стыка]] ·
+[[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008: каноническая модель Production/Joints MVP]].
+
+## Текущий статус архитектуры (2026-07-10)
+
+- **Architecture Session 003 завершена** — см.
+  [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 003|журнал сессий]].
+- Зафиксирована **доменная модель Production/Joints MVP** (решения 003-A — 003-AM,
+  ADR-008): engineering-ядро, lifecycle Joint, RACI-модель ответственности.
+- **Следующий этап:** проектирование БД/API Production/Joints MVP.
 
 ## Текущее состояние backend (2026-07-06)
 

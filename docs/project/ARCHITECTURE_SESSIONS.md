@@ -166,9 +166,9 @@
 | | |
 |---|---|
 | **Номер** | 003 |
-| **Дата** | 2026-07-08 |
+| **Дата** | 2026-07-08 — 2026-07-10 |
 | **Тема** | Каноническая модель предметной области WeldPassport |
-| **Статус** | В работе |
+| **Статус** | Завершена |
 
 ### Краткое описание
 
@@ -347,6 +347,28 @@ Project
   **CLOSURE_RESPONSIBLE**, не подменяя домены и не заменяя Attachment / DocumentFile
   (см. 003-Z).
 
+### Финальная сводка
+
+**Architecture Session 003 завершена.**
+
+Решения зафиксированы как **003-A — 003-AM** (ADR-008). Результатом сессии является
+**каноническая модель Production/Joints MVP**.
+
+**Результаты:**
+
+- определена граница Production/Joints MVP;
+- зафиксирована центральная роль Joint;
+- определена связь Project → EngineeringDocument / Line → Joint;
+- определён жизненный цикл Joint:
+  WeldOperation → Inspection / NDTInspection / HardnessInspection → Defect →
+  RepairOperation → HeatTreatmentOperation → Closure;
+- зафиксирована модель файлов DocumentFile + Attachment;
+- зафиксированы раздельные статусы Joint по контурам;
+- зафиксирована совместная ответственность СМР, ПТО, ОГС, ОТК/НК и CLOSURE_RESPONSIBLE;
+- зафиксирована RACI-модель Production/Joints MVP.
+
+**Следующий этап:** проектирование БД/API Production/Joints MVP.
+
 ### Связанные ADR
 
 - [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008 — каноническая модель предметной области (003-A — 003-AM)]]
@@ -356,6 +378,7 @@ Project
 
 - `docs/project/DECISIONS.md` (ADR-008)
 - `docs/ARCHITECTURE.md` (краткое описание engineering/joint и lifecycle ядра)
+- `docs/project/PROJECT_SUMMARY.md`
 
 ---
 

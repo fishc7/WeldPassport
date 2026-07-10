@@ -270,6 +270,9 @@ Defect, RepairOperation, HeatTreatmentOperation, Attachment/DocumentFile
 Inspection; DocumentationPackage и Joint closure описаны в 003-AL. Полная матрица —
 [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 003 — RACI модель Production/Joints MVP|Session 003 — RACI]].
 
+> **Architecture Session 003 завершена** (2026-07-10). ADR-008 фиксирует решения
+> 003-A — 003-AM. Следующий этап — **проектирование БД/API Production/Joints MVP**.
+
 ## 6. Ключевые правила модели данных
 
 ### Разделять человека и системного пользователя

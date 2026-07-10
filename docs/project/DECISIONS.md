@@ -392,7 +392,7 @@ Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 
 
 Дата: 2026-07-08
 
-Статус: принято (блок 003-A — 003-AM)
+Статус: принято — закрывает Architecture Session 003 (решения 003-A — 003-AM)
 
 Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 003|Session 003]]
 
@@ -980,6 +980,9 @@ conclusion
 Полная RACI-таблица по 10 MVP-сущностям — см.
 [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 003 — RACI модель Production/Joints MVP|Session 003 — RACI]].
 
+**Итог ADR-008:** ADR-008 завершает Architecture Session 003 и является основанием
+для проектирования Production/Joints MVP.
+
 ---
 
 ### Последствия
@@ -1006,6 +1009,7 @@ conclusion
 docs/project/ARCHITECTURE_SESSIONS.md (Session 003)
 docs/project/DECISIONS.md (ADR-008)
 docs/ARCHITECTURE.md (§5.1, §5.2)
+docs/project/PROJECT_SUMMARY.md
 ```
 
 ---
