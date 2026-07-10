@@ -8,7 +8,13 @@
 
 **Ветка:** `feature/engineering-joints-mvp` (база `6f1bc85`).
 
-**Канон:** [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 004|Architecture Session 004]] · [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009]].
+**Канон:** [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 004|Architecture Session 004]] · [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009]] · [[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010]] (замещает Joint-часть ADR-009).
+
+> **Обновление 2026-07-11 (ADR-010, принят):** модель Joint пересмотрена. Прежние
+> Task 5 (Joint DRAFT) и Task 6 (lifecycle + revision history) заменены разбиением
+> **Task 5A → 5B → 6 → 7** (см. ниже). Task 4 (EngineeringDocument,
+> DocumentRevision) завершён и не затрагивается. ADR-010 — действующий канон
+> реализации Joint для Tasks 5A, 5B, 6 и 7.
 
 **Исполнение:**
 
@@ -54,14 +60,21 @@
 ## Цепочка миграций (линейная)
 
 ```text
-20260703_03_welder_admissions  (текущий head)
+20260703_03_welder_admissions
   → 20260710_01_hr_master_role
   → 20260710_02_project_core
   → 20260710_03_project_lines
-  → 20260710_04_engineering_documents
-  → 20260710_05_engineering_joints
-  → 20260710_06_joint_lifecycle
+  → 20260710_04_engineering_docs        (Task 4, текущий head — commit 6d2ea09)
+  → 20260711_05_engineering_joints      (Task 5A)
+  → 20260711_06_joint_review            (Task 5B)
+  → 20260711_07_joint_doc_revisions     (Task 6)
+  → 20260711_08_joint_bulk_requests     (Task 7)
 ```
+
+> Примечание: фактический id миграции Task 4 — `20260710_04_engineering_docs`
+> (сокращён с `…_documents`: полное имя занимало 33 символа и не помещалось в
+> `alembic_version.version_num varchar(32)`). Имена этапов 5A–7 подобраны ≤ 32
+> символов.
 
 ---
 
@@ -456,11 +469,18 @@ pytest tests/test_engineering_documents_api.py::test_pto_engineer_creates_and_ap
 
 ---
 
-## Task 5 — Joint DRAFT и вычисление ready_for_welding
+## Task 5A — Joint Core
+
+> Пересматривает прежний Task 5 по ADR-010 (принят). Только ядро Joint без
+> lifecycle-переходов согласования, истории снимков и bulk.
 
 ### Цель
 
-Таблица `engineering.joints`, создание DRAFT, PATCH только для DRAFT, вычисляемые `ready_for_welding` и `missing_welding_requirements`.
+Таблица `engineering.joints` с обязательной связью с Line, автогенерацией
+`system_code`, нормализацией `joint_no`, optimistic locking (`version`) и
+вычисляемыми полями `ready_for_welding`, `missing_welding_requirements`,
+`production_state`. CRUD + PATCH только допустимых полей. Переходы согласования
+(`pto_status` / `ogs_status`, `PENDING_REVIEW` / `ACTIVE`) — в Task 5B.
 
 ### Файлы
 
@@ -476,242 +496,242 @@ pytest tests/test_engineering_documents_api.py::test_pto_engineer_creates_and_ap
 
 **Create:**
 
-- `09_Разработка/backend/migrations/versions/20260710_05_engineering_joints.py`
+- `09_Разработка/backend/migrations/versions/20260711_05_engineering_joints.py`
 - `09_Разработка/backend/tests/test_engineering_joints_api.py`
 
-### Interfaces
+### Модель `Joint` (ADR-010)
 
-| Вход | Выход |
-|------|-------|
-| Project, Line, EngineeringDocument, DocumentRevision | `Joint` DRAFT |
-| Task 1 permissions | 403 без FOREMAN/MASTER в scope |
-| Line.required_inspection_types | копия в Joint при создании |
+- `id` UUID PK; `project_id` FK → `project.projects` NOT NULL; `line_id` FK →
+  `project.lines` **NOT NULL**; `origin_document_revision_id`,
+  `current_document_revision_id` FK → `engineering.document_revisions` NOT NULL.
+- `system_code` `varchar(64)` NOT NULL, автогенерация `<project_code>-JNT-<sequence>`
+  (отдельная на проект, без переиспользования); `UNIQUE(project_id, system_code)`;
+  от пользователя не принимается.
+- `joint_no` `varchar(100)` NOT NULL (исходное); `joint_no_normalized` `varchar(100)`
+  NOT NULL (trim, схлопывание пробелов, типографские дефисы → `-`, сравнение без
+  учёта регистра).
+- Инженерные поля по сторонам (`dn_1/2`, `thickness_1/2`, `material_id_*`,
+  `material_text_*`, `component_type_*`, `component_item_id_*`, `component_text_*`),
+  классификация (`geometry_type`, `weld_joint_type`, `connection_code`), проектные
+  способы сварки (`required_root/fill/cap_method`), требование термообработки,
+  положение на чертеже (координаты необязательны; при `position_x/y` обязателен
+  `coordinate_system`).
+- Материалы / номенклатура / WPS — nullable UUID **без FK** (Р-4).
+- Аудит: `created_by`, `updated_by`, `created_at`, `updated_at`; `version` для
+  optimistic locking. Физического удаления нет; DELETE-endpoint не создаётся.
 
-**Модель `Joint`** — поля по Session 004 раздел 2:
+### Согласованность иерархии (Б-3, ADR-010)
 
-`id`, `project_id`, `line_id`, `engineering_document_id`, `current_revision_id`, `joint_no`, `engineering_status`, `superseded_by_joint_id`, `geometry_type`, `weld_type`, `standard_joint_code`, `dn`, `thickness`, `material_1_catalog_id`, `material_1_name`, `material_2_catalog_id`, `material_2_name`, `planned_wps_id`, `required_inspection_types`, `heat_treatment_required`, audit fields.
+- `Joint.line_id` обязателен.
+- Если `EngineeringDocument.line_id` заполнен — совпадает с `Joint.line_id`.
+- Если `EngineeringDocument.line_id IS NULL` — допустим как основание; линия из
+  Joint; документ обязан быть того же `Project`.
+- Тип документа-основания не ограничивается `ISOMETRIC`.
 
-**Допустимые значения и CHECK:**
+### Права
 
-| Поле | Значения |
-|------|----------|
-| `geometry_type` | `BUTT`, `TEE`, `CORNER`, `LAP` |
-| `weld_type` | `BW`, `FW` |
-| `engineering_status` | `DRAFT`, `CONFIRMED`, `CANCELLED`, `SUPERSEDED` |
+Создавать Joint: `MASTER`, `FOREMAN`, `PTO_ENGINEER`, `OGS_ENGINEER` в допустимом
+scope (проверка по документу Joint). Обычный PATCH не меняет `system_code`,
+`origin_/current_document_revision_id`, `status`, `pto_status`, `ogs_status`,
+`superseded_by_joint_id`.
 
-**Без FK (nullable UUID, будущие домены МТО/WPS):**
+### Вычисляемые поля (Б-4)
 
-- `material_1_catalog_id` — nullable UUID без FK;
-- `material_2_catalog_id` — nullable UUID без FK;
-- `planned_wps_id` — nullable UUID без FK.
+`ready_for_welding`, `missing_welding_requirements`, `production_state`
+(`NOT_STARTED`) сохраняются из ADR-009. `requires_review` — отдельный признак
+(в 5A может быть выведен, статусы согласования вводятся в 5B).
 
-Причина: будущие сущности МТО и WPS предполагаются самостоятельными доменными объектами с UUID; FK в плане №1 **не создаётся**.
+### API
 
-**`required_inspection_types`:** PostgreSQL `ARRAY(Text)`; SQLAlchemy `postgresql.ARRAY(String)`; default `'{}'`; при создании копируется с Line; пустой перечень — пустой массив, не NULL.
+| Метод | Путь |
+|-------|------|
+| POST | `/api/v1/engineering/joints` |
+| GET | `/api/v1/engineering/joints/{joint_id}` |
+| GET | `/api/v1/engineering/joints` (фильтры, сортировка, limit/offset, total) |
+| PATCH | `/api/v1/engineering/joints/{joint_id}` |
 
-**Ограничения:**
+### Ключевые тесты
 
-- UNIQUE `(project_id, engineering_document_id, joint_no)`;
-- CHECK наборов `geometry_type`, `weld_type`, `engineering_status`;
-- CHECK `dn > 0` IF `dn IS NOT NULL`;
-- CHECK `thickness > 0` IF `thickness IS NOT NULL`;
-- CHECK `superseded_by_joint_id IS NULL OR superseded_by_joint_id <> id`;
-- все FK в одном project.
+Создание всеми разрешёнными ролями; отказ без роли / чужой проект / неверная линия
+/ ревизия другого проекта или линии; автогенерация и уникальность `system_code`;
+нормализация `joint_no` (регистр, пробелы, дефисы), уникальность в ревизии,
+одинаковый номер в другой ревизии допустим, исходный `joint_no` сохраняется;
+optimistic locking (успех, конфликт устаревшей version, инкремент);
+`ready_for_welding` false/true; запрет изменения защищённых полей через PATCH.
 
-**Вычисление (`JointRead` computed):**
+**Commit:** `feat(engineering): add joint core`
 
-- `ready_for_welding`: true если заполнены `geometry_type`, `weld_type`, `dn`, `thickness`, `material_1_name`, `material_2_name`
-- `missing_welding_requirements`: список недостающих полей
-- `production_state`: константа `NOT_STARTED` для плана №1
-
-**API:**
-
-| Метод | Путь | Handler |
-|-------|------|---------|
-| POST | `/api/v1/engineering/joints` | `create_joint` — FOREMAN/MASTER |
-| GET | `/api/v1/engineering/joints` | `list_joints` — фильтры |
-| GET | `/api/v1/engineering/joints/{id}` | `get_joint` |
-| PATCH | `/api/v1/engineering/joints/{id}` | `update_joint` — только DRAFT |
-
-### Шаги
-
-- [ ] **5.1** Failing test: FOREMAN GLOBAL создаёт DRAFT
-- [ ] **5.2** Failing test: без роли → 403
-- [ ] **5.3** Failing test: cross-project line → 422
-- [ ] **5.4** Failing test: duplicate joint_no → 409
-- [ ] **5.5** Failing test: ready_for_welding false/true
-- [ ] **5.6** Миграция + сервис `compute_joint_readiness()`
-- [ ] **5.7** PASS + регрессия
-- [ ] **5.8** Commit
-
-**Первый failing test:**
-
-```powershell
-pytest tests/test_engineering_joints_api.py::test_foreman_creates_draft_joint -q
-```
-
-**Commit:** `feat(engineering): add draft joints and readiness checks`
-
-**Checkpoint:** ChatGPT — нет FK WPS/МТО, production_state = NOT_STARTED only.
+**Checkpoint:** ChatGPT — обязательность Line, автогенерация system_code, отсутствие
+FK WPS/МТО.
 
 ---
 
-## Task 6 — Joint lifecycle и история ревизий
+## Task 5B — Joint Review Lifecycle
 
 ### Цель
 
-Команды confirm/cancel/supersede/link, техническая таблица `joint_revision_links`, GET lifecycle.
+Двойное согласование ПТО/ОГС поверх ядра Task 5A: статусы `PENDING_REVIEW` /
+`ACTIVE`, `pto_status` / `ogs_status`, команды submit / confirm / reject / cancel /
+supersede; аддитивное расширение `scope_type` значением `ENGINEERING_DOCUMENT`.
 
 ### Файлы
-
-**Create:**
-
-- `09_Разработка/backend/migrations/versions/20260710_06_joint_lifecycle.py`
-- `09_Разработка/backend/tests/test_engineering_joint_lifecycle.py`
 
 **Modify:**
 
-- `09_Разработка/backend/app/engineering/models.py` — `JointRevisionLink`
-- `09_Разработка/backend/app/engineering/schemas.py` — `JointLifecycleOut`
-- `09_Разработка/backend/app/engineering/repository.py`
-- `09_Разработка/backend/app/engineering/services.py` — `confirm_joint()`, `cancel_joint()`, `supersede_joint()`, `link_joint_revision()`
-- `09_Разработка/backend/app/engineering/api.py`
+- `09_Разработка/backend/app/engineering/models.py`, `schemas.py`, `repository.py`,
+  `services.py`, `api.py`
+- `09_Разработка/backend/app/hr/models.py`, `schemas.py` — `scope_type`
+  `ENGINEERING_DOCUMENT` (аддитивно)
 - `09_Разработка/backend/migrations/env.py`
-
-### Interfaces
-
-| Вход | Выход |
-|------|-------|
-| Joint DRAFT (Task 5) | CONFIRMED / CANCELLED / SUPERSEDED |
-| `PTO_ENGINEER` + scope GLOBAL / PROJECT / LINE | confirm, cancel, supersede, link_joint_revision |
-| approved Document/Revision | precondition для confirm |
-
-**Таблица `engineering.joint_revision_links`:**
-
-- `joint_id` UUID FK; `document_revision_id` UUID FK; `linked_at`; `linked_by`
-- UNIQUE `(joint_id, document_revision_id)`
-
-**API:**
-
-| Метод | Путь | Handler |
-|-------|------|---------|
-| POST | `/api/v1/engineering/joints/{id}/confirm` | `confirm_joint` — ПТО (`PTO_ENGINEER`) |
-| POST | `/api/v1/engineering/joints/{id}/cancel` | `cancel_joint` — ПТО (`PTO_ENGINEER`) + reason |
-| POST | `/api/v1/engineering/joints/{id}/supersede` | `supersede_joint` — ПТО (`PTO_ENGINEER`) + new joint payload + reason |
-| POST | `/api/v1/engineering/joints/{joint_id}/revisions/{revision_id}/link` | `link_joint_revision` — ПТО (`PTO_ENGINEER`) |
-| GET | `/api/v1/engineering/joints/{id}/lifecycle` | `get_joint_lifecycle` |
-
-**Правила `link_joint_revision`:**
-
-- выполняет только ПТО (`PTO_ENGINEER`) в GLOBAL / PROJECT / LINE scope;
-- Revision принадлежит тому же `EngineeringDocument` и `Project`, что и Joint;
-- Joint **сохраняет** прежний UUID;
-- создаётся запись `joint_revision_links`;
-- `current_revision_id` обновляется на новую Revision;
-- повторная идентичная связь → `409`;
-- Revision другого документа или проекта → `422`;
-- `CANCELLED` или `SUPERSEDED` Joint нельзя переносить на новую Revision.
-
-**Правила confirm / cancel / supersede:**
-
-- confirm: `engineering_status` → CONFIRMED; требует `PTO_ENGINEER` и approved doc/revision
-- cancel: → CANCELLED; требует `PTO_ENGINEER` и reason; CANCELLED/SUPERSEDED не редактируются
-- supersede: требует `PTO_ENGINEER`; старый → SUPERSEDED + `superseded_by_joint_id`; новый Joint с новым UUID
-- запрет циклической цепочки supersede
-- неизменившийся Joint сохраняет UUID при новой Revision через `POST .../link` и `joint_revision_links`
-
-### Шаги
-
-- [ ] **6.1** Failing test: ПТО (`PTO_ENGINEER`) confirm DRAFT → CONFIRMED
-- [ ] **6.2** Failing test: confirm без approved revision → 422
-- [ ] **6.3** Failing test: supersede создаёт новый UUID, старый SUPERSEDED
-- [ ] **6.4** Failing test: циклический supersede → 409
-- [ ] **6.5** Failing test: неизменившийся Joint связывается с новой Revision через `link_joint_revision`, UUID сохранён
-- [ ] **6.6** Failing test: Revision другого EngineeringDocument → 422
-- [ ] **6.7** Failing test: повторная связь joint+revision → 409
-- [ ] **6.8** Failing test: lifecycle возвращает revision links
-- [ ] **6.9** Миграция + реализация
-- [ ] **6.10** PASS + регрессия
-- [ ] **6.11** Commit
-
-**Первый failing test:**
-
-```powershell
-pytest tests/test_engineering_joint_lifecycle.py::test_pto_engineer_confirms_joint -q
-```
-
-**Commit:** `feat(engineering): add joint lifecycle and revision history`
-
-**Checkpoint:** ChatGPT — соответствие ADR-009 004-05, отсутствие физического DELETE.
-
----
-
-## Task 7 — интеграция и регрессия
-
-### Цель
-
-E2E вертикальный срез и финальная проверка цепочки миграций и тестов.
-
-### Файлы
+- `09_Разработка/backend/tests/conftest.py`
 
 **Create:**
 
-- `09_Разработка/backend/tests/test_engineering_joints_e2e.py`
+- `09_Разработка/backend/migrations/versions/20260711_06_joint_review.py`
+- `09_Разработка/backend/tests/test_engineering_joint_review.py`
 
-**Modify (только при подтверждённой необходимости):**
+### Решения
 
-- `09_Разработка/backend/app/main.py`
-- `09_Разработка/backend/migrations/env.py`
-- `09_Разработка/backend/app/shared/db.py`
-- `09_Разработка/backend/tests/conftest.py`
+- Поля согласования: `pto_status`/`ogs_status` (`PENDING/CONFIRMED/REJECTED`),
+  `pto_comment`/`ogs_comment`, `pto_decided_by/at`, `ogs_decided_by/at`,
+  `submitted_by/at`. При создании `status=DRAFT`, оба `PENDING`.
+- `scope_type` (Р-1): `ENGINEERING_DOCUMENT` добавляется аддитивно к
+  `GLOBAL/COMPANY/PROJECT/SITE/LINE`; `COMPANY`/`SITE` сохраняются; переименования и
+  миграции данных нет. Обновить CHECK БД, Pydantic `ScopeType`, HR-тесты, проверки
+  scope.
+- Разделение полей ПТО/ОГС: изменение полей ПТО → сброс `pto_status`; ОГС →
+  `ogs_status`; общих → оба; из `ACTIVE` → `PENDING_REVIEW`.
+- `ACTIVE` — автоматически при обоих `CONFIRMED`.
+- `requires_review = true`, если `pto_status != CONFIRMED` или `ogs_status !=
+  CONFIRMED`, а также в `DRAFT`/`PENDING_REVIEW`.
 
-### Interfaces
+### API (переходы)
 
-| Вход | Выход |
-|------|-------|
-| Tasks 1–6 | E2E сценарий без WeldOperation |
+`POST /joints/{id}/submit-for-review` · `/confirm-pto` · `/confirm-ogs` ·
+`/reject-pto` · `/reject-ogs` · `/cancel` · `/supersede`.
 
-**E2E сценарий (`test_full_engineering_vertical_slice`):**
+Правила: submit — из `DRAFT` или повторно после `REJECTED`, сохраняет
+`submitted_by/at`, → `PENDING_REVIEW`; confirm-pto — только `PTO_ENGINEER`, меняет
+только `pto_status`; confirm-ogs — только `OGS_ENGINEER`; reject — комментарий
+обязателен, Joint остаётся `PENDING_REVIEW`; cancel/supersede — причина,
+подразделение (`PTO`/`OGS`), actor, expected version; supersede дополнительно
+`superseded_by_joint_id` (запрет self-supersede; заменяющий того же проекта;
+допустимый статус). Статусы через обычный PATCH не меняются.
 
-1. Create Company
-2. Create Project
-3. Add project_companies (WELDING_CONTRACTOR)
-4. Create Line с `required_inspection_types`
-5. Create EngineeringDocument + DocumentRevision
-6. Approve document и revision (ПТО (`PTO_ENGINEER`))
-7. FOREMAN/MASTER создаёт DRAFT Joint (копия `required_inspection_types` с Line)
-8. PATCH полей → `ready_for_welding=true`
-9. ПТО (`PTO_ENGINEER`) confirm → CONFIRMED
-10. Новая DocumentRevision на тот же document (approve ПТО (`PTO_ENGINEER`))
-11. `POST /joints/{id}/revisions/{revision_id}/link` (ПТО (`PTO_ENGINEER`)) — UUID Joint сохранён, `current_revision_id` обновлён
-12. Альтернативная ветка: supersede (ПТО (`PTO_ENGINEER`)) → новый Joint UUID
+### Ключевые тесты
 
-### Шаги
+DRAFT → PENDING_REVIEW; confirm ПТО/ОГС; авто-ACTIVE; reject ПТО/ОГС; обязательный
+комментарий; повторная отправка после reject; cancel; supersede; запрет
+self-supersede; сброс согласований при изменении полей; возврат ACTIVE →
+PENDING_REVIEW; optimistic locking; `scope_type` `ENGINEERING_DOCUMENT` не ломает
+существующие области; регрессия HR.
 
-- [ ] **7.1** Написать E2E test (failing до полной сборки)
-- [ ] **7.2** `alembic heads` — один head `20260710_06_joint_lifecycle`
-- [ ] **7.3** `alembic upgrade head`
-- [ ] **7.4** `python -m compileall app`
-- [ ] **7.5** `pytest tests/test_engineering_joints_e2e.py -q`
-- [ ] **7.6** `pytest tests/ -q` — полный набор
-- [ ] **7.7** Проверить список маршрутов (OpenAPI `/docs` или `app.routes`)
-- [ ] **7.8** Убедиться: нет импортов `src.models`, нет правок `app/workforce`
-- [ ] **7.9** Commit
+**Commit:** `feat(engineering): add joint review lifecycle`
 
-**Команды проверки:**
+**Checkpoint:** ChatGPT — двойное согласование, аддитивный scope_type, роли
+PTO_ENGINEER/OGS_ENGINEER.
 
-```powershell
-cd 09_Разработка/backend
-alembic heads
-alembic upgrade head
-python -m compileall app
-pytest tests/test_engineering_joints_e2e.py -q
-pytest tests/ -q
-```
+---
 
-**Commit:** `test(engineering): verify engineering joints vertical slice`
+## Task 6 — Joint ↔ DocumentRevision History
 
-**Checkpoint:** ChatGPT — готовность к implementation plan №2 (WeldOperation).
+### Цель
+
+Таблица `engineering.joint_document_revisions` с неизменяемыми снимками, роли связей,
+аннулирование, смена текущей ревизии.
+
+### Файлы
+
+**Modify:** `engineering/models.py`, `schemas.py`, `repository.py`, `services.py`,
+`api.py`, `migrations/env.py`.
+
+**Create:**
+
+- `09_Разработка/backend/migrations/versions/20260711_07_joint_doc_revisions.py`
+- `09_Разработка/backend/tests/test_engineering_joint_revisions.py`
+
+### Таблица `joint_document_revisions`
+
+- `id` UUID PK; `joint_id` FK NOT NULL; `document_revision_id` FK NOT NULL;
+  `revision_role` (`ORIGIN/CONFIRMED/MODIFIED/REMOVED`); `document_role`
+  (`PRIMARY/ADDITIONAL/EXECUTIVE/REFERENCE`); `link_status` (`ACTIVE/INVALIDATED`).
+- Полный неизменяемый снимок основных параметров Joint (joint_no, нормализация, dn/
+  толщины, материалы, компоненты, классификация, способы сварки, термообработка,
+  положение) на момент связи. Снимок не редактируется (PATCH snapshot нет).
+- Аннулирование: `invalidated_reason/by/at`; `updated_at`/`updated_by` меняются
+  только при аннулировании; аннулированная связь остаётся в истории, не может стать
+  текущей PRIMARY.
+- Partial unique index: `joint_no_normalized` уникален среди активных связей в одной
+  `DocumentRevision` (`WHERE link_status='ACTIVE'`); одна активная `PRIMARY`-связь на
+  Joint, соответствующая `current_document_revision_id`.
+
+### API
+
+`POST /joints/{id}/document-revisions` (новый снимок, не меняет current
+автоматически) · `POST /joints/{id}/document-revisions/{link_id}/invalidate`
+(`PTO_ENGINEER`/`OGS_ENGINEER`, причина; текущую PRIMARY нельзя аннулировать без
+предварительной смены; повтор → конфликт) · `POST /joints/{id}/set-current-revision`
+(expected version; связь принадлежит Joint, ACTIVE, соответствует ревизии;
+обновляет `current_document_revision_id`, назначает новую PRIMARY, снимает прежнюю
+без изменения снимка, копирует поля Joint из выбранного снимка, проверяет права на
+старый и новый документ, сбрасывает нужные подтверждения, инкремент `version`).
+
+### Ключевые тесты
+
+ORIGIN-связь при создании Joint; соответствие снимка Joint; неизменяемость снимка;
+новая связь; аннулирование; запрет current для аннулированной; отсутствие
+физического удаления; set-current-revision (успех, копирование полей, смена PRIMARY,
+права на оба документа, запрет INVALIDATED / чужой связи).
+
+**Commit:** `feat(engineering): add joint document revision history`
+
+**Checkpoint:** ChatGPT — неизменяемые снимки, одна активная PRIMARY, права на оба
+документа при смене ревизии.
+
+---
+
+## Task 7 — Bulk Joint Import
+
+### Цель
+
+Массовое атомарное создание Joint из одной `DocumentRevision` с идемпотентностью.
+
+### Файлы
+
+**Modify:** `engineering/schemas.py`, `repository.py`, `services.py`, `api.py`,
+`migrations/env.py`.
+
+**Create:**
+
+- `09_Разработка/backend/migrations/versions/20260711_08_joint_bulk_requests.py`
+- `09_Разработка/backend/tests/test_engineering_joint_bulk.py`
+
+### Решения
+
+- `POST /api/v1/engineering/joints/bulk` — общие поля (`project_id`, `line_id`,
+  `document_revision_id`, `created_by`, `idempotency_key`) + строки (≤ 500) с
+  параметрами конкретных Joint. Атомарно: любая невалидная строка → не создаётся ни
+  один Joint; ошибки с `row_index`; `system_code` присваивается только после
+  успешной валидации всего пакета; commit/rollback целиком. Успех: `row_index`,
+  `id`, `system_code`, `joint_no`.
+- Таблица `engineering.joint_bulk_requests`: `id`, `project_id`, `idempotency_key`,
+  `request_hash`, `status`, `response_payload` JSON, аудит;
+  `UNIQUE(project_id, idempotency_key)`. Тот же ключ и hash → сохранённый
+  `response_payload`; тот же ключ, другой hash → конфликт; ответ хранится целиком и
+  не пересобирается. Hash — из канонизированного тела запроса без нестабильных
+  значений.
+
+### Ключевые тесты
+
+Успешный пакет; максимум 500; отказ при 501; атомарный rollback; ошибки с
+`row_index`; `system_code` не расходуются при неуспехе; сопоставление `row_index`;
+повтор с тем же `idempotency_key`; конфликт при другом содержимом; возврат
+сохранённого `response_payload`.
+
+**Commit:** `feat(engineering): add bulk joint import`
+
+**Checkpoint:** ChatGPT — атомарность, идемпотентность, отсутствие расхода
+system_code при неуспехе; финальная регрессия Tasks 1–6.
 
 ---
 
@@ -719,27 +739,31 @@ pytest tests/ -q
 
 | # | Критерий | Статус |
 |---|----------|--------|
-| 1 | Session 004 первый контур (Project→Line→Doc→Revision→Joint) | Покрыт Tasks 2–6 |
+| 1 | Session 004 первый контур (Project→Line→Doc→Revision→Joint) | Покрыт Tasks 2–4 + 5A/5B/6/7 (Joint по ADR-010) |
 | 2 | Нет WeldOperation, Inspection, Repair, HT | Да |
 | 3 | Нет полноценной auth/JWT | Да — только X-User-Id + role check |
-| 4 | Нет Excel-импорта | Да |
+| 4 | Нет Excel-импорта | Да (bulk Task 7 — JSON, не Excel) |
 | 5 | Нет HEAT_TREATMENT_OPERATOR | Да |
-| 6 | Нет FK к WPS/МТО | Да — nullable без FK |
+| 6 | Нет FK к WPS/МТО | Да — nullable без FK (Р-4) |
 | 7 | PK/FK согласованы (IP-01) | Да — таблица в § IP-01 |
 | 8 | Миграции линейны от `20260703_03_welder_admissions` | Да — § цепочка |
-| 9 | Один Alembic head после Task 6 | Да |
-| 10 | Каждый Task — тест + commit | Да — 7 commits |
+| 9 | Один Alembic head после Task 7 | Да — `20260711_08_joint_bulk_requests` |
+| 10 | Каждый Task — тест + commit | Да — 8 commits (Tasks 1–4, 5A, 5B, 6, 7) |
 | 11 | Нет TBD/TODO в плане | Да |
 | 12 | ChatGPT — review; Claude Code — код; Cursor — среда/Git | Да — в шапке |
 | 13 | Предметный термин ПТО соответствует техническому `role_code` `PTO_ENGINEER` (IP-07) | Да |
-| 14 | Новый `role_code` `PTO` отсутствует | Да |
+| 14 | Новый `role_code` `PTO`/`OGS` отсутствует | Да — используются `PTO_ENGINEER`/`OGS_ENGINEER` (Р-2) |
 | 15 | Миграция не переименовывает `role_code` в данных `worker_roles` | Да |
 | 16 | Типы массивов `ARRAY(Text)` и UUID определены однозначно | Да |
-| 17 | Новая Revision привязывается через `POST .../link` | Да — Task 6 |
-| 18 | Права документов и Joint проверяются по scope с `PTO_ENGINEER` | Да — Tasks 4–6 |
+| 17 | Новая Revision привязывается через `POST .../set-current-revision` | Да — Task 6 (ADR-010) |
+| 18 | Права документов и Joint проверяются по scope с `PTO_ENGINEER`/`OGS_ENGINEER` | Да — Tasks 4, 5A, 5B, 6 |
 | 19 | Company/Project без выдуманного владельца роли | Да — только active Worker |
 | 20 | Владелец Line — ПТО (`PTO_ENGINEER`); `FOREMAN`/`MASTER` не создают Line (IP-08) | Да — Task 3 |
 | 21 | `LINE` scope не используется для POST Line (IP-08) | Да — Task 3 |
+| 22 | Joint по ADR-010: двойное согласование ПТО/ОГС, `system_code`, снимки, bulk | Да — Tasks 5A/5B/6/7 |
+| 23 | `scope_type` `ENGINEERING_DOCUMENT` добавлен аддитивно (COMPANY/SITE сохранены, Р-1) | Да — Task 5B |
+| 24 | `ready_for_welding`/`missing_welding_requirements`/`production_state` сохранены (Б-4) | Да — Task 5A |
+| 25 | `Joint.line_id` обязателен; согласование с nullable `document.line_id` (Б-3) | Да — Tasks 5A |
 
 ---
 
@@ -747,6 +771,7 @@ pytest tests/ -q
 
 - [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 004|Session 004]]
 - [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009]]
+- [[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010]] (принят — замещает Joint-часть ADR-009)
 - [[docs/ARCHITECTURE#5.3. Физическая модель БД и API Production/Joints MVP (Session 004)|ARCHITECTURE §5.3]]
 
-*Версия плана: 2026-07-10. Задач: 7. Ветка: feature/engineering-joints-mvp.*
+*Версия плана: 2026-07-11 (ревизия по ADR-010, принят). Задач: 8 (1–4, 5A, 5B, 6, 7). Ветка: feature/engineering-joints-mvp.*

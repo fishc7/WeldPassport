@@ -1130,6 +1130,204 @@ docs/project/UBIQUITOUS_LANGUAGE.md
 
 ---
 
+## ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт
+
+Дата: 2026-07-11
+
+Статус: **принято** (замещает Joint-часть ADR-009; решения ADR-009
+по EngineeringDocument и DocumentRevision **сохраняют силу**)
+
+Замещает частично: [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009]] (только раздел Joint)
+
+Уточняет: [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008]] ·
+[[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007]] · IP-05, IP-07, IP-08
+
+Канон реализации: [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP|Engineering Joints MVP — Implementation Plan]] (Tasks 5A, 5B, 6, 7)
+
+### Контекст
+
+ADR-009 (Session 004) зафиксировал минимальную модель Joint: одностадийное
+подтверждение ПТО, статусы `DRAFT / CONFIRMED / CANCELLED / SUPERSEDED`, бизнес-ключ
+`project_id + engineering_document_id + joint_no`, тонкая техническая связь
+`joint_revision_links`. При проработке реализации выявлена потребность в более
+полной модели производственного стыка:
+
+- раздельное согласование двух служб — **ПТО** (документарная зона) и **ОГС**
+  (технологическая зона), с автоматическим переходом в рабочее состояние только
+  при подтверждении обеими;
+- устойчивая идентичность Joint при выпуске новых ревизий инженерного документа с
+  **неизменяемыми снимками** параметров на момент связи;
+- **массовый ввод** стыков из одной ревизии документа с гарантией атомарности и
+  идемпотентности.
+
+Эти требования расходятся с Joint-частью ADR-009 и по правилу AGENTS.md фиксируются
+отдельным ADR **до** написания кода. ADR-010 замещает **только** раздел Joint
+ADR-009; решения ADR-009 по `EngineeringDocument` и `DocumentRevision` (реализованы
+в Task 4, commit `6d2ea09`) остаются в силе без изменений.
+
+### Решение
+
+#### Базовые соглашения (Р-1 — Р-4)
+
+- **Р-1. `hr.worker_roles.scope_type`** — значение `ENGINEERING_DOCUMENT` добавляется
+  **аддитивно** к фактическому набору `GLOBAL, COMPANY, PROJECT, SITE, LINE`.
+  Значения `COMPANY` и `SITE` сохраняются. Переименования и миграции данных нет
+  (значения `ISOMETRIC`/`UNIT` в текущей схеме не существует). При
+  `scope_type = ENGINEERING_DOCUMENT` поле `scope_id` содержит id `EngineeringDocument`
+  (строковый UUID); отдельное поле не вводится.
+- **Р-2. Роли** — используются существующие технические `role_code` `PTO_ENGINEER`
+  (предметно «ПТО») и `OGS_ENGINEER` (предметно «ОГС»). Новые `role_code` `PTO`/`OGS`
+  **не** вводятся (IP-07). Создавать Joint могут `MASTER`, `FOREMAN`, `PTO_ENGINEER`,
+  `OGS_ENGINEER`; подтверждать ПТО — только `PTO_ENGINEER`; подтверждать ОГС —
+  только `OGS_ENGINEER`.
+- **Р-3. Сущности** — используются фактические `Line` (`project.lines`, не
+  «ProjectLine»), `Project` (`project.projects`, PK UUID, есть `code`), `Worker`
+  (`hr.workers`, PK Integer). Поля-акторы Joint (`created_by`, `pto_decided_by`,
+  `submitted_by`, …) — Integer без FK, в стиле существующих `created_by`.
+- **Р-4. Справочники отсутствуют** — ссылки на материалы (`material_id_*`),
+  номенклатуру (`component_item_id_*`) и WPS (`planned_wps_id` / method) хранятся как
+  **nullable UUID без FK**; текстовые дубли (`material_text_*`, `component_text_*`) —
+  строки. FK добавляются отдельным решением после появления доменов МТО/WPS.
+
+#### Согласованность иерархии Joint (Б-3)
+
+- `Joint.line_id` — **обязателен** (NOT NULL).
+- Если `EngineeringDocument.line_id` **заполнен**, он **обязан совпадать** с
+  `Joint.line_id`.
+- Если `EngineeringDocument.line_id IS NULL`, документ **разрешено** использовать как
+  основание Joint; линия берётся из `Joint.line_id`. Такой документ обязан
+  принадлежать тому же `Project`, что и Joint.
+- Полная цепочка проверок при создании Joint и каждой новой связи: Project
+  существует; Line существует и относится к Project; DocumentRevision существует и
+  относится к EngineeringDocument; EngineeringDocument относится к тому же Project;
+  соответствие Line — по правилу выше.
+- Тип документа-основания **не** ограничивается `ISOMETRIC`.
+
+#### Вычисляемые поля (Б-4)
+
+Вычисляемые поля ADR-009 **сохраняются** (не колонки БД, вычисляются API):
+
+- `ready_for_welding` — готовность стыка к сварке по заполненности инженерных полей;
+- `missing_welding_requirements` — перечень недостающих полей;
+- `production_state` — в MVP константа `NOT_STARTED`.
+
+`requires_review` их **не** заменяет — это отдельный вычисляемый признак
+согласования: `requires_review = true`, если ПТО **или** ОГС не подтвердили Joint
+(`pto_status != CONFIRMED` или `ogs_status != CONFIRMED`, а также в состояниях
+`DRAFT` / `PENDING_REVIEW`).
+
+#### Модель Joint (заменяет раздел Joint ADR-009)
+
+- Схема `engineering`; `id` UUID PK; обязательные `project_id`, `line_id`,
+  `origin_document_revision_id`, `current_document_revision_id`.
+- `system_code` формируется системой (`<project_code>-JNT-<sequence>`),
+  не принимается от пользователя; последовательность отдельная на проект, номера не
+  переиспользуются; `UNIQUE(project_id, system_code)`.
+- `joint_no` (исходное обозначение) + `joint_no_normalized` (служебное: trim,
+  схлопывание пробелов, типографские дефисы → `-`, сравнение без учёта регистра);
+  исходное значение не теряется.
+- `origin_document_revision_id` неизменяем; `current_document_revision_id` меняется
+  только командой `set-current-revision` (не обычным PATCH).
+- Статусы `status`: `DRAFT, PENDING_REVIEW, ACTIVE, CANCELLED, SUPERSEDED` (без
+  `ON_HOLD`). Двойное согласование `pto_status` / `ogs_status`:
+  `PENDING / CONFIRMED / REJECTED`. При создании `status=DRAFT`, оба статуса
+  `PENDING`. `ACTIVE` — автоматически при обоих `CONFIRMED`; иначе не ACTIVE.
+- `superseded_by_joint_id` — nullable self-FK; обязателен при `status=SUPERSEDED`;
+  запрет self-supersede; заменяющий Joint того же проекта.
+- Инженерные поля по сторонам соединения, классификация
+  (`geometry_type` `BUTT/FILLET/TEE/LAP/SLOT/OTHER`, `weld_joint_type`
+  `BW/SW/FW/OTHER`, `connection_code` `C/U/T/N/P/OTHER`), проектные способы сварки
+  (`required_root/fill/cap_method`), требование термообработки, положение на чертеже
+  (координаты необязательны; при заполненных `position_x/y` обязателен
+  `coordinate_system`).
+- Concurrency — `version` (optimistic locking); изменяющий запрос передаёт ожидаемую
+  версию, несовпадение → конфликт без перезаписи. Физического удаления нет,
+  DELETE-endpoint не создаётся.
+
+#### Разделение ответственности ПТО / ОГС
+
+- Поля ПТО: `joint_no`, `line_id`, документ/ревизия, `sheet_no`, `drawing_zone`,
+  координаты, `location_note`, документарное примечание.
+- Поля ОГС: `geometry_type`, `weld_joint_type`, `connection_code`, DN/толщины,
+  материалы, компоненты, проектные способы сварки, WPS (при наличии ссылки),
+  требования термообработки.
+- Изменение полей ПТО сбрасывает `pto_status` → `PENDING`; полей ОГС → `ogs_status`
+  → `PENDING`; общих полей — оба; из `ACTIVE` Joint возвращается в `PENDING_REVIEW`.
+
+#### История ревизий: `joint_document_revisions`
+
+- Неизменяемый снимок основных параметров Joint на момент связи; `revision_role`
+  (`ORIGIN/CONFIRMED/MODIFIED/REMOVED`), `document_role`
+  (`PRIMARY/ADDITIONAL/EXECUTIVE/REFERENCE`), `link_status` (`ACTIVE/INVALIDATED`).
+- Снимок не редактируется (PATCH snapshot не создаётся); исправление — новая связь
+  или аннулирование (`invalidated_reason/by/at`); аннулированная связь остаётся в
+  истории и не может стать текущей PRIMARY.
+- В пределах одной `DocumentRevision` `joint_no_normalized` уникален среди
+  **активных** связей (partial unique index `WHERE link_status='ACTIVE'`); у одного
+  Joint в момент времени только одна активная связь `document_role=PRIMARY`,
+  соответствующая `current_document_revision_id`.
+
+#### Доступ по областям (scope) и иерархия
+
+- Области: `GLOBAL, PROJECT, COMPANY, SITE, LINE, ENGINEERING_DOCUMENT`. Проверяется
+  не только совпадение `scope_id`, но и иерархия; для обычных действий — по текущему
+  документу Joint; для смены текущей ревизии — доступ и к старому, и к новому
+  документу. Несколько активных ролей дают объединение областей.
+
+#### Bulk-импорт и идемпотентность
+
+- `POST /api/v1/engineering/joints/bulk` — атомарное создание из одной
+  `DocumentRevision`; ≤ 500 строк; при любой невалидной строке не создаётся ни один
+  Joint; ошибки с `row_index`; `system_code` присваивается только после успешной
+  валидации всего пакета; commit/rollback целиком.
+- Таблица `engineering.joint_bulk_requests` (`UNIQUE(project_id, idempotency_key)`,
+  `request_hash`, `response_payload` JSON): тот же ключ и тот же hash → сохранённый
+  ответ; тот же ключ, другой hash → конфликт; ответ хранится целиком и не
+  пересобирается из текущего состояния Joint.
+
+#### Разбиение реализации на этапы
+
+| Этап | Содержание | Миграция |
+|------|-----------|----------|
+| **Task 5A — Joint Core** | `joints`; обязательная связь с Line; `origin_/current_document_revision_id`; `system_code`; основные инженерные поля; нормализация `joint_no`; `version`; вычисляемые `ready_for_welding`, `missing_welding_requirements`, `production_state`; create / get / list / PATCH только допустимых полей | `20260711_05_engineering_joints` |
+| **Task 5B — Joint Review Lifecycle** | `PENDING_REVIEW` / `ACTIVE`; `pto_status` / `ogs_status`; submit / confirm / reject; cancel / supersede; роли `PTO_ENGINEER` / `OGS_ENGINEER`; аддитивное добавление `ENGINEERING_DOCUMENT` в `scope_type` | `20260711_06_joint_review` |
+| **Task 6 — Joint ↔ DocumentRevision History** | `joint_document_revisions`; неизменяемые снимки; роли связей; invalidate; set-current-revision | `20260711_07_joint_doc_revisions` |
+| **Task 7 — Bulk Joint Import** | bulk endpoint; `joint_bulk_requests`; идемпотентность; атомарность пакета | `20260711_08_joint_bulk_requests` |
+
+### Отклонённые варианты
+
+1. **Реализовать всё как единый Task 5** — отклонено: объём охватывает несколько
+   доменных подсистем; поэтапная сдача с ревью безопаснее.
+2. **Одностадийное подтверждение (только ПТО) из ADR-009** — отклонено для Joint:
+   производству требуется раздельная ответственность ПТО и ОГС.
+3. **Буквальное `scope_type` из первичного ТЗ (рейнейм `ISOMETRIC`, набор с `UNIT`)**
+   — отклонено: таких значений в схеме нет; исполнение удалило бы `COMPANY`/`SITE`.
+4. **Новые `role_code` `PTO`/`OGS`** — отклонено (IP-07); используются существующие
+   `PTO_ENGINEER` / `OGS_ENGINEER`.
+5. **Редактируемый снимок связи (PATCH snapshot)** — отклонено: снимок неизменяем,
+   исправление — новая связь или аннулирование.
+
+### Последствия
+
+- Joint-часть ADR-009 считается замещённой ADR-010; остальные разделы ADR-009 и вся
+  реализация Task 4 (`EngineeringDocument`, `DocumentRevision`) — без изменений.
+- Появляются таблицы `engineering.joints`, `engineering.joint_document_revisions`,
+  `engineering.joint_bulk_requests`; `hr.worker_roles.scope_type` расширяется
+  значением `ENGINEERING_DOCUMENT`.
+- `IMPLEMENTATION_PLAN` перестраивается на этапы 5A / 5B / 6 / 7.
+- Материалы, номенклатура и WPS остаются без FK до появления соответствующих
+  доменов.
+- ADR-010 является каноном реализации Joint для Tasks 5A, 5B, 6 и 7.
+
+### Где зафиксировано
+
+```text
+docs/project/DECISIONS.md (ADR-010)
+docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Tasks 5A, 5B, 6, 7)
+```
+
+---
+
 ## ADR-003. Исключение модуля нормирования из активного MVP
 
 Дата: 2026-07-03
