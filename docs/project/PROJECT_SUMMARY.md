@@ -58,15 +58,22 @@ WeldPassport — внутренняя система для отдела гла�
 
 Границы доменов — [[docs/project/CONSTITUTION|Конституция §8]] · [[docs/project/ADR-006-domain-ownership-matrix|ADR-006: матрица владения]] ·
 [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007: жизненный цикл стыка]] ·
-[[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008: каноническая модель Production/Joints MVP]].
+[[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008: каноническая модель Production/Joints MVP]] ·
+[[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009: физическая модель БД и API Production/Joints MVP]].
 
 ## Текущий статус архитектуры (2026-07-10)
 
-- **Architecture Session 003 завершена** — см.
-  [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 003|журнал сессий]].
-- Зафиксирована **доменная модель Production/Joints MVP** (решения 003-A — 003-AM,
-  ADR-008): engineering-ядро, lifecycle Joint, RACI-модель ответственности.
-- **Следующий этап:** проектирование БД/API Production/Joints MVP.
+- **Architecture Session 003 завершена** — доменная модель Production/Joints MVP
+  (ADR-008, решения 003-A — 003-AM).
+- **Architecture Session 004 завершена** — см.
+  [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 004|журнал сессий]].
+- **БД/API Production/Joints MVP спроектированы** (ADR-009, решения 004-01 — 004-27):
+  схемы `project`, `engineering`, `production`, `quality`, `documents`; структуры
+  таблиц, API-контуры, правила переходов и тестовые сценарии.
+- **Реализация ещё не начата:** таблицы, миграции и API Production/Joints в коде
+  **отсутствуют**.
+- **Следующий этап:** подготовка пошагового **implementation plan**.
+- **Импорт Excel** — отложенное отдельное решение (не входит в начальный MVP).
 
 ## Текущее состояние backend (2026-07-06)
 

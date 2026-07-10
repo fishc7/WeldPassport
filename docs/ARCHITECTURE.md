@@ -270,8 +270,54 @@ Defect, RepairOperation, HeatTreatmentOperation, Attachment/DocumentFile
 Inspection; DocumentationPackage и Joint closure описаны в 003-AL. Полная матрица —
 [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 003 — RACI модель Production/Joints MVP|Session 003 — RACI]].
 
-> **Architecture Session 003 завершена** (2026-07-10). ADR-008 фиксирует решения
-> 003-A — 003-AM. Следующий этап — **проектирование БД/API Production/Joints MVP**.
+> **Architecture Session 004 завершена** (2026-07-10). ADR-009 фиксирует физическую
+> модель БД, события и API (решения 004-01 — 004-27). Следующий этап —
+> **подготовка пошагового implementation plan**; код и миграции ещё не созданы.
+
+### 5.3. Физическая модель БД и API Production/Joints MVP (Session 004)
+
+Session 004 (ADR-009) переводит предметную модель ADR-008 в утверждённый контур схем,
+таблиц и API. **Реализация в коде ещё не начата.**
+
+#### Схемы PostgreSQL (следующий утверждённый контур MVP)
+
+| Схема | Основные сущности | Владелец домена |
+|-------|-------------------|-----------------|
+| `project` | Project, Line | projects |
+| `engineering` | EngineeringDocument, DocumentRevision, Joint | engineering / ПТО |
+| `production` | WeldOperation, RepairOperation, HeatTreatmentOperation | production / СМР |
+| `quality` | Inspection, Defect | quality / ОТК, НК |
+| `documents` | DocumentFile, технические связи | documents / ПТО |
+| `hr`, `welding` | workers, welders, admissions, WPS | ОК, ОГС (реализовано) |
+
+```text
+engineering.joints          ← центральный объект (инженерная модель)
+    ├── production.weld_operations
+    ├── production.repair_operations
+    ├── production.heat_treatment_operations
+    ├── quality.inspections
+    └── quality.defects
+```
+
+Joint остаётся **центральным объектом** производственного процесса, но события
+жизненного цикла **разделены по владельцам** схем и модулей backend.
+
+Ключевые правила (детали — ADR-009, Session 004):
+
+| Правило | Суть |
+|---------|------|
+| Инженерный статус | `engineering_status` хранится на Joint (`DRAFT` … `SUPERSEDED`) |
+| Производственное состояние | `production_state` и `ready_for_welding` **вычисляются** API |
+| Уникальность номера | `project_id` + `engineering_document_id` + `joint_no` |
+| WeldOperation | Этапы `ROOT`/`FILL`/`COVER`/`FILL_COVER`; допуск проверяется строго |
+| Сварщики | `actual_welder_id` / `documented_welder_id` разделены (ADR-002) |
+| Контроль | Единая `Inspection` для VT, RT, UT, HARDNESS и др. |
+| Неизменяемость | Подтверждённые производственные факты не редактируются и не удаляются |
+| API | Контуры `/projects`, `/engineering`, `/production`, `/quality`, `/documents` |
+| Импорт Excel | Отложен; не входит в начальный MVP |
+
+Полная спецификация полей, ограничений, маршрутов и тестовых сценариев —
+[[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 004|Session 004]] (разделы 1–7).
 
 ## 6. Ключевые правила модели данных
 
@@ -394,8 +440,8 @@ erDiagram
 Идентификаторы рекомендуется хранить как UUID, а человекочитаемые номера
 проекта, изометрии и стыка — как отдельные бизнес-атрибуты. Для стыка: неизменяемый
 `joint_id` (PK) и `joint_number` (уникален в составе
-`project_id + line_id + source_engineering_document_id`, см.
-[[docs/project/DECISIONS#003-I. Уникальность JointNumber|ADR-008, 003-I]] и
+`project_id + engineering_document_id + joint_no`, см.
+[[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009, 004-04]] и
 [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007]]).
 
 ## Активное ядро MVP и отложенные модули
@@ -411,12 +457,16 @@ erDiagram
 | Профиль сварщика (ОГС) | `welding.welders` | Реализовано |
 | Допуски сварщика (ОГС) | `welding.welder_admissions` | Реализовано (v0.1) |
 | Legacy работники/сварщики | `workforce` / кириллические таблицы | Deprecated (ADR-005) |
-| Стык (инженерная модель) | `engineering.joints` | Проектирование (ADR-007) |
-| Сварочные операции | `production.weld_operations` | Проектирование |
-| Периодика КСС | `periodic_kss.*` | Проектирование |
-| Контроль качества / НК | QC / NDT control results | Проектирование |
-| Исполнительная документация | PTO executive documents | Проектирование |
-| Закрытие стыка | joint history, закрытие | Проектирование |
+| Проект, линия | `project.*` | Спроектировано (ADR-009), не реализовано |
+| Инженерия, стык | `engineering.joints`, `engineering_documents` | Спроектировано (ADR-009), не реализовано |
+| Сварочные операции | `production.weld_operations` | Спроектировано (ADR-009), не реализовано |
+| Ремонт, термообработка | `production.repair_operations`, `heat_treatment_operations` | Спроектировано (ADR-009), не реализовано |
+| Контроль, дефекты | `quality.inspections`, `quality.defects` | Спроектировано (ADR-009), не реализовано |
+| Файлы | `documents.document_files` | Спроектировано (ADR-009), не реализовано |
+| Периодика КСС | `periodic_kss.*` | Проектирование (backlog) |
+| Исполнительная документация | PTO executive documents | Проектирование (backlog) |
+| Закрытие стыка | joint closure | Проектирование (backlog) |
+| Импорт Excel | — | Отложено (ADR-009, 004-26) |
 
 Производственная цепочка MVP: **ОК → ОГС → СМР → ПТО → ОТК/НК → Закрытие**.
 
@@ -533,32 +583,34 @@ scope = организация / проект / объект
 
 ## 9. API
 
-Для MVP подходит REST API:
+Для MVP — REST API по предметным контурам (ADR-009, Session 004):
 
 ```text
 /api/v1/projects
-/api/v1/sites
-/api/v1/isometrics
-/api/v1/joints
-/api/v1/workers
-/api/v1/welders
-/api/v1/admission-checks
-/api/v1/work-assignments
-/api/v1/welding-operations
-/api/v1/inspections
-/api/v1/reports
+/api/v1/engineering
+/api/v1/production
+/api/v1/quality
+/api/v1/documents
+/api/v1/hr          (реализовано)
+/api/v1/ogs         (реализовано)
 ```
 
-Бизнес-действия оформляются командами, а не универсальным обновлением статуса:
+Ключевые маршруты Joint (engineering):
 
 ```text
-POST /joints/{id}/assign
-POST /joints/{id}/record-welding
-POST /joints/{id}/request-inspection
-POST /inspections/{id}/record-result
-POST /defects/{id}/record-repair
-POST /joints/{id}/close
+POST   /api/v1/engineering/joints
+GET    /api/v1/engineering/joints/{id}/lifecycle
+POST   /api/v1/engineering/joints/{id}/confirm
+POST   /api/v1/engineering/joints/{id}/cancel
+POST   /api/v1/engineering/joints/{id}/supersede
 ```
+
+Production и quality — самостоятельные коллекции с командами `confirm` / `void`;
+`PATCH` только для черновиков. Ответ Joint включает вычисляемые `ready_for_welding`,
+`production_state`, `requires_ogs_review`, `requires_pto_review`.
+
+> Устаревший черновик маршрутов (`/api/v1/joints`, `/api/v1/isometrics` и др.) заменяется
+> контурной моделью ADR-009 при реализации.
 
 Для защиты от повторной отправки мобильным интернетом команды записи должны
 поддерживать `Idempotency-Key`.
@@ -798,7 +850,7 @@ backend или оставить отдельным слоём до миграц�
 ## Связанные документы
 
 - [[docs/00_PROJECT_CONTEXT|Контекст проекта]] — назначение, жизненный цикл, 7 модулей
-- [[docs/project/DECISIONS|Журнал решений (ADR)]] — [[docs/project/DECISIONS#ADR-001. Модель организаций и проектов|ADR-001]] · [[docs/project/ADR-002-double-welder-accounting|ADR-002: двойной учёт сварщика]] · [[docs/project/DECISIONS#ADR-003. Исключение модуля нормирования из активного MVP|ADR-003: нормирование в backlog]] · [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007: жизненный цикл стыка]] · [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008: каноническая модель предметной области]]
+- [[docs/project/DECISIONS|Журнал решений (ADR)]] — [[docs/project/DECISIONS#ADR-001. Модель организаций и проектов|ADR-001]] · [[docs/project/ADR-002-double-welder-accounting|ADR-002: двойной учёт сварщика]] · [[docs/project/DECISIONS#ADR-003. Исключение модуля нормирования из активного MVP|ADR-003: нормирование в backlog]] · [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007: жизненный цикл стыка]] · [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008: каноническая модель предметной области]] · [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009: физическая модель БД и API]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 004|Session 004]]
 - [[03_База_данных/Модель_организаций_и_проектов|Модель организаций и проектов]] · [[03_База_данных/WeldPassport_Реестр_сущностей_БД_v0.1|Реестр сущностей БД]]
 - [[05_Роли_и_права/00_Ролевая_цепочка_ответственности|Ролевая цепочка ответственности]] · [[02_Процессы/WeldPassport_Процессы_v0.1|Процессы v0.1]]
 - [[10_Проектирование_WeldPassport/03_Работники_и_сварщики/01_Модель_данных_Работники_и_сварщики_v0.1|Модель данных: работники и сварщики]] · [[10_Проектирование_WeldPassport/03_Работники_и_сварщики/02_План_реализации_Работники_и_сварщики_v0.1|План реализации]]

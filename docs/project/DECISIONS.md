@@ -1014,6 +1014,122 @@ docs/project/PROJECT_SUMMARY.md
 
 ---
 
+## ADR-009. Production/Joints MVP — физическая модель БД, события и API
+
+Дата: 2026-07-10
+
+Статус: принято — закрывает Architecture Session 004 (решения 004-01 — 004-27)
+
+Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 004|Session 004]]
+
+Уточняет: [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008]] ·
+[[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007]] ·
+[[docs/project/ADR-006-domain-ownership-matrix|ADR-006]] ·
+[[docs/project/ADR-002-double-welder-accounting|ADR-002]] ·
+[[docs/project/DECISIONS#ADR-004. Стабилизация модели ОГС (welders, admissions, stamp_code)|ADR-004]]
+
+Канон: [[docs/ARCHITECTURE#5.3. Физическая модель БД и API Production/Joints MVP (Session 004)|ARCHITECTURE §5.3]]
+
+### Контекст
+
+Session 003 (ADR-008) зафиксировала каноническую предметную модель Production/Joints
+MVP. Session 004 переводит её в физическую схему PostgreSQL, границы модулей backend,
+контракт REST API и правила переходов состояний.
+
+Источники требований: реальные журналы сварки, ремонта, контроля, термообработки,
+справочники типов соединений, данные сварщиков и материалов.
+
+Код, миграции и тесты **не менялись** в рамках Session 004.
+
+### Решение
+
+#### Схемы и владение данными
+
+| Схема | Сущности |
+|-------|----------|
+| `project` | Project, Line |
+| `engineering` | EngineeringDocument, DocumentRevision, Joint |
+| `production` | WeldOperation, RepairOperation, HeatTreatmentOperation |
+| `quality` | Inspection, Defect |
+| `documents` | DocumentFile, технические связи файлов |
+| `hr`, `welding` | существующие контуры (без изменений) |
+
+- **Joint** — инженерная сущность в `engineering`; центральный объект процесса.
+- Производственные факты — `production`; контроль и дефекты — `quality`;
+  файлы — `documents`.
+- `engineering_status` хранится на Joint; `production_state` и `ready_for_welding`
+  **вычисляются** API, в БД не хранятся.
+
+#### Joint
+
+- Двухэтапное создание: **FOREMAN** / **MASTER** создаёт `DRAFT`; **ПТО** подтверждает.
+- Бизнес-ключ: `project_id` + `engineering_document_id` + `joint_no` (уточняет ADR-008, 003-I).
+- `engineering_status`: `DRAFT`, `CONFIRMED`, `CANCELLED`, `SUPERSEDED`.
+- При новой ревизии РД: неизменившийся Joint сохраняет UUID; удалённый — `CANCELLED`;
+  заменённый — `SUPERSEDED` + `superseded_by_joint_id`; существенно изменённый — новый UUID.
+- Геометрия (`geometry_type`) и форма шва (`weld_type`) разделены; материалы — каталог
+  + исторический снимок на каждую сторону.
+
+#### WeldOperation
+
+- Несколько операций на Joint; этапы MVP: `ROOT`, `FILL`, `COVER`, `FILL_COVER`.
+- `actual_welder_id` и `documented_welder_id` разделены (ADR-002).
+- Допуск сварщика проверяется **строго** перед созданием операции; обход в MVP не предусмотрен.
+- `Joint.planned_wps_id` (ОГС) и `WeldOperation.actual_wps_id` (факт) разделены.
+- Статусы: `DRAFT`, `CONFIRMED`, `VOIDED`; подтверждённая операция неизменяема;
+  исправление — новая операция с `replaces_operation_id`.
+- Сварочные материалы — снимок в `weld_consumable_usages` (техническая таблица).
+
+#### Контроль, ремонт, термообработка
+
+- **Inspection** едина для всех методов (`VT`, `RT`, `UT`, `PT`, `MT`, `HARDNESS`, `PMI`, `FERRITE`).
+- Подтверждённый `FAIL` требует минимум один **Defect**.
+- **RepairOperation** связывается с Defect; ремонтная сварка — `WeldOperation` с
+  `repair_operation_id`; Defect закрывается повторным `PASS`, не самим ремонтом.
+- **HeatTreatmentOperation** — повторяемое событие; контроль твёрдости — `Inspection.HARDNESS`.
+- Роль `HEAT_TREATMENT_OPERATOR` для регистрации термообработки.
+
+#### API
+
+Группы: `/api/v1/projects`, `/engineering`, `/production`, `/quality`, `/documents`.
+
+Сущности — самостоятельные коллекции; команды `confirm` / `void` / `cancel` / `supersede`;
+`PATCH` только для черновиков. Ответ Joint включает вычисляемые поля состояния.
+
+#### Импорт Excel
+
+Не входит в начальный MVP; отложен до стабилизации модели. Окончательный вариант
+(прямой импорт или через промежуточную проверку) — отдельное будущее решение.
+
+### Отклонённые варианты
+
+1. **Хранение `production_state` как редактируемого поля** — отклонено: риск расхождения с фактами.
+2. **Отдельные сущности NDTInspection / HardnessInspection в MVP** — отклонено: единая Inspection.
+3. **Создание WeldOperation без проверки допуска** — отклонено: строгая проверка обязательна.
+4. **Импорт Excel в начальном MVP** — отложено.
+5. **Физическое удаление подтверждённых производственных записей** — отклонено.
+
+### Последствия
+
+- Потребуется добавить схемы `project`, `engineering`, `production`, `quality`, `documents`.
+- Потребуется новая роль `HEAT_TREATMENT_OPERATOR`.
+- Реализацию нужно разделить на несколько последовательных этапов (implementation plan).
+- `hr` и `welding` остаются каноническими владельцами работников, сварщиков, допусков и WPS.
+- Будущий импорт Excel **не должен** обходить доменные проверки.
+- ADR-008 сохраняет силу по предметной модели; ADR-009 уточняет физическую реализацию.
+
+### Где зафиксировано
+
+```text
+docs/project/ARCHITECTURE_SESSIONS.md (Session 004)
+docs/project/DECISIONS.md (ADR-009)
+docs/ARCHITECTURE.md (§5.3, активное ядро MVP, API)
+docs/project/PROJECT_SUMMARY.md
+docs/project/UBIQUITOUS_LANGUAGE.md
+```
+
+---
+
 ## ADR-003. Исключение модуля нормирования из активного MVP
 
 Дата: 2026-07-03

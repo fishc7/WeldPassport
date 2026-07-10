@@ -389,7 +389,7 @@ Project
 | **Номер** | 004 |
 | **Дата** | 2026-07-10 |
 | **Тема** | Проектирование БД/API Production/Joints MVP |
-| **Статус** | В процессе |
+| **Статус** | Завершена |
 
 ### Краткое описание
 
@@ -400,13 +400,13 @@ Project
 В качестве источников требований проанализированы реальные журналы сварки, ремонта,
 контроля, термообработки, справочники типов соединений, данные сварщиков и материалов.
 
-**Код и миграции на этой сессии не создаются.** Это промежуточная фиксация решений;
-сессия не считается завершённой до синхронизации ADR и канонической документации.
+**Код и миграции на этой сессии не создавались.** Session 004 завершена; решения
+зафиксированы в ADR-009 и синхронизированы с канонической документацией.
 
 Уточняет: [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008]] ·
 [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007]].
 
-### Принятые решения (блок 004-01 — 004-26)
+### Принятые решения (блок 004-01 — 004-27)
 
 | ID | Тема |
 |----|------|
@@ -436,6 +436,7 @@ Project
 | **004-24** | Условия ACCEPTED |
 | **004-25** | Требования контроля наследуются со снимком |
 | **004-26** | Импорт Excel — поэтапное решение |
+| **004-27** | Сварочные материалы — фактический снимок плюс будущая связь с МТО |
 
 #### 004-01. Двухэтапное создание Joint
 
@@ -704,14 +705,24 @@ Joint считается `ACCEPTED`, когда:
 
 #### 004-26. Импорт Excel — поэтапное решение
 
-- На начальном этапе MVP используется ручной / API-контур.
-- Импорт Excel **не отменён**, а отложен.
-- После стабилизации модели будет отдельно выбран:
-  - прямой импорт;
-  - импорт через промежуточную проверку.
+- На начальном этапе MVP используется **ручной / API-контур**.
+- Импорт Excel **не отменён**, а **отложен**.
+- После стабилизации модели будет выбран **прямой импорт** или **импорт через
+  промежуточную проверку**.
 - Окончательный вариант импорта пока **не определён**.
 - Текущая модель должна учитывать возможность будущего импорта без добавления
   импортных сущностей в MVP.
+
+#### 004-27. Сварочные материалы — фактический снимок плюс будущая связь с МТО
+
+- Фактически использованные сварочные материалы сохраняются как **исторический снимок**.
+- Для каждого материала фиксируются тип, марка и при наличии номер партии.
+- Используется техническая дочерняя таблица `weld_consumable_usages`.
+- Техническая таблица **не считается** отдельной предметной сущностью MVP.
+- После появления материального контура допускается необязательная ссылка на
+  складскую партию МТО.
+- Изменение справочника или складской партии **не изменяет** исторические данные
+  `WeldOperation`.
 
 ### Подтверждённый раздел 1 — границы БД и связи
 
@@ -750,19 +761,231 @@ DocumentFile ↔ предметные объекты (техническая т�
 - Ремонтная сварка остаётся WeldOperation.
 - DocumentFile связывается с предметными объектами через техническую таблицу.
 
-### Следующий рассматриваемый раздел
+### Подтверждённый раздел 2 — структура `engineering.joints`
 
-**Раздел 2 «Структура Joint»** — в работе, **ещё не подтверждён**. Детализация полей,
-ограничений и DDL-черновика `engineering.joints` — следующий шаг Session 004.
+Основные группы полей:
+
+| Группа | Поля |
+|--------|------|
+| Идентификация | `id`, `project_id`, `line_id`, `engineering_document_id`, `current_revision_id`, `joint_no` |
+| Инженерный статус | `engineering_status`, `superseded_by_joint_id` |
+| Классификация | `geometry_type`, `weld_type`, `standard_joint_code` |
+| Размеры | `dn`, `thickness` |
+| Материал 1 | `material_1_catalog_id`, `material_1_name` |
+| Материал 2 | `material_2_catalog_id`, `material_2_name` |
+| Технология | `planned_wps_id` |
+| Контроль | `required_inspection_types`, `heat_treatment_required` |
+| Аудит | `created_by`, `created_at`, `updated_at`, `confirmed_by`, `confirmed_at` |
+
+Ограничения:
+
+- уникальность `project_id` + `engineering_document_id` + `joint_no`;
+- `DRAFT` требует Project, Line, EngineeringDocument и `joint_no`;
+- перед сваркой обязательны типы соединения и шва, DN, толщина и оба материала;
+- `CANCELLED` и `SUPERSEDED` запрещают новые производственные события;
+- подтверждённый Joint физически не удаляется;
+- история связи с ревизиями хранится в технической таблице;
+- `ready_for_welding` и `production_state` **вычисляются** API.
+
+### Подтверждённый раздел 3 — структура `production.weld_operations`
+
+Поля:
+
+- `id`, `joint_id`, `repair_operation_id`, `sequence_no`;
+- `stage`: `ROOT`, `FILL`, `COVER`, `FILL_COVER`;
+- `actual_welder_id`, `documented_welder_id`;
+- снимок фактического клейма;
+- `welding_method`, `actual_wps_id`, `welding_position`;
+- `welded_at`, `passes_count`, `purge_used`;
+- `preheat_temperature`, `ambient_temperature`;
+- `requires_ogs_review`, `requires_pto_review`;
+- `status`: `DRAFT`, `CONFIRMED`, `VOIDED`;
+- `replaces_operation_id`, `void_reason`;
+- `created_by`, `created_at`, `confirmed_by`, `confirmed_at`.
+
+Правила:
+
+- каждый этап и сварщик оформляются отдельной `WeldOperation`;
+- допуск сварщика проверяется перед подтверждением;
+- подтверждённая операция неизменяема;
+- исправление — `VOIDED` плюс новая операция;
+- зарплата и стоимость работ **не входят** в `WeldOperation`;
+- сварочные материалы хранятся через `weld_consumable_usages` (см. 004-27).
+
+### Подтверждённый раздел 4 — структура Inspection и Defect
+
+`quality.inspections`:
+
+- `id`, `joint_id`, `weld_operation_id`, `repair_operation_id`;
+- `inspection_type`, `inspected_at`, `result`;
+- `report_no`, `report_date`;
+- `performed_by_worker_id`, `performed_by_company_id`;
+- `previous_inspection_id`;
+- `status`: `DRAFT`, `CONFIRMED`, `VOIDED`;
+- `created_by`, `created_at`, `confirmed_by`, `confirmed_at`.
+
+Результаты: `PASS`, `FAIL`, `CONDITIONAL`.
+
+`quality.defects`:
+
+- `id`, `joint_id`, `inspection_id`, `weld_operation_id`;
+- `defect_code`, `description`, `location`;
+- `length`, `width`, `depth`;
+- `status`: `OPEN`, `IN_REPAIR`, `CLOSED`;
+- `closed_by_inspection_id`, `closed_at`;
+- `created_by`, `created_at`.
+
+Правила:
+
+- подтверждённый `FAIL` требует минимум один Defect;
+- одна Inspection может выявить несколько Defect;
+- Defect закрывается только повторной подтверждённой Inspection с `PASS`;
+- открытый Defect блокирует `Joint.ACCEPTED`;
+- подтверждённые записи физически не удаляются.
+
+### Подтверждённый раздел 5 — RepairOperation и HeatTreatmentOperation
+
+`production.repair_operations`:
+
+- `id`, `joint_id`;
+- `repair_no`, `reason`, `started_at`, `completed_at`;
+- `excavation_length`, `excavation_width`, `excavation_depth`;
+- `preheat_method`, `preheat_temperature`;
+- `status`: `PLANNED`, `IN_PROGRESS`, `COMPLETED`, `VOIDED`;
+- `created_by`, `created_at`, `completed_by`.
+
+Связь `RepairOperation` с несколькими Defect — техническая таблица `repair_defects`.
+
+Ремонтная сварка — обычная `WeldOperation` с `repair_operation_id`.
+
+`production.heat_treatment_operations`:
+
+- `id`, `joint_id`, `repair_operation_id`;
+- `sequence_no`, `treatment_type`, `performed_at`, `repeat_reason`;
+- `heating_method`, `temperature_control_method`;
+- `target_temperature`, `heating_rate`, `holding_time`, `cooling_method`;
+- `operator_worker_id`;
+- снимок ФИО / клейма;
+- `diagram_no`;
+- `status`: `DRAFT`, `CONFIRMED`, `VOIDED`;
+- `created_by`, `created_at`, `confirmed_by`, `confirmed_at`.
+
+Правила:
+
+- номер ремонта последователен внутри Joint;
+- Defect закрывается **не** ремонтом, а повторной `Inspection.PASS`;
+- термообработка повторяема;
+- повторная обработка требует причину;
+- контроль твёрдости — `Inspection.HARDNESS`;
+- история не перезаписывается.
+
+### Подтверждённый раздел 6 — API и переходы состояний
+
+API разделяется по контурам:
+
+```text
+/api/v1/projects
+/api/v1/engineering
+/api/v1/production
+/api/v1/quality
+/api/v1/documents
+```
+
+Joint:
+
+```text
+POST   /api/v1/engineering/joints
+GET    /api/v1/engineering/joints
+GET    /api/v1/engineering/joints/{id}
+PATCH  /api/v1/engineering/joints/{id}
+POST   /api/v1/engineering/joints/{id}/confirm
+POST   /api/v1/engineering/joints/{id}/cancel
+POST   /api/v1/engineering/joints/{id}/supersede
+GET    /api/v1/engineering/joints/{id}/lifecycle
+```
+
+Для `WeldOperation`, `RepairOperation`, `HeatTreatmentOperation` и `Inspection`:
+
+- самостоятельные коллекции;
+- отдельные команды `confirm` / `void` и другие допустимые переходы;
+- `PATCH` применяется **только** к черновикам.
+
+Ответ Joint API содержит вычисляемые поля:
+
+- `ready_for_welding`;
+- `missing_welding_requirements`;
+- `production_state`;
+- `open_defects_count`;
+- `requires_ogs_review`;
+- `requires_pto_review`.
+
+Ошибки:
+
+- `404` — не найдено;
+- `403` — нет роли / scope;
+- `409` — конфликт состояния или уникальности;
+- `422` — производственные условия не выполнены, со списком причин.
+
+### Подтверждённый раздел 7 — проверки и тестирование
+
+Уровень БД:
+
+- внешние ключи;
+- уникальность Joint в EngineeringDocument;
+- CHECK-ограничения статусов и типов;
+- положительные значения размеров и режимов;
+- уникальная последовательность операций внутри Joint;
+- отсутствие физического удаления подтверждённых данных.
+
+Уровень сервисов:
+
+- роли и scope;
+- готовность Joint;
+- активность сварщика и клеймо;
+- допуск по методу, DN, толщине, материалам и дате;
+- переходы состояний;
+- Defect при `FAIL`;
+- повторный `PASS` для закрытия Defect;
+- обязательные проверки для `ACCEPTED`.
+
+Обязательные тестовые сценарии:
+
+- минимальный `DRAFT` Joint;
+- технически неготовый Joint;
+- комбинированная сварка RAD + RD;
+- сварщик без подходящего допуска;
+- несовпадение actual / documented welder;
+- `VOIDED` и замена `WeldOperation`;
+- `FAIL` → Defect → Repair → повторный `PASS`;
+- повторная термообработка;
+- новая ревизия и замена Joint;
+- вычисление `ready_for_welding` и `production_state`;
+- права ПТО, СМР, ОГС, ОТК и НК.
+
+### Финальная сводка
+
+**Architecture Session 004 завершена.**
+
+- Session 004 завершена.
+- Подтверждены решения **004-01 — 004-27**.
+- Подтверждены **семь разделов** проекта БД/API.
+- Разрешена подготовка **плана реализации**.
+- Код, миграции и тесты на архитектурной сессии **не изменялись**.
+- Импорт Excel остаётся **отдельным будущим решением**.
 
 ### Связанные ADR
 
-- TBD (после завершения Session 004)
+- [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009 — физическая модель БД, события и API (004-01 — 004-27)]]
+- Уточняет [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008]] ·
+  [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007]] ·
+  [[docs/project/ADR-002-double-welder-accounting|ADR-002]]
 
 ### Синхронизированные документы
 
-- TBD (сессия не завершена; ADR, CONSTITUTION, ARCHITECTURE и PROJECT_SUMMARY
-  **не изменяются** до закрытия Session 004)
+- `docs/project/DECISIONS.md` (ADR-009)
+- `docs/ARCHITECTURE.md` (§5.3, активное ядро MVP, API)
+- `docs/project/PROJECT_SUMMARY.md`
+- `docs/project/UBIQUITOUS_LANGUAGE.md` (уточнение терминов и роли)
 
 ---
 
@@ -797,4 +1020,4 @@ DocumentFile ↔ предметные объекты (техническая т�
 
 ---
 
-*Версия журнала: 2026-07-10. Записей: 4 (Session 004 — промежуточная фиксация).*
+*Версия журнала: 2026-07-10. Записей: 4 (Session 004 — завершена).*
