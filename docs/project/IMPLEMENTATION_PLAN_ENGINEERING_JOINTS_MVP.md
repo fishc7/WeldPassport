@@ -18,7 +18,7 @@
 
 ---
 
-## Решения плана (IP-01 — IP-06)
+## Решения плана (IP-01 — IP-07)
 
 | ID | Решение |
 |----|---------|
@@ -26,8 +26,9 @@
 | **IP-02** | Минимальный реестр `project.companies` (id, name, inn, status, created_by, created_at); расширенная карточка отложена; `project_companies` с полноценными FK |
 | **IP-03** | `X-User-Id` = `hr.workers.id`; не аутентификация; сервисы проверяют активные `hr.worker_roles`; JWT не входит в план |
 | **IP-04** | Добавить `MASTER` в `hr.worker_roles` (CHECK, Pydantic, тесты); `HEAT_TREATMENT_OPERATOR` не добавлять |
-| **IP-05** | Scope: `GLOBAL`, `PROJECT`, `LINE`; `scope_id` — UUID проекта/линии в **строковом** виде; `FOREMAN`/`MASTER` создают DRAFT Joint; `PTO` подтверждает, отменяет и заменяет Joint; `PTO` утверждает EngineeringDocument и DocumentRevision; `PTO` привязывает Joint к новой ревизии |
+| **IP-05** | Scope: `GLOBAL`, `PROJECT`, `LINE`; `scope_id` — UUID проекта/линии в **строковом** виде; `FOREMAN`/`MASTER` создают DRAFT Joint; ПТО (`PTO_ENGINEER`) подтверждает, отменяет и заменяет Joint; ПТО (`PTO_ENGINEER`) утверждает EngineeringDocument и DocumentRevision; ПТО (`PTO_ENGINEER`) привязывает Joint к новой ревизии |
 | **IP-06** | Ветка `feature/engineering-joints-mvp`, создана от `6f1bc85` |
+| **IP-07** | Предметное название роли — **ПТО**; технический `role_code` существующего backend — `PTO_ENGINEER`; существующий `PTO_ENGINEER` сохраняется; новый `role_code` `PTO` **не** добавляется; миграция данных `PTO_ENGINEER` → `PTO` **не** выполняется |
 
 ---
 
@@ -67,7 +68,14 @@
 
 ### Цель
 
-Подготовить минимальную проверку ролей для последующих API: добавить роль `MASTER`, сохранить все существующие `role_code` без изменений, scope `GLOBAL` / `PROJECT` / `LINE`, валидация `scope_id` как UUID-строки. Канонический `role_code` ПТО в плане — `PTO`.
+Подготовить минимальную проверку ролей для последующих API: добавить роль `MASTER`, сохранить все существующие `role_code` без изменений (включая `PTO_ENGINEER` для ПТО — IP-07), scope `GLOBAL` / `PROJECT` / `LINE`, валидация `scope_id` как UUID-строки.
+
+**Ограничения миграции и ролей (IP-07):**
+
+- миграция `20260710_01_hr_master_role` добавляет в CHECK **только** `MASTER`;
+- `PTO_ENGINEER` сохраняется без изменений;
+- новый `role_code` `PTO` **не** добавляется;
+- `UPDATE role_code` в данных `worker_roles` **не** выполняется.
 
 ### Файлы
 
@@ -76,6 +84,7 @@
 - `09_Разработка/backend/app/hr/models.py`
 - `09_Разработка/backend/app/hr/schemas.py`
 - `09_Разработка/backend/app/hr/repository.py`
+- `09_Разработка/backend/app/hr/services.py` — `scope_id: str | None`; `PROJECT`/`LINE` — нормализованный строковый UUID; `GLOBAL` — `scope_id` отсутствует; остальные существующие scopes (`COMPANY`, `SITE`) сохраняют прежнюю семантику
 - `09_Разработка/backend/tests/test_hr_worker_roles_schemas.py`
 - `09_Разработка/backend/tests/conftest.py` — только при необходимости fixture worker с ролью
 
@@ -91,8 +100,8 @@
 |------|-------|
 | `hr.workers`, `hr.worker_roles` (существующие) | `permissions.require_role()`, `permissions.has_role()` |
 | `X-User-Id` → `worker_id` | Проверка `role_code` + `scope_type` + `scope_id` + `valid_from`/`valid_to` + `is_active` |
-| — | Миграция `20260710_01_hr_master_role.py`: пересоздать/расширить CHECK `ck_hr_worker_roles_role_code`, **добавив** `MASTER`; все существующие допустимые `role_code` сохраняются |
-| — | Pydantic `WorkerRoleCode`: добавлен `MASTER`; существующие значения, включая `PTO`, без изменений |
+| — | Миграция `20260710_01_hr_master_role.py`: пересоздать/расширить CHECK `ck_hr_worker_roles_role_code`, **добавив** `MASTER`; все существующие допустимые `role_code` сохраняются; `PTO` не добавляется; UPDATE `role_code` в данных не выполняется |
+| — | Pydantic `WorkerRoleCode`: добавлен `MASTER`; существующие значения, включая `PTO_ENGINEER`, без изменений; `PTO` не добавляется |
 
 **Ключевые имена:**
 
@@ -104,7 +113,7 @@
 
 ### Шаги
 
-- [ ] **1.1** Написать failing test: `WorkerRoleCreate(role_code="MASTER")` и `role_code="PTO"` проходят валидацию
+- [ ] **1.1** Написать failing test: `WorkerRoleCreate(role_code="MASTER")` и `role_code="PTO_ENGINEER"` проходят валидацию
 - [ ] **1.2** Написать failing tests в `test_role_permissions.py` (см. ниже)
 - [ ] **1.3** Миграция CHECK (только добавление `MASTER`) + синхронизировать model CHECK
 - [ ] **1.4** Обновить `WorkerRoleCode` Literal — добавить `MASTER`
@@ -116,7 +125,7 @@
 
 | # | Тест | Команда | Ожидаемый FAIL |
 |---|------|---------|----------------|
-| 1 | `test_worker_role_create_accepts_master_and_pto` | `pytest tests/test_hr_worker_roles_schemas.py::test_worker_role_create_accepts_master_and_pto -q` | `ValidationError` или тест отсутствует |
+| 1 | `test_worker_role_create_accepts_master_and_pto_engineer` | `pytest tests/test_hr_worker_roles_schemas.py::test_worker_role_create_accepts_master_and_pto_engineer -q` | `ValidationError` или тест отсутствует |
 | 2 | `test_has_role_global_foreman` | `pytest tests/test_role_permissions.py::test_has_role_global_foreman -q` | `ModuleNotFoundError: permissions` или assert False |
 | 3 | `test_has_role_project_scope_matches_uuid` | `pytest tests/test_role_permissions.py::test_has_role_project_scope_matches_uuid -q` | роль с другим `scope_id` считается подходящей |
 | 4 | `test_has_role_line_scope_matches_uuid` | `pytest tests/test_role_permissions.py::test_has_role_line_scope_matches_uuid -q` | то же для LINE |
@@ -193,7 +202,7 @@ pytest tests/test_hr_schemas.py tests/test_ogs_welders.py tests/test_ogs_welder_
 
 - `POST /companies` и `POST /projects` требуют только валидный `X-User-Id` существующего **активного** `hr.workers` (`employment_status = active`);
 - отсутствие заголовка → `401` (как сейчас); неизвестный `worker_id` → `404` (паттерн `NotFoundError`);
-- **не** назначать эти действия ролям `PTO`, `FOREMAN` или `MASTER` на этом этапе;
+- **не** назначать эти действия ролям ПТО (`PTO_ENGINEER`), `FOREMAN` или `MASTER` на этом этапе;
 - role-based управление Company/Project — отдельное будущее архитектурное решение.
 
 **Сервисы / репозиторий:**
@@ -365,10 +374,10 @@ pytest tests/test_project_lines_api.py::test_create_line_for_project -q
 
 **Ограничения:** UNIQUE `(project_id, document_no)`; UNIQUE `(engineering_document_id, revision_code)`.
 
-**Права (role_code `PTO`, scope GLOBAL / PROJECT / LINE):**
+**Права (role_code `PTO_ENGINEER`, scope GLOBAL / PROJECT / LINE):**
 
-- создать `EngineeringDocument` и `DocumentRevision` — активная роль `PTO` в соответствующем scope;
-- `approve` / `cancel` / `supersede` документа и ревизии — `PTO` в scope проекта (или GLOBAL);
+- создать `EngineeringDocument` и `DocumentRevision` — активная роль `PTO_ENGINEER` в соответствующем scope;
+- `approve` / `cancel` / `supersede` документа и ревизии — `PTO_ENGINEER` в scope проекта (или GLOBAL);
 - `X-User-Id` = `hr.workers.id`; отсутствие подходящей роли → `403`.
 
 **Сервисы:**
@@ -380,22 +389,22 @@ pytest tests/test_project_lines_api.py::test_create_line_for_project -q
 
 | Метод | Путь | Handler |
 |-------|------|---------|
-| POST | `/api/v1/engineering/documents` | `create_document` — PTO |
+| POST | `/api/v1/engineering/documents` | `create_document` — ПТО (`PTO_ENGINEER`) |
 | GET | `/api/v1/engineering/documents` | `list_documents` |
 | GET | `/api/v1/engineering/documents/{id}` | `get_document` |
-| POST | `/api/v1/engineering/documents/{id}/approve` | `approve_document` — PTO |
-| POST | `/api/v1/engineering/documents/{id}/cancel` | `cancel_document` — PTO |
-| POST | `/api/v1/engineering/documents/{id}/supersede` | `supersede_document` — PTO |
-| POST | `/api/v1/engineering/documents/{id}/revisions` | `create_revision` — PTO |
+| POST | `/api/v1/engineering/documents/{id}/approve` | `approve_document` — ПТО (`PTO_ENGINEER`) |
+| POST | `/api/v1/engineering/documents/{id}/cancel` | `cancel_document` — ПТО (`PTO_ENGINEER`) |
+| POST | `/api/v1/engineering/documents/{id}/supersede` | `supersede_document` — ПТО (`PTO_ENGINEER`) |
+| POST | `/api/v1/engineering/documents/{id}/revisions` | `create_revision` — ПТО (`PTO_ENGINEER`) |
 | GET | `/api/v1/engineering/documents/{id}/revisions` | `list_revisions` |
-| POST | `/api/v1/engineering/revisions/{id}/approve` | `approve_revision` — PTO |
-| POST | `/api/v1/engineering/revisions/{id}/cancel` | `cancel_revision` — PTO |
-| POST | `/api/v1/engineering/revisions/{id}/supersede` | `supersede_revision` — PTO |
+| POST | `/api/v1/engineering/revisions/{id}/approve` | `approve_revision` — ПТО (`PTO_ENGINEER`) |
+| POST | `/api/v1/engineering/revisions/{id}/cancel` | `cancel_revision` — ПТО (`PTO_ENGINEER`) |
+| POST | `/api/v1/engineering/revisions/{id}/supersede` | `supersede_revision` — ПТО (`PTO_ENGINEER`) |
 
 ### Шаги
 
-- [ ] **4.1** Failing test: PTO PROJECT scope создаёт и утверждает document + revision
-- [ ] **4.2** Failing test: PTO чужого PROJECT scope → 403
+- [ ] **4.1** Failing test: ПТО (`PTO_ENGINEER`) PROJECT scope создаёт и утверждает document + revision
+- [ ] **4.2** Failing test: ПТО (`PTO_ENGINEER`) чужого PROJECT scope → 403
 - [ ] **4.3** Failing test: revision без document → 404/422
 - [ ] **4.4** Failing test: duplicate document_no в project → 409
 - [ ] **4.5** Failing test: approve переводит status, физического DELETE нет
@@ -406,7 +415,7 @@ pytest tests/test_project_lines_api.py::test_create_line_for_project -q
 **Первый failing test:**
 
 ```powershell
-pytest tests/test_engineering_documents_api.py::test_pto_creates_and_approves_document -q
+pytest tests/test_engineering_documents_api.py::test_pto_engineer_creates_and_approves_document -q
 ```
 
 **Commit:** `feat(engineering): add documents and revisions`
@@ -542,7 +551,7 @@ pytest tests/test_engineering_joints_api.py::test_foreman_creates_draft_joint -q
 | Вход | Выход |
 |------|-------|
 | Joint DRAFT (Task 5) | CONFIRMED / CANCELLED / SUPERSEDED |
-| `PTO` + scope GLOBAL / PROJECT / LINE | confirm, cancel, supersede, link_joint_revision |
+| `PTO_ENGINEER` + scope GLOBAL / PROJECT / LINE | confirm, cancel, supersede, link_joint_revision |
 | approved Document/Revision | precondition для confirm |
 
 **Таблица `engineering.joint_revision_links`:**
@@ -554,15 +563,15 @@ pytest tests/test_engineering_joints_api.py::test_foreman_creates_draft_joint -q
 
 | Метод | Путь | Handler |
 |-------|------|---------|
-| POST | `/api/v1/engineering/joints/{id}/confirm` | `confirm_joint` — PTO |
-| POST | `/api/v1/engineering/joints/{id}/cancel` | `cancel_joint` — PTO + reason |
-| POST | `/api/v1/engineering/joints/{id}/supersede` | `supersede_joint` — PTO + new joint payload + reason |
-| POST | `/api/v1/engineering/joints/{joint_id}/revisions/{revision_id}/link` | `link_joint_revision` — PTO |
+| POST | `/api/v1/engineering/joints/{id}/confirm` | `confirm_joint` — ПТО (`PTO_ENGINEER`) |
+| POST | `/api/v1/engineering/joints/{id}/cancel` | `cancel_joint` — ПТО (`PTO_ENGINEER`) + reason |
+| POST | `/api/v1/engineering/joints/{id}/supersede` | `supersede_joint` — ПТО (`PTO_ENGINEER`) + new joint payload + reason |
+| POST | `/api/v1/engineering/joints/{joint_id}/revisions/{revision_id}/link` | `link_joint_revision` — ПТО (`PTO_ENGINEER`) |
 | GET | `/api/v1/engineering/joints/{id}/lifecycle` | `get_joint_lifecycle` |
 
 **Правила `link_joint_revision`:**
 
-- выполняет только `PTO` в GLOBAL / PROJECT / LINE scope;
+- выполняет только ПТО (`PTO_ENGINEER`) в GLOBAL / PROJECT / LINE scope;
 - Revision принадлежит тому же `EngineeringDocument` и `Project`, что и Joint;
 - Joint **сохраняет** прежний UUID;
 - создаётся запись `joint_revision_links`;
@@ -573,15 +582,15 @@ pytest tests/test_engineering_joints_api.py::test_foreman_creates_draft_joint -q
 
 **Правила confirm / cancel / supersede:**
 
-- confirm: `engineering_status` → CONFIRMED; требует `PTO` и approved doc/revision
-- cancel: → CANCELLED; требует `PTO` и reason; CANCELLED/SUPERSEDED не редактируются
-- supersede: требует `PTO`; старый → SUPERSEDED + `superseded_by_joint_id`; новый Joint с новым UUID
+- confirm: `engineering_status` → CONFIRMED; требует `PTO_ENGINEER` и approved doc/revision
+- cancel: → CANCELLED; требует `PTO_ENGINEER` и reason; CANCELLED/SUPERSEDED не редактируются
+- supersede: требует `PTO_ENGINEER`; старый → SUPERSEDED + `superseded_by_joint_id`; новый Joint с новым UUID
 - запрет циклической цепочки supersede
 - неизменившийся Joint сохраняет UUID при новой Revision через `POST .../link` и `joint_revision_links`
 
 ### Шаги
 
-- [ ] **6.1** Failing test: PTO confirm DRAFT → CONFIRMED
+- [ ] **6.1** Failing test: ПТО (`PTO_ENGINEER`) confirm DRAFT → CONFIRMED
 - [ ] **6.2** Failing test: confirm без approved revision → 422
 - [ ] **6.3** Failing test: supersede создаёт новый UUID, старый SUPERSEDED
 - [ ] **6.4** Failing test: циклический supersede → 409
@@ -596,7 +605,7 @@ pytest tests/test_engineering_joints_api.py::test_foreman_creates_draft_joint -q
 **Первый failing test:**
 
 ```powershell
-pytest tests/test_engineering_joint_lifecycle.py::test_pto_confirms_joint -q
+pytest tests/test_engineering_joint_lifecycle.py::test_pto_engineer_confirms_joint -q
 ```
 
 **Commit:** `feat(engineering): add joint lifecycle and revision history`
@@ -637,13 +646,13 @@ E2E вертикальный срез и финальная проверка ц�
 3. Add project_companies (WELDING_CONTRACTOR)
 4. Create Line с `required_inspection_types`
 5. Create EngineeringDocument + DocumentRevision
-6. Approve document и revision (`PTO`)
+6. Approve document и revision (ПТО (`PTO_ENGINEER`))
 7. FOREMAN/MASTER создаёт DRAFT Joint (копия `required_inspection_types` с Line)
 8. PATCH полей → `ready_for_welding=true`
-9. PTO confirm → CONFIRMED
-10. Новая DocumentRevision на тот же document (approve `PTO`)
-11. `POST /joints/{id}/revisions/{revision_id}/link` (`PTO`) — UUID Joint сохранён, `current_revision_id` обновлён
-12. Альтернативная ветка: supersede (`PTO`) → новый Joint UUID
+9. ПТО (`PTO_ENGINEER`) confirm → CONFIRMED
+10. Новая DocumentRevision на тот же document (approve ПТО (`PTO_ENGINEER`))
+11. `POST /joints/{id}/revisions/{revision_id}/link` (ПТО (`PTO_ENGINEER`)) — UUID Joint сохранён, `current_revision_id` обновлён
+12. Альтернативная ветка: supersede (ПТО (`PTO_ENGINEER`)) → новый Joint UUID
 
 ### Шаги
 
@@ -690,11 +699,13 @@ pytest tests/ -q
 | 10 | Каждый Task — тест + commit | Да — 7 commits |
 | 11 | Нет TBD/TODO в плане | Да |
 | 12 | ChatGPT — review; Claude Code — код; Cursor — среда/Git | Да — в шапке |
-| 13 | В API плана используется канонический role_code `PTO` | Да |
-| 14 | Типы массивов `ARRAY(Text)` и UUID определены однозначно | Да |
-| 15 | Новая Revision привязывается через `POST .../link` | Да — Task 6 |
-| 16 | Права документов и Joint проверяются по scope | Да — Tasks 4–6 |
-| 17 | Company/Project без выдуманного владельца роли | Да — только active Worker |
+| 13 | Предметный термин ПТО соответствует техническому `role_code` `PTO_ENGINEER` (IP-07) | Да |
+| 14 | Новый `role_code` `PTO` отсутствует | Да |
+| 15 | Миграция не переименовывает `role_code` в данных `worker_roles` | Да |
+| 16 | Типы массивов `ARRAY(Text)` и UUID определены однозначно | Да |
+| 17 | Новая Revision привязывается через `POST .../link` | Да — Task 6 |
+| 18 | Права документов и Joint проверяются по scope с `PTO_ENGINEER` | Да — Tasks 4–6 |
+| 19 | Company/Project без выдуманного владельца роли | Да — только active Worker |
 
 ---
 
