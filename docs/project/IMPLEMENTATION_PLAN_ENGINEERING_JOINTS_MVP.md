@@ -18,7 +18,7 @@
 
 ---
 
-## Решения плана (IP-01 — IP-07)
+## Решения плана (IP-01 — IP-08)
 
 | ID | Решение |
 |----|---------|
@@ -29,6 +29,7 @@
 | **IP-05** | Scope: `GLOBAL`, `PROJECT`, `LINE`; `scope_id` — UUID проекта/линии в **строковом** виде; `FOREMAN`/`MASTER` создают DRAFT Joint; ПТО (`PTO_ENGINEER`) подтверждает, отменяет и заменяет Joint; ПТО (`PTO_ENGINEER`) утверждает EngineeringDocument и DocumentRevision; ПТО (`PTO_ENGINEER`) привязывает Joint к новой ревизии |
 | **IP-06** | Ветка `feature/engineering-joints-mvp`, создана от `6f1bc85` |
 | **IP-07** | Предметное название роли — **ПТО**; технический `role_code` существующего backend — `PTO_ENGINEER`; существующий `PTO_ENGINEER` сохраняется; новый `role_code` `PTO` **не** добавляется; миграция данных `PTO_ENGINEER` → `PTO` **не** выполняется |
+| **IP-08** | Line создаёт и изменяет техническая роль `PTO_ENGINEER`; при создании Line допускается `GLOBAL` или соответствующий `PROJECT` scope; `LINE` scope **не** используется для создания ещё не существующей линии; `FOREMAN`/`MASTER` **не** создают и **не** изменяют Line; предметное название владельца — **ПТО** |
 
 ---
 
@@ -301,23 +302,37 @@ pytest tests/ -q
 - `created_by`, `created_at`, `updated_at`
 - UNIQUE `(project_id, line_no)`; CHECK `nominal_dn > 0` IF NOT NULL
 
+**Права (IP-08, `role_code` `PTO_ENGINEER`):**
+
+- `POST` Line — ПТО (`PTO_ENGINEER`) с `GLOBAL` или соответствующим `PROJECT` scope; `LINE` scope для создания **не** допускается;
+- `PATCH` Line — ПТО (`PTO_ENGINEER`) с `GLOBAL`, соответствующим `PROJECT` либо соответствующим `LINE` scope;
+- отсутствие подходящей роли → `403`;
+- `GET` (list / get) — существующий authenticated API pattern: валидный `X-User-Id` активного `hr.workers` (`employment_status = active`); отсутствие заголовка → `401`; неизвестный `worker_id` → `404`;
+- `FOREMAN` / `MASTER` **не** создают и **не** изменяют Line.
+
 **API:**
 
 | Метод | Путь | Handler |
 |-------|------|---------|
-| POST | `/api/v1/projects/{project_id}/lines` | `create_line` |
+| POST | `/api/v1/projects/{project_id}/lines` | `create_line` — ПТО (`PTO_ENGINEER`), GLOBAL / PROJECT scope |
 | GET | `/api/v1/projects/{project_id}/lines` | `list_lines` |
 | GET | `/api/v1/projects/lines/{line_id}` | `get_line` |
-| PATCH | `/api/v1/projects/lines/{line_id}` | `update_line` — только draft/active редактируемые поля |
+| PATCH | `/api/v1/projects/lines/{line_id}` | `update_line` — ПТО (`PTO_ENGINEER`), GLOBAL / PROJECT / LINE scope; только draft/active редактируемые поля |
 
 ### Шаги
 
 - [ ] **3.1** Failing test: POST line без project → 404
 - [ ] **3.2** Failing test: duplicate line_no в project → 409
 - [ ] **3.3** Failing test: nominal_dn <= 0 → 422
-- [ ] **3.4** Миграция + реализация
-- [ ] **3.5** PASS + регрессия
-- [ ] **3.6** Commit
+- [ ] **3.4** Failing test: GLOBAL `PTO_ENGINEER` создаёт Line
+- [ ] **3.5** Failing test: `PTO_ENGINEER` соответствующего `PROJECT` scope создаёт Line
+- [ ] **3.6** Failing test: `PTO_ENGINEER` чужого `PROJECT` scope → 403
+- [ ] **3.7** Failing test: `FOREMAN` / `MASTER` → 403 на POST и PATCH
+- [ ] **3.8** Failing test: `PTO_ENGINEER` соответствующего `LINE` scope изменяет существующую Line
+- [ ] **3.9** Failing test: `LINE` scope не может создать новую Line → 403
+- [ ] **3.10** Миграция + реализация
+- [ ] **3.11** PASS + регрессия
+- [ ] **3.12** Commit
 
 **Первый failing test:**
 
@@ -327,9 +342,26 @@ pytest tests/test_project_lines_api.py::test_create_line_for_project -q
 
 **Ожидаемый FAIL:** `404` или таблица `project.lines` не существует.
 
+**TDD-сценарии прав (IP-08):**
+
+| # | Сценарий | Ожидание |
+|---|----------|----------|
+| 1 | GLOBAL `PTO_ENGINEER` создаёт Line | `201` |
+| 2 | `PTO_ENGINEER` соответствующего `PROJECT` scope создаёт Line | `201` |
+| 3 | `PTO_ENGINEER` чужого `PROJECT` scope | `403` |
+| 4 | `FOREMAN` / `MASTER` на POST / PATCH | `403` |
+| 5 | `PTO_ENGINEER` соответствующего `LINE` scope изменяет существующую Line | `200` |
+| 6 | `LINE` scope на POST (создание новой Line) | `403` |
+
+**Самопроверка Task 3:**
+
+- владелец Line — **ПТО** (`PTO_ENGINEER`);
+- производственные роли (`FOREMAN`, `MASTER`) Line **не** создают и **не** изменяют;
+- `LINE` scope применяется только к уже существующей линии (PATCH), не к POST.
+
 **Commit:** `feat(projects): add project lines`
 
-**Checkpoint:** ChatGPT — `required_inspection_types` как `ARRAY(Text)` снимок для будущих Joint (ADR-009 004-25).
+**Checkpoint:** ChatGPT — `required_inspection_types` как `ARRAY(Text)` снимок для будущих Joint (ADR-009 004-25); владелец Line — ПТО (IP-08).
 
 ---
 
@@ -706,6 +738,8 @@ pytest tests/ -q
 | 17 | Новая Revision привязывается через `POST .../link` | Да — Task 6 |
 | 18 | Права документов и Joint проверяются по scope с `PTO_ENGINEER` | Да — Tasks 4–6 |
 | 19 | Company/Project без выдуманного владельца роли | Да — только active Worker |
+| 20 | Владелец Line — ПТО (`PTO_ENGINEER`); `FOREMAN`/`MASTER` не создают Line (IP-08) | Да — Task 3 |
+| 21 | `LINE` scope не используется для POST Line (IP-08) | Да — Task 3 |
 
 ---
 
