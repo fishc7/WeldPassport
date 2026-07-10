@@ -8,6 +8,7 @@ EmploymentStatus = Literal["active", "dismissed", "suspended"]
 WorkerRoleCode = Literal[
     "WELDER",
     "FOREMAN",
+    "MASTER",
     "PTO_ENGINEER",
     "OTK_INSPECTOR",
     "NDT_SPECIALIST",
@@ -16,7 +17,7 @@ WorkerRoleCode = Literal[
     "CLOSING_RESPONSIBLE",
 ]
 
-ScopeType = Literal["GLOBAL", "COMPANY", "PROJECT", "SITE"]
+ScopeType = Literal["GLOBAL", "COMPANY", "PROJECT", "SITE", "LINE"]
 
 
 class DepartmentBase(BaseModel):
@@ -139,7 +140,7 @@ class WorkerOut(WorkerBase):
 class WorkerRoleBase(BaseModel):
     role_code: WorkerRoleCode
     scope_type: ScopeType = "GLOBAL"
-    scope_id: int | None = None
+    scope_id: str | None = None
     valid_from: date | None = None
     valid_to: date | None = None
     note: str | None = None
@@ -151,7 +152,7 @@ class WorkerRoleCreate(WorkerRoleBase):
 
 class WorkerRoleUpdate(BaseModel):
     scope_type: ScopeType | None = None
-    scope_id: int | None = None
+    scope_id: str | None = None
     valid_from: date | None = None
     valid_to: date | None = None
     is_active: bool | None = None

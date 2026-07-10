@@ -16,13 +16,19 @@ def test_worker_role_create_defaults_to_global_scope() -> None:
 
 def test_worker_role_create_rejects_invalid_role_code() -> None:
     with pytest.raises(ValidationError):
-        WorkerRoleCreate(role_code="MASTER")  # type: ignore[arg-type]
+        WorkerRoleCreate(role_code="UNKNOWN_ROLE")  # type: ignore[arg-type]
+
+
+def test_worker_role_create_accepts_master() -> None:
+    payload = WorkerRoleCreate(role_code="MASTER")
+    assert payload.role_code == "MASTER"
 
 
 def test_worker_role_create_accepts_all_role_codes() -> None:
     codes = [
         "WELDER",
         "FOREMAN",
+        "MASTER",
         "PTO_ENGINEER",
         "OTK_INSPECTOR",
         "NDT_SPECIALIST",
@@ -46,8 +52,8 @@ def test_worker_role_create_with_project_scope() -> None:
     payload = WorkerRoleCreate(
         role_code="CONFIRMING_PERSON",
         scope_type="PROJECT",
-        scope_id=12,
+        scope_id="550e8400-e29b-41d4-a716-446655440000",
         valid_from=date(2026, 7, 3),
     )
     assert payload.scope_type == "PROJECT"
-    assert payload.scope_id == 12
+    assert payload.scope_id == "550e8400-e29b-41d4-a716-446655440000"

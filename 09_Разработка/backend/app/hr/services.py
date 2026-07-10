@@ -1,3 +1,4 @@
+import uuid
 from datetime import date
 
 from sqlalchemy.exc import IntegrityError
@@ -33,7 +34,7 @@ def to_worker_out(worker: Worker) -> WorkerOut:
 def to_worker_card(worker: Worker) -> WorkerCard:
     roles = sorted(
         worker.worker_roles,
-        key=lambda r: (r.role_code, r.scope_type, r.scope_id or 0),
+        key=lambda r: (r.role_code, r.scope_type, r.scope_id or ""),
     )
     return WorkerCard(
         **to_worker_out(worker).model_dump(),
@@ -216,8 +217,7 @@ class HrService:
                 "Нельзя назначить активную роль уволенному работнику (dismissed)"
             )
         scope_type = data.scope_type
-        scope_id = data.scope_id
-        self._validate_role_scope(scope_type, scope_id)
+        scope_id = self._validate_role_scope(scope_type, data.scope_id)
         if self._repo.find_active_role_duplicate(
             worker_id=worker_id,
             role_code=data.role_code,
@@ -250,9 +250,11 @@ class HrService:
         role = self._get_worker_role(worker_id, role_id)
         payload = data.model_dump(exclude_unset=True)
         scope_type = payload.get("scope_type", role.scope_type)
-        scope_id = payload.get("scope_id", role.scope_id)
+        raw_scope_id = payload.get("scope_id", role.scope_id)
         is_active = payload.get("is_active", role.is_active)
-        self._validate_role_scope(scope_type, scope_id)
+        scope_id = self._validate_role_scope(scope_type, raw_scope_id)
+        if "scope_id" in payload:
+            payload["scope_id"] = scope_id
         if is_active:
             duplicate = self._repo.find_active_role_duplicate(
                 worker_id=worker_id,
@@ -313,13 +315,42 @@ class HrService:
             raise NotFoundError("Роль работника", role_id)
         return role
 
-    def _validate_role_scope(self, scope_type: str, scope_id: int | None) -> None:
-        if scope_type == "GLOBAL" and scope_id is not None:
-            raise ConflictError("Для scope_type=GLOBAL поле scope_id должно быть null")
-        if scope_type != "GLOBAL" and scope_id is None:
+    def _validate_role_scope(
+        self, scope_type: str, scope_id: str | None
+    ) -> str | None:
+        """Проверяет scope_id и возвращает канонический строковый вид.
+
+        - GLOBAL: scope_id должен отсутствовать (None);
+        - PROJECT/LINE: обязателен валидный UUID, нормализуется через uuid.UUID(...);
+        - остальные scope_type (COMPANY, SITE): scope_id обязателен, но формат
+          не фиксируется UUID-ом.
+        """
+        normalized = scope_id.strip() if isinstance(scope_id, str) else scope_id
+        if normalized == "":
+            normalized = None
+
+        if scope_type == "GLOBAL":
+            if normalized is not None:
+                raise ConflictError(
+                    "Для scope_type=GLOBAL поле scope_id должно быть null"
+                )
+            return None
+
+        if normalized is None:
             raise ConflictError(
                 f"Для scope_type={scope_type} поле scope_id обязательно"
             )
+
+        if scope_type in ("PROJECT", "LINE"):
+            try:
+                return str(uuid.UUID(normalized))
+            except (ValueError, AttributeError, TypeError) as exc:
+                raise ConflictError(
+                    f"Для scope_type={scope_type} поле scope_id должно быть "
+                    "валидным UUID"
+                ) from exc
+
+        return normalized
 
     def _get_department(self, department_id: int) -> Department:
         department = self._repo.get_department(department_id)

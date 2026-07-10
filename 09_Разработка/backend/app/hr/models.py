@@ -140,13 +140,13 @@ class WorkerRole(Base):
     __table_args__ = (
         CheckConstraint(
             "role_code IN ("
-            "'WELDER', 'FOREMAN', 'PTO_ENGINEER', 'OTK_INSPECTOR', "
+            "'WELDER', 'FOREMAN', 'MASTER', 'PTO_ENGINEER', 'OTK_INSPECTOR', "
             "'NDT_SPECIALIST', 'OGS_ENGINEER', 'CONFIRMING_PERSON', 'CLOSING_RESPONSIBLE'"
             ")",
             name="ck_hr_worker_roles_role_code",
         ),
         CheckConstraint(
-            "scope_type IN ('GLOBAL', 'COMPANY', 'PROJECT', 'SITE')",
+            "scope_type IN ('GLOBAL', 'COMPANY', 'PROJECT', 'SITE', 'LINE')",
             name="ck_hr_worker_roles_scope_type",
         ),
         {"schema": HR_SCHEMA},
@@ -162,7 +162,7 @@ class WorkerRole(Base):
     scope_type: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="GLOBAL"
     )
-    scope_id: Mapped[int | None] = mapped_column(Integer)
+    scope_id: Mapped[str | None] = mapped_column(String(36))
     valid_from: Mapped[date | None] = mapped_column(Date)
     valid_to: Mapped[date | None] = mapped_column(Date)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

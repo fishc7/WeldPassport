@@ -1,3 +1,5 @@
+from datetime import date
+
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -158,7 +160,7 @@ class HrRepo:
         worker_id: int,
         role_code: str,
         scope_type: str,
-        scope_id: int | None,
+        scope_id: str | None,
         exclude_role_id: int | None = None,
     ) -> WorkerRole | None:
         q = self.db.query(WorkerRole).filter(
@@ -185,6 +187,40 @@ class HrRepo:
         self.db.commit()
         self.db.refresh(role)
         return role
+
+    def find_active_roles(
+        self,
+        *,
+        worker_id: int,
+        role_code: str,
+    ) -> list[WorkerRole]:
+        return (
+            self.db.query(WorkerRole)
+            .filter(
+                WorkerRole.worker_id == worker_id,
+                WorkerRole.role_code == role_code,
+                WorkerRole.is_active.is_(True),
+            )
+            .all()
+        )
+
+    def has_active_worker_role_in_scope(
+        self,
+        worker_id: int,
+        role_code: str,
+        scope_type: str,
+        scope_id: str | None = None,
+        *,
+        on_date: date | None = None,
+    ) -> bool:
+        from app.shared.permissions import RoleRequirement, check_worker_role
+
+        requirement = RoleRequirement(
+            role_code=role_code,
+            scope_type=scope_type,  # type: ignore[arg-type]
+            scope_id=scope_id,
+        )
+        return check_worker_role(self.db, worker_id, requirement, on_date=on_date)
 
     def has_active_worker_role(self, worker_id: int, role_code: str) -> bool:
         return (
