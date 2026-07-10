@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.hr.models import Worker, WorkerRole
 from app.main import app
-from app.projects.models import Company, Project, ProjectCompany
+from app.projects.models import Company, Line, Project, ProjectCompany
 from app.shared.db import SessionLocal, get_db
 from app.welding.models import Welder, WelderAdmission
 
@@ -191,6 +191,10 @@ def _purge_test_data(db: Session) -> None:
             synchronize_session=False
         )
     if project_ids:
+        # Линии удаляем раньше проектов: FK project.lines → projects RESTRICT.
+        db.query(Line).filter(Line.project_id.in_(project_ids)).delete(
+            synchronize_session=False
+        )
         db.query(Project).filter(Project.id.in_(project_ids)).delete(
             synchronize_session=False
         )

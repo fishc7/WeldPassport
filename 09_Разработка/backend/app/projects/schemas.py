@@ -1,8 +1,9 @@
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 CompanyStatus = Literal["active", "inactive"]
 ProjectStatus = Literal["draft", "active", "closed"]
@@ -14,6 +15,28 @@ ProjectCompanyRole = Literal[
     "INSPECTION",
     "DESIGNER",
 ]
+
+LineStatus = Literal["draft", "active", "cancelled"]
+
+# Допустимые виды контроля (ADR-009 004-25). Снимок в required_inspection_types.
+InspectionType = Literal[
+    "VT",
+    "RT",
+    "UT",
+    "PT",
+    "MT",
+    "HARDNESS",
+    "PMI",
+    "FERRITE",
+]
+
+
+def _reject_duplicate_inspection_types(value: list[str]) -> list[str]:
+    """Дубликаты отклоняются, а не нормализуются молча: требования контроля должны
+    быть однозначными (Task 3)."""
+    if len(set(value)) != len(value):
+        raise ValueError("required_inspection_types содержит повторяющиеся значения")
+    return value
 
 
 # ── Company ───────────────────────────────────────────────────────────────────
@@ -93,3 +116,60 @@ class ProjectListFilters(BaseModel):
     role_code: ProjectCompanyRole | None = None
     skip: int = Field(default=0, ge=0)
     limit: int = Field(default=100, ge=1, le=500)
+
+
+# ── Line ──────────────────────────────────────────────────────────────────────
+
+
+class LineCreate(BaseModel):
+    line_no: str = Field(min_length=1, max_length=100)
+    name: str | None = Field(default=None, max_length=255)
+    medium: str | None = Field(default=None, max_length=255)
+    nominal_dn: Decimal | None = Field(default=None, gt=0)
+    class_code: str | None = Field(default=None, max_length=50)
+    category_code: str | None = Field(default=None, max_length=50)
+    status: LineStatus = "draft"
+    required_inspection_types: list[InspectionType] = Field(default_factory=list)
+
+    @field_validator("required_inspection_types")
+    @classmethod
+    def _no_duplicate_inspection_types(cls, v: list[str]) -> list[str]:
+        return _reject_duplicate_inspection_types(v)
+
+
+class LineUpdate(BaseModel):
+    line_no: str | None = Field(default=None, min_length=1, max_length=100)
+    name: str | None = Field(default=None, max_length=255)
+    medium: str | None = Field(default=None, max_length=255)
+    nominal_dn: Decimal | None = Field(default=None, gt=0)
+    class_code: str | None = Field(default=None, max_length=50)
+    category_code: str | None = Field(default=None, max_length=50)
+    status: LineStatus | None = None
+    required_inspection_types: list[InspectionType] | None = None
+
+    @field_validator("required_inspection_types")
+    @classmethod
+    def _no_duplicate_inspection_types(
+        cls, v: list[str] | None
+    ) -> list[str] | None:
+        if v is None:
+            return v
+        return _reject_duplicate_inspection_types(v)
+
+
+class LineRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    project_id: UUID
+    line_no: str
+    name: str | None
+    medium: str | None
+    nominal_dn: Decimal | None
+    class_code: str | None
+    category_code: str | None
+    status: LineStatus
+    required_inspection_types: list[str]
+    created_by: int
+    created_at: datetime
+    updated_at: datetime

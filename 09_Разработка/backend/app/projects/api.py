@@ -6,6 +6,9 @@ from sqlalchemy.orm import Session
 from app.projects.schemas import (
     CompanyCreate,
     CompanyRead,
+    LineCreate,
+    LineRead,
+    LineUpdate,
     ProjectCompanyCreate,
     ProjectCompanyRead,
     ProjectCompanyRole,
@@ -78,6 +81,30 @@ def list_projects(
     return svc.list_projects(filters)
 
 
+# ── Линии: детали по line_id ──────────────────────────────────────────────────
+# Статические пути /lines/{line_id} объявлены раньше динамического /{project_id},
+# иначе "lines" перехватывается как project_id (UUID) и даёт 422.
+
+
+@router.get("/lines/{line_id}", response_model=LineRead)
+def get_line(
+    line_id: UUID,
+    svc: ProjectService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.get_line(line_id)
+
+
+@router.patch("/lines/{line_id}", response_model=LineRead)
+def update_line(
+    line_id: UUID,
+    data: LineUpdate,
+    svc: ProjectService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.update_line(line_id, data, updated_by=uid)
+
+
 @router.get("/{project_id}", response_model=ProjectRead)
 def get_project(
     project_id: UUID,
@@ -114,3 +141,32 @@ def list_project_companies(
     _uid: int = Depends(get_current_user_id),
 ):
     return svc.list_project_companies(project_id)
+
+
+# ── Линии проекта ─────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/{project_id}/lines",
+    response_model=LineRead,
+    status_code=201,
+)
+def create_line(
+    project_id: UUID,
+    data: LineCreate,
+    svc: ProjectService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.create_line(project_id, data, created_by=uid)
+
+
+@router.get(
+    "/{project_id}/lines",
+    response_model=list[LineRead],
+)
+def list_lines(
+    project_id: UUID,
+    svc: ProjectService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_lines(project_id)

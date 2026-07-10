@@ -2,7 +2,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.projects.models import Company, Project, ProjectCompany
+from app.projects.models import Company, Line, Project, ProjectCompany
 from app.projects.schemas import ProjectListFilters
 
 
@@ -94,3 +94,36 @@ class ProjectRepo:
         self.db.commit()
         self.db.refresh(link)
         return link
+
+    # --- lines ---
+
+    def get_line(self, line_id: UUID) -> Line | None:
+        return self.db.query(Line).filter(Line.id == line_id).first()
+
+    def get_line_by_project_and_no(
+        self, project_id: UUID, line_no: str
+    ) -> Line | None:
+        return (
+            self.db.query(Line)
+            .filter(Line.project_id == project_id, Line.line_no == line_no)
+            .first()
+        )
+
+    def list_lines(self, project_id: UUID) -> list[Line]:
+        return (
+            self.db.query(Line)
+            .filter(Line.project_id == project_id)
+            .order_by(Line.line_no, Line.id)
+            .all()
+        )
+
+    def create_line(self, line: Line) -> Line:
+        self.db.add(line)
+        self.db.commit()
+        self.db.refresh(line)
+        return line
+
+    def save_line(self, line: Line) -> Line:
+        self.db.commit()
+        self.db.refresh(line)
+        return line

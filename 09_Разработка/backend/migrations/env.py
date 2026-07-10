@@ -46,6 +46,7 @@ PROJECT_MANAGED_TABLES = {
     "companies",
     "projects",
     "project_companies",
+    "lines",
 }
 
 

@@ -6,15 +6,21 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.hr.repository import HrRepo
-from app.projects.models import Company, Project, ProjectCompany
+from app.projects.models import Company, Line, Project, ProjectCompany
 from app.projects.repository import ProjectRepo
 from app.projects.schemas import (
     CompanyCreate,
+    LineCreate,
+    LineUpdate,
     ProjectCompanyCreate,
     ProjectCreate,
     ProjectListFilters,
 )
 from app.shared.errors import ConflictError, NotFoundError, ValidationError
+from app.shared.permissions import RoleRequirement, check_worker_role
+
+# Владелец Line — ПТО (IP-08). Технический role_code существующего backend.
+LINE_OWNER_ROLE = "PTO_ENGINEER"
 
 
 class ProjectService:
@@ -139,4 +145,107 @@ class ProjectService:
             self._db.rollback()
             raise ConflictError(
                 "Активное участие организации с этой ролью уже существует"
+            ) from exc
+
+    # --- lines (IP-08) ---
+
+    def _forbidden(self) -> HTTPException:
+        return HTTPException(
+            status_code=403,
+            detail="Недостаточно прав: требуется роль ПТО (PTO_ENGINEER)",
+        )
+
+    def _require_line_create_permission(
+        self, worker_id: int, project_id: UUID
+    ) -> None:
+        """POST Line — ПТО с GLOBAL или соответствующим PROJECT scope.
+
+        LINE scope для создания ещё не существующей линии не допускается (IP-08).
+        """
+        requirements = (
+            RoleRequirement(LINE_OWNER_ROLE, "GLOBAL"),
+            RoleRequirement(LINE_OWNER_ROLE, "PROJECT", str(project_id)),
+        )
+        if not any(
+            check_worker_role(self._db, worker_id, req) for req in requirements
+        ):
+            raise self._forbidden()
+
+    def _require_line_update_permission(
+        self, worker_id: int, project_id: UUID, line_id: UUID
+    ) -> None:
+        """PATCH Line — ПТО с GLOBAL, соответствующим PROJECT либо LINE scope."""
+        requirements = (
+            RoleRequirement(LINE_OWNER_ROLE, "GLOBAL"),
+            RoleRequirement(LINE_OWNER_ROLE, "PROJECT", str(project_id)),
+            RoleRequirement(LINE_OWNER_ROLE, "LINE", str(line_id)),
+        )
+        if not any(
+            check_worker_role(self._db, worker_id, req) for req in requirements
+        ):
+            raise self._forbidden()
+
+    def get_line(self, line_id: UUID) -> Line:
+        line = self._repo.get_line(line_id)
+        if line is None:
+            raise NotFoundError("Линия", line_id)
+        return line
+
+    def list_lines(self, project_id: UUID) -> list[Line]:
+        self.get_project(project_id)
+        return self._repo.list_lines(project_id)
+
+    def create_line(
+        self, project_id: UUID, data: LineCreate, *, created_by: int
+    ) -> Line:
+        self._require_line_create_permission(created_by, project_id)
+        self.get_project(project_id)
+
+        line_no = data.line_no.strip()
+        if self._repo.get_line_by_project_and_no(project_id, line_no) is not None:
+            raise ConflictError("Линия с таким line_no в проекте уже существует")
+
+        line = Line(
+            project_id=project_id,
+            line_no=line_no,
+            name=data.name,
+            medium=data.medium,
+            nominal_dn=data.nominal_dn,
+            class_code=data.class_code,
+            category_code=data.category_code,
+            status=data.status,
+            required_inspection_types=list(data.required_inspection_types),
+            created_by=created_by,
+        )
+        try:
+            return self._repo.create_line(line)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Линия с таким line_no в проекте уже существует"
+            ) from exc
+
+    def update_line(
+        self, line_id: UUID, data: LineUpdate, *, updated_by: int
+    ) -> Line:
+        line = self.get_line(line_id)
+        self._require_line_update_permission(updated_by, line.project_id, line_id)
+
+        if line.status == "cancelled":
+            raise ConflictError("Отменённую линию нельзя редактировать")
+
+        changes = data.model_dump(exclude_unset=True)
+        if "line_no" in changes and changes["line_no"] is not None:
+            changes["line_no"] = changes["line_no"].strip()
+        for field, value in changes.items():
+            if field == "required_inspection_types" and value is not None:
+                value = list(value)
+            setattr(line, field, value)
+
+        try:
+            return self._repo.save_line(line)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Линия с таким line_no в проекте уже существует"
             ) from exc
