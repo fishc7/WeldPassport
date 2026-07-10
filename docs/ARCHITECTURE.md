@@ -45,7 +45,7 @@ flowchart LR
 - SQLAlchemy 2;
 - Alembic;
 - Pydantic;
-- PostgreSQL 16;
+- PostgreSQL 18;
 - Celery или Dramatiq для фоновых задач;
 - Redis как очередь и краткоживущий кэш.
 
@@ -262,6 +262,13 @@ Project
 | Файлы | Единый механизм `DocumentFile` + `Attachment` для всех доменов |
 | Статусы | Статусы Joint разделяются по контурам (`production`, `inspection`, `documentation`, `closure` и др.) |
 | Закрытие | Финальный контур — роль `CLOSURE_RESPONSIBLE` после проверки обязательных условий |
+
+Production/Joints MVP использует **RACI-модель ответственности** по 10 каноническим
+сущностям: Project, EngineeringDocument, Line, Joint, WeldOperation, Inspection,
+Defect, RepairOperation, HeatTreatmentOperation, Attachment/DocumentFile
+(решения 003-AB — 003-AM, ADR-008). NDTInspection и HardnessInspection — расширения
+Inspection; DocumentationPackage и Joint closure описаны в 003-AL. Полная матрица —
+[[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 003 — RACI модель Production/Joints MVP|Session 003 — RACI]].
 
 ## 6. Ключевые правила модели данных
 
