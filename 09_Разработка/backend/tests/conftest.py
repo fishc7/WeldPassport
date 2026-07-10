@@ -9,6 +9,7 @@ from sqlalchemy import or_, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.engineering.models import DocumentRevision, EngineeringDocument
 from app.hr.models import Worker, WorkerRole
 from app.main import app
 from app.projects.models import Company, Line, Project, ProjectCompany
@@ -181,6 +182,24 @@ def _purge_test_data(db: Session) -> None:
         .filter(Company.created_by.in_(worker_ids))
         .all()
     ]
+
+    # Инженерные документы/ревизии удаляем раньше линий и проектов:
+    # FK engineering.* → project.* c ondelete RESTRICT. Документы помечены
+    # created_by тестовых workers.
+    document_ids = [
+        row[0]
+        for row in db.query(EngineeringDocument.id)
+        .filter(EngineeringDocument.created_by.in_(worker_ids))
+        .all()
+    ]
+    if document_ids:
+        db.query(DocumentRevision).filter(
+            DocumentRevision.engineering_document_id.in_(document_ids)
+        ).delete(synchronize_session=False)
+        db.query(EngineeringDocument).filter(
+            EngineeringDocument.id.in_(document_ids)
+        ).delete(synchronize_session=False)
+
     if project_ids or company_ids:
         conditions = []
         if project_ids:
