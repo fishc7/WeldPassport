@@ -5,12 +5,13 @@ from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import or_, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.hr.models import Worker, WorkerRole
 from app.main import app
+from app.projects.models import Company, Project, ProjectCompany
 from app.shared.db import SessionLocal, get_db
 from app.welding.models import Welder, WelderAdmission
 
@@ -110,6 +111,27 @@ def worker_without_welder_role(db: Session) -> Worker:
 
 
 @pytest.fixture
+def active_worker(db: Session) -> Worker:
+    """Активный работник — валидный X-User-Id для изменяющих endpoints projects."""
+    worker = _create_worker(db, suffix="ProjActive")
+    db.commit()
+    db.refresh(worker)
+    return worker
+
+
+@pytest.fixture
+def inactive_worker(db: Session) -> Worker:
+    """Уволенный работник — не имеет права создавать Company/Project (403)."""
+    worker = _create_worker(db, suffix="ProjDismissed")
+    worker.employment_status = "dismissed"
+    worker.dismissal_date = date.today()
+    db.add(worker)
+    db.commit()
+    db.refresh(worker)
+    return worker
+
+
+@pytest.fixture
 def worker_with_welder_profile(db: Session, worker_with_welder_role: Worker) -> Worker:
     """Работник с ролью WELDER и оформленным профилем сварщика ОГС."""
     welder = Welder(
@@ -134,46 +156,66 @@ def create_welder_profile(db: Session, worker_id: int, stamp_code: str) -> Welde
     return welder
 
 
+def _purge_test_data(db: Session) -> None:
+    """Удаляет тестовые данные: сначала project (по created_by = тестовый worker),
+    затем welding/hr. Порядок учитывает FK. Данные projects помечены created_by,
+    равным id тестовых workers (TEST_COMPANY_ID)."""
+    worker_ids = [
+        row[0]
+        for row in db.query(Worker.id)
+        .filter(Worker.company_id == TEST_COMPANY_ID)
+        .all()
+    ]
+    if not worker_ids:
+        return
+
+    project_ids = [
+        row[0]
+        for row in db.query(Project.id)
+        .filter(Project.created_by.in_(worker_ids))
+        .all()
+    ]
+    company_ids = [
+        row[0]
+        for row in db.query(Company.id)
+        .filter(Company.created_by.in_(worker_ids))
+        .all()
+    ]
+    if project_ids or company_ids:
+        conditions = []
+        if project_ids:
+            conditions.append(ProjectCompany.project_id.in_(project_ids))
+        if company_ids:
+            conditions.append(ProjectCompany.company_id.in_(company_ids))
+        db.query(ProjectCompany).filter(or_(*conditions)).delete(
+            synchronize_session=False
+        )
+    if project_ids:
+        db.query(Project).filter(Project.id.in_(project_ids)).delete(
+            synchronize_session=False
+        )
+    if company_ids:
+        db.query(Company).filter(Company.id.in_(company_ids)).delete(
+            synchronize_session=False
+        )
+
+    db.query(WelderAdmission).filter(
+        WelderAdmission.worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(Welder).filter(Welder.worker_id.in_(worker_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(WorkerRole).filter(WorkerRole.worker_id.in_(worker_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(Worker).filter(Worker.id.in_(worker_ids)).delete(
+        synchronize_session=False
+    )
+    db.commit()
+
+
 @pytest.fixture(autouse=True)
 def _cleanup_test_data(db: Session) -> Generator[None, None, None]:
-    worker_ids = [
-        row[0]
-        for row in db.query(Worker.id)
-        .filter(Worker.company_id == TEST_COMPANY_ID)
-        .all()
-    ]
-    if worker_ids:
-        db.query(WelderAdmission).filter(
-            WelderAdmission.worker_id.in_(worker_ids)
-        ).delete(synchronize_session=False)
-        db.query(Welder).filter(Welder.worker_id.in_(worker_ids)).delete(
-            synchronize_session=False
-        )
-        db.query(WorkerRole).filter(WorkerRole.worker_id.in_(worker_ids)).delete(
-            synchronize_session=False
-        )
-        db.query(Worker).filter(Worker.id.in_(worker_ids)).delete(
-            synchronize_session=False
-        )
-        db.commit()
+    _purge_test_data(db)
     yield
-    worker_ids = [
-        row[0]
-        for row in db.query(Worker.id)
-        .filter(Worker.company_id == TEST_COMPANY_ID)
-        .all()
-    ]
-    if worker_ids:
-        db.query(WelderAdmission).filter(
-            WelderAdmission.worker_id.in_(worker_ids)
-        ).delete(synchronize_session=False)
-        db.query(Welder).filter(Welder.worker_id.in_(worker_ids)).delete(
-            synchronize_session=False
-        )
-        db.query(WorkerRole).filter(WorkerRole.worker_id.in_(worker_ids)).delete(
-            synchronize_session=False
-        )
-        db.query(Worker).filter(Worker.id.in_(worker_ids)).delete(
-            synchronize_session=False
-        )
-        db.commit()
+    _purge_test_data(db)
