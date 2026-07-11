@@ -53,6 +53,8 @@ PROJECT_MANAGED_TABLES = {
 ENGINEERING_MANAGED_TABLES = {
     "engineering_documents",
     "document_revisions",
+    "joints",
+    "joint_sequences",
 }
 
 

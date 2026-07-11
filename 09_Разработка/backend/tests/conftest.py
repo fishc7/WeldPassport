@@ -9,7 +9,12 @@ from sqlalchemy import or_, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from app.engineering.models import DocumentRevision, EngineeringDocument
+from app.engineering.models import (
+    DocumentRevision,
+    EngineeringDocument,
+    Joint,
+    JointSequence,
+)
 from app.hr.models import Worker, WorkerRole
 from app.main import app
 from app.projects.models import Company, Line, Project, ProjectCompany
@@ -182,6 +187,18 @@ def _purge_test_data(db: Session) -> None:
         .filter(Company.created_by.in_(worker_ids))
         .all()
     ]
+
+    # Стыки удаляем раньше ревизий/линий/проектов: FK engineering.joints →
+    # project.* и engineering.document_revisions c ondelete RESTRICT. Стыки
+    # помечены created_by тестовых workers. Счётчики last_value чистим по
+    # project_id, чтобы не оставлять сирот.
+    db.query(Joint).filter(Joint.created_by.in_(worker_ids)).delete(
+        synchronize_session=False
+    )
+    if project_ids:
+        db.query(JointSequence).filter(
+            JointSequence.project_id.in_(project_ids)
+        ).delete(synchronize_session=False)
 
     # Инженерные документы/ревизии удаляем раньше линий и проектов:
     # FK engineering.* → project.* c ondelete RESTRICT. Документы помечены

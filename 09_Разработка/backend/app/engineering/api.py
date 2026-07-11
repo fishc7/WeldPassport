@@ -11,8 +11,17 @@ from app.engineering.schemas import (
     EngineeringDocumentListFilters,
     EngineeringDocumentRead,
     EngineeringStatus,
+    GeometryType,
+    JointCreate,
+    JointListFilters,
+    JointListResponse,
+    JointRead,
+    JointSortBy,
+    JointUpdate,
+    SortOrder,
+    WeldJointType,
 )
-from app.engineering.services import EngineeringService
+from app.engineering.services import EngineeringService, joint_to_read
 from app.shared.auth import get_current_user_id
 from app.shared.db import get_db
 
@@ -164,3 +173,68 @@ def list_revisions(
     _uid: int = Depends(get_current_user_id),
 ):
     return svc.list_revisions(document_id)
+
+
+# ── Стыки (Joint, Task 5A) ────────────────────────────────────────────────────
+
+
+@router.post("/joints", response_model=JointRead, status_code=201)
+def create_joint(
+    data: JointCreate,
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return joint_to_read(svc.create_joint(data))
+
+
+@router.get("/joints", response_model=JointListResponse)
+def list_joints(
+    project_id: UUID | None = Query(default=None),
+    line_id: UUID | None = Query(default=None),
+    current_document_revision_id: UUID | None = Query(default=None),
+    system_code: str | None = Query(default=None),
+    joint_no: str | None = Query(default=None),
+    geometry_type: GeometryType | None = Query(default=None),
+    weld_joint_type: WeldJointType | None = Query(default=None),
+    ready_for_welding: bool | None = Query(default=None),
+    sort_by: JointSortBy = Query(default="created_at"),
+    sort_order: SortOrder = Query(default="asc"),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    filters = JointListFilters(
+        project_id=project_id,
+        line_id=line_id,
+        current_document_revision_id=current_document_revision_id,
+        system_code=system_code,
+        joint_no=joint_no,
+        geometry_type=geometry_type,
+        weld_joint_type=weld_joint_type,
+        ready_for_welding=ready_for_welding,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit,
+        offset=offset,
+    )
+    return svc.list_joints(filters)
+
+
+@router.get("/joints/{joint_id}", response_model=JointRead)
+def get_joint(
+    joint_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return joint_to_read(svc.get_joint(joint_id))
+
+
+@router.patch("/joints/{joint_id}", response_model=JointRead)
+def update_joint(
+    joint_id: UUID,
+    data: JointUpdate,
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return joint_to_read(svc.update_joint(joint_id, data))
