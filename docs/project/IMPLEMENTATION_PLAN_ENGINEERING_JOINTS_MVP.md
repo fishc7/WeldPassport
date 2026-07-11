@@ -574,6 +574,16 @@ FK WPS/МТО.
 `ACTIVE`, `pto_status` / `ogs_status`, команды submit / confirm / reject / cancel /
 supersede; аддитивное расширение `scope_type` значением `ENGINEERING_DOCUMENT`.
 
+> **Детальный канон Task 5B — [[docs/project/ADR-011-joint-lifecycle-approvals-blocking-scope|ADR-011]]** (принят 2026-07-11):
+> полный жизненный цикл, независимые согласования, блокировки, три версии Joint
+> (`record`/`approval`/`workflow`), отмена, замена и переоценка. Расхождения словарей с
+> ADR-010 **закрыты** решениями Р-11-1 — Р-11-4 (раздел «Решения по согласованию с
+> ADR-010» в ADR-011) и учтены в «Решениях» ниже. Общая линия: словари и физическая
+> схема — по ADR-010, полнота жизненного цикла и обязательный объём (§44) — по ADR-011.
+> Полные блокировки, переоценка (`ENGINEERING`/`WELDING_TECHNOLOGY`) и проверка
+> целостности одного Joint — обязательный объём Task 5B по ADR-011 §44, детализируются
+> при разработке этапа.
+
 ### Файлы
 
 **Modify:**
@@ -592,44 +602,69 @@ supersede; аддитивное расширение `scope_type` значени
 
 ### Решения
 
-- Поля согласования: `pto_status`/`ogs_status` (`PENDING/CONFIRMED/REJECTED`),
-  `pto_comment`/`ogs_comment`, `pto_decided_by/at`, `ogs_decided_by/at`,
-  `submitted_by/at`. При создании `status=DRAFT`, оба `PENDING`.
-- `scope_type` (Р-1): `ENGINEERING_DOCUMENT` добавляется аддитивно к
+- Состояния согласования (Р-11-1): `pto_status`/`ogs_status` ∈
+  `NOT_SUBMITTED/PENDING/APPROVED/REJECTED/REVOKED` (положительное решение —
+  `APPROVED`, **не** `CONFIRMED`). Дополнительно `pto_pending_reason`/
+  `ogs_pending_reason` (`INITIAL_REVIEW/REVIEW_REOPENED/TEMPORARY_SUSPENSION/
+  REVALIDATION`), `pto_decision_method`/`ogs_decision_method`
+  (`AUTOMATIC/MANUAL/OVERRIDE`), `pto_comment`/`ogs_comment`, `pto_decided_by/at`,
+  `ogs_decided_by/at`, `submitted_by/at`. При создании `status=DRAFT`, оба
+  `NOT_SUBMITTED`; после submit — оба `PENDING`.
+- Версии (Р-11-2): три версии — `record_version` (concurrency, = прежняя `version`
+  Task 5A, переименование), `approval_version` (значимые данные; к ней привязаны
+  согласования), `workflow_version` (переходы/блокировки/замена); все `>0`. Конфликт →
+  `409` с кодами `RECORD_/APPROVAL_/WORKFLOW_/SOURCE_JOINT_/SUCCESSOR_JOINT_VERSION_CONFLICT`,
+  без автоповтора.
+- Роли (Р-11-3): подтверждают `PTO_ENGINEER` (ПТО) и `OGS_ENGINEER` (ОГС); в CHECK
+  `hr.worker_roles.role_code` **аддитивно** добавляются `PTO_MANAGER`, `CHIEF_WELDER`,
+  `AUDITOR` (исключительные/совместные решения, диагностика). Права — по действующей
+  роли, не по должности.
+- `scope_type` (Р-1 / Р-11-4): `ENGINEERING_DOCUMENT` добавляется аддитивно к
   `GLOBAL/COMPANY/PROJECT/SITE/LINE`; `COMPANY`/`SITE` сохраняются; переименования и
-  миграции данных нет. Обновить CHECK БД, Pydantic `ScopeType`, HR-тесты, проверки
-  scope.
+  миграции данных нет. Концептуальные уровни ADR-011 отображаются на канон:
+  `ISOMETRIC → ENGINEERING_DOCUMENT`, `UNIT → SITE`; литералы `UNIT`/`ISOMETRIC` не
+  вводятся. Обновить CHECK БД, Pydantic `ScopeType`, HR-тесты, проверки scope (по
+  иерархии, а не только по `scope_id`).
 - Разделение полей ПТО/ОГС: изменение полей ПТО → сброс `pto_status`; ОГС →
-  `ogs_status`; общих → оба; из `ACTIVE` → `PENDING_REVIEW`.
-- `ACTIVE` — автоматически при обоих `CONFIRMED`.
-- `requires_review = true`, если `pto_status != CONFIRMED` или `ogs_status !=
-  CONFIRMED`, а также в `DRAFT`/`PENDING_REVIEW`.
+  `ogs_status`; общих → оба; из `ACTIVE` → `PENDING_REVIEW`. Значимое изменение
+  увеличивает `approval_version`, любое изменение — `record_version`, workflow-переход
+  — `workflow_version`.
+- `ACTIVE` — автоматически и атомарно при обоих `APPROVED` для текущей
+  `approval_version`.
+- `requires_review = true`, если `pto_status != APPROVED` или `ogs_status !=
+  APPROVED`, а также в `DRAFT`/`PENDING_REVIEW`.
 
 ### API (переходы)
 
-`POST /joints/{id}/submit-for-review` · `/confirm-pto` · `/confirm-ogs` ·
-`/reject-pto` · `/reject-ogs` · `/cancel` · `/supersede`.
+`POST /joints/{id}/submit-for-review` · `/approve-pto` · `/approve-ogs` ·
+`/reject-pto` · `/reject-ogs` · `/revoke-pto` · `/revoke-ogs` · `/cancel` ·
+`/supersede`.
 
 Правила: submit — из `DRAFT` или повторно после `REJECTED`, сохраняет
-`submitted_by/at`, → `PENDING_REVIEW`; confirm-pto — только `PTO_ENGINEER`, меняет
-только `pto_status`; confirm-ogs — только `OGS_ENGINEER`; reject — комментарий
-обязателен, Joint остаётся `PENDING_REVIEW`; cancel/supersede — причина,
-подразделение (`PTO`/`OGS`), actor, expected version; supersede дополнительно
-`superseded_by_joint_id` (запрет self-supersede; заменяющий того же проекта;
-допустимый статус). Статусы через обычный PATCH не меняются.
+`submitted_by/at`, оба согласования → `PENDING`, → `PENDING_REVIEW`; approve-pto —
+только `PTO_ENGINEER`, меняет только `pto_status` → `APPROVED`; approve-ogs — только
+`OGS_ENGINEER`; reject — комментарий обязателен, Joint остаётся `PENDING_REVIEW`;
+revoke — отзыв действующего `APPROVED` (не восстанавливается, инвариант №20),
+основание обязательно; cancel/supersede — причина, подразделение (`PTO`/`OGS`), actor,
+ожидаемые версии; supersede дополнительно `superseded_by_joint_id` (запрет
+self-supersede; заменяющий того же проекта; допустимый статус). Команды передают
+релевантные версии; статусы через обычный PATCH не меняются. Автоматическое
+согласование ОГС (`AUTOMATIC`) и `OVERRIDE` (`CHIEF_WELDER`) — предусмотреть способ
+решения и аудит (ADR-011 §9), полнота логики поэтапно.
 
 ### Ключевые тесты
 
-DRAFT → PENDING_REVIEW; confirm ПТО/ОГС; авто-ACTIVE; reject ПТО/ОГС; обязательный
-комментарий; повторная отправка после reject; cancel; supersede; запрет
-self-supersede; сброс согласований при изменении полей; возврат ACTIVE →
-PENDING_REVIEW; optimistic locking; `scope_type` `ENGINEERING_DOCUMENT` не ломает
-существующие области; регрессия HR.
+DRAFT → PENDING_REVIEW; approve ПТО/ОГС; авто-ACTIVE при обоих `APPROVED`; reject
+ПТО/ОГС; revoke (не восстанавливается); обязательный комментарий; повторная отправка
+после reject; cancel; supersede; запрет self-supersede; выборочный сброс согласований
+при изменении полей ПТО/ОГС/общих; возврат ACTIVE → PENDING_REVIEW; три версии
+(`record`/`approval`/`workflow`) и коды `409`; `scope_type` `ENGINEERING_DOCUMENT` не
+ломает существующие области; проверка scope по иерархии; регрессия HR.
 
 **Commit:** `feat(engineering): add joint review lifecycle`
 
-**Checkpoint:** ChatGPT — двойное согласование, аддитивный scope_type, роли
-PTO_ENGINEER/OGS_ENGINEER.
+**Checkpoint:** ChatGPT — двойное согласование (`APPROVED`), три версии Joint,
+аддитивный scope_type, роли PTO_ENGINEER/OGS_ENGINEER + PTO_MANAGER/CHIEF_WELDER/AUDITOR.
 
 ---
 

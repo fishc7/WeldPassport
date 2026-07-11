@@ -316,8 +316,18 @@ ADR-007
 
 Инженерная сущность, созданная из утверждённой рабочей документации, являющаяся
 **центральным объектом производственного процесса**. Хранится в `engineering.joints`.
-Инженерный статус (`engineering_status`: `DRAFT`, `CONFIRMED`, `CANCELLED`, `SUPERSEDED`)
-хранится в БД; `ready_for_welding` и `production_state` **вычисляются** API.
+
+Жизненный цикл (`status`, ADR-010/011): `DRAFT`, `PENDING_REVIEW`, `ACTIVE`,
+`CANCELLED`, `SUPERSEDED` (последние два — терминальные). Независимые согласования
+`pto_status`/`ogs_status` (ADR-011 Р-11-1): `NOT_SUBMITTED`, `PENDING`, `APPROVED`,
+`REJECTED`, `REVOKED` — положительное решение называется **`APPROVED`** (не
+`CONFIRMED`, который занят `engineering_status` документов). `ACTIVE` — автоматически
+при обоих `APPROVED` для текущей `approval_version`.
+
+Три версии (ADR-011 Р-11-2): `record_version` (concurrency), `approval_version`
+(значимые данные; к ней привязаны согласования), `workflow_version` (переходы,
+блокировки, замена). `ready_for_welding`, `missing_welding_requirements` и
+`production_state` **вычисляются** API и в БД не хранятся.
 
 ### Владелец
 
@@ -336,7 +346,7 @@ Production, Quality, NDT, Executive Documentation (Documents / PTO).
 
 ### Связанные ADR
 
-ADR-006, ADR-007, ADR-008, ADR-009
+ADR-006, ADR-007, ADR-008, ADR-009, ADR-010, ADR-011
 
 ---
 
@@ -759,6 +769,27 @@ ADR-004, ADR-006
 ### Определение
 
 Производственная роль работника в системе (например, `WELDER`), назначаемая ОК.
+Права определяются **только действующей ролью**, не должностью (ADR-011 §18).
+
+Технический `role_code` — канон (ADR-010 Р-2); предметные имена ADR-011 —
+псевдонимы (ADR-011 Р-11-3):
+
+| Предметное имя (ADR-011) | Технический `role_code` |
+| --- | --- |
+| `PTO` | `PTO_ENGINEER` |
+| `WELDING_ENGINEER` | `OGS_ENGINEER` |
+| `PTO_MANAGER` | `PTO_MANAGER` (Task 5B) |
+| `CHIEF_WELDER` | `CHIEF_WELDER` (Task 5B) |
+| аудитор | `AUDITOR` (Task 5B) |
+| системный администратор | системный уровень, не `hr.worker_roles` |
+
+### Область действия роли (scope)
+
+`hr.worker_roles.scope_type` (канон ADR-010 Р-1 / Р-11-4):
+`GLOBAL, COMPANY, PROJECT, SITE, LINE, ENGINEERING_DOCUMENT`. Концептуальные уровни
+ADR-011 §19 отображаются на канон: `ISOMETRIC → ENGINEERING_DOCUMENT`, `UNIT → SITE`;
+литералы `UNIT`/`ISOMETRIC` не вводятся. `COMPANY` — сквозной срез. Проверка — по
+иерархии, а не только по совпадению `scope_id`.
 
 ### Владелец
 
@@ -766,7 +797,7 @@ HR (`hr.worker_roles`)
 
 ### Используется
 
-OGS, Production.
+OGS, Production, Engineering (согласование Joint, ADR-011).
 
 ### Не является
 
@@ -775,7 +806,7 @@ OGS, Production.
 
 ### Связанные ADR
 
-ADR-004
+ADR-004, ADR-010, ADR-011
 
 ---
 

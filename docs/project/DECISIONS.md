@@ -1243,6 +1243,9 @@ ADR-009; решения ADR-009 по `EngineeringDocument` и `DocumentRevision`
 - Concurrency — `version` (optimistic locking); изменяющий запрос передаёт ожидаемую
   версию, несовпадение → конфликт без перезаписи. Физического удаления нет,
   DELETE-endpoint не создаётся.
+  > **Уточнено ADR-011 (Р-11-2):** в Task 5B единая `version` разделяется на три —
+  > `record_version` (concurrency, = прежняя `version`), `approval_version`,
+  > `workflow_version`. См. [[docs/project/ADR-011-joint-lifecycle-approvals-blocking-scope|ADR-011 §15]].
 
 #### Разделение ответственности ПТО / ОГС
 
@@ -1324,6 +1327,69 @@ ADR-009; решения ADR-009 по `EngineeringDocument` и `DocumentRevision`
 ```text
 docs/project/DECISIONS.md (ADR-010)
 docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Tasks 5A, 5B, 6, 7)
+```
+
+---
+
+## ADR-011. Жизненный цикл Joint, согласования, блокировки и контроль областей
+
+Дата: 2026-07-11
+
+Статус: **принято** (детализирует Task 5B поверх [[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010]]; базовую идентичность Joint не меняет)
+
+Область: Engineering / Joint / ПТО / ОГС
+
+Полный текст: [[docs/project/ADR-011-joint-lifecycle-approvals-blocking-scope|ADR-011-joint-lifecycle-approvals-blocking-scope.md]].
+
+Уточняет: [[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010]] ·
+[[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007]] ·
+[[docs/project/ADR-006-domain-ownership-matrix|ADR-006]] ·
+[[docs/project/ADR-002-double-welder-accounting|ADR-002]]
+
+Канон реализации: [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP#Task 5B — Joint Review Lifecycle|Implementation Plan, Task 5B]]
+
+### Суть
+
+- **Жизненный цикл Joint:** `DRAFT → PENDING_REVIEW → ACTIVE`, терминальные `CANCELLED`
+  и `SUPERSEDED` (необратимы). Переходы — только доменными командами, не правкой поля.
+- **Независимые согласования ПТО и ОГС** (`NOT_SUBMITTED / PENDING / APPROVED /
+  REJECTED / REVOKED`); `ACTIVE` — автоматически и атомарно при действующих `APPROVED`
+  обеих сторон для текущей `approval_version`. Согласования не объединяются в одно поле.
+- **Выборочный сброс:** изменение инженерных данных сбрасывает ПТО, технологических —
+  ОГС, общих — оба; незатронутая сторона сохраняет решение.
+- **Автосогласование ОГС** (`AUTOMATIC` / `REJECTED` / `MANUAL_REVIEW_REQUIRED`);
+  преодоление формального запрета — только `CHIEF_WELDER` через `OVERRIDE` с обоснованием.
+- **Три версии Joint:** `record_version` (concurrency), `approval_version` (значимые
+  данные), `workflow_version` (workflow); конфликт → `409 Conflict` без автоповтора.
+- **Блокировки** — отдельные записи с областью (`PRODUCTION / EDITING / APPROVAL /
+  ALL`); не статус ЖЦ. Готовность действий (`available_actions`) **вычисляется**
+  сервером, не хранится и не дублируется во frontend.
+- **Отмена и замена:** штатная `CANCELLED` (после первой `WeldOperation` — совместное
+  решение ПТО_MANAGER + CHIEF_WELDER); атомарная `SUPERSEDED` через
+  `REPLACEMENT_PENDING`; производственные события на преемника **не переносятся**;
+  ошибочная отмена — новый Joint через `recreated_from_joint_id`.
+- **Переоценка одного Joint** по зонам `ENGINEERING` / `WELDING_TECHNOLOGY` (`NDT`,
+  `PWHT`, `EXECUTIVE_DOCUMENTATION` — архитектурно предусмотрены, логика позже).
+- **Аудит и авторство:** поля-акторы не принимаются из тела запроса — только из
+  auth-контекста; история статусов, согласований, блокировок и переоценок неизменяема.
+
+Обязательный объём Task 5B (§44) и отложенные расширения (§45, приложение E)
+разграничены. Расхождения словарей с ADR-010 **закрыты** архитектурными решениями
+Р-11-1 — Р-11-4 (раздел «Решения по согласованию с ADR-010» полного текста):
+состояния согласования — набор ADR-011, положительное решение `APPROVED`; версии —
+три (`record`/`approval`/`workflow`, `version → record_version`); роли — техимена
+ADR-010 (`PTO_ENGINEER`/`OGS_ENGINEER`) + новые `PTO_MANAGER`/`CHIEF_WELDER`/`AUDITOR`;
+`scope_type` — набор ADR-010 (`ISOMETRIC → ENGINEERING_DOCUMENT`, `UNIT → SITE`).
+Общая линия: словари и физическая схема — по ADR-010, полнота жизненного цикла — по
+ADR-011.
+
+### Где зафиксировано
+
+```text
+docs/project/ADR-011-joint-lifecycle-approvals-blocking-scope.md
+docs/project/DECISIONS.md (ADR-011)
+docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Task 5B)
+docs/project/PROJECT_SUMMARY.md
 ```
 
 ---
