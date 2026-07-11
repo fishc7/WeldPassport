@@ -5,11 +5,21 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.engineering.joint_workflow import (
+    ApprovalState,
+    BlockScope,
+    BlockType,
+    DecisionMethod,
+    JointStatus,
+    PendingReason,
+)
+
 DocumentType = Literal["ISOMETRIC", "DRAWING", "WELD_MAP", "OTHER"]
 EngineeringStatus = Literal["DRAFT", "APPROVED", "CANCELLED", "SUPERSEDED"]
 
-# ── Joint enums (Task 5A, ADR-010) ────────────────────────────────────────────
-JointStatus = Literal["DRAFT"]
+# ── Joint enums (Task 5A ядро + Task 5B жизненный цикл, ADR-010 / ADR-011) ─────
+# JointStatus / ApprovalState / PendingReason / DecisionMethod / BlockType /
+# BlockScope — единый источник в joint_workflow (канон ADR-011).
 GeometryType = Literal["BUTT", "FILLET", "TEE", "LAP", "SLOT", "OTHER"]
 WeldJointType = Literal["BW", "SW", "FW", "OTHER"]
 ConnectionCode = Literal["C", "U", "T", "N", "P", "OTHER"]
@@ -243,7 +253,38 @@ class JointRead(BaseModel):
     joint_no: str
     joint_no_normalized: str
     status: JointStatus
+
+    # Три версии (Task 5B). `version` сохранён как зеркало record_version для
+    # обратной совместимости контракта Task 5A.
     version: int
+    record_version: int
+    approval_version: int
+    workflow_version: int
+
+    # Согласования ПТО/ОГС.
+    pto_status: ApprovalState
+    pto_pending_reason: PendingReason | None
+    pto_decision_method: DecisionMethod | None
+    pto_approval_version: int | None
+    pto_decided_by: int | None
+    pto_decided_at: datetime | None
+    pto_comment: str | None
+    ogs_status: ApprovalState
+    ogs_pending_reason: PendingReason | None
+    ogs_decision_method: DecisionMethod | None
+    ogs_approval_version: int | None
+    ogs_decided_by: int | None
+    ogs_decided_at: datetime | None
+    ogs_comment: str | None
+
+    submitted_by: int | None
+    submitted_at: datetime | None
+    cancelled_reason: str | None
+    cancelled_by: int | None
+    cancelled_at: datetime | None
+    superseded_by_joint_id: UUID | None
+    superseded_by: int | None
+    superseded_at: datetime | None
 
     dn_1: Decimal | None
     dn_2: Decimal | None
@@ -286,6 +327,13 @@ class JointRead(BaseModel):
     ready_for_welding: bool
     missing_welding_requirements: list[str]
     production_state: ProductionState
+    # Требуется проверка, если хотя бы одна сторона не APPROVED либо Joint ещё в
+    # DRAFT/PENDING_REVIEW (§ решения Task 5B плана).
+    requires_review: bool
+    is_blocked: bool
+    # Доступные действия актора (§22-23 ADR-011). Пусто в массовых списках и для
+    # аудитора; заполняется на карточке Joint и в ответах команд.
+    available_actions: list[str] = Field(default_factory=list)
 
 
 class JointListFilters(BaseModel):
@@ -311,3 +359,142 @@ class JointListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# ── Команды жизненного цикла (Task 5B, §7-8 ADR-011 / §7-8 задания) ───────────
+# Актор (worker_id) берётся ТОЛЬКО из auth-контекста (X-User-Id), не из тела
+# (§17 ADR-011). Тело несёт причины/комментарии/ожидаемые версии. Ожидаемые версии
+# опциональны: при передаче сверяются и дают 409 с машинным кодом (§16).
+
+
+def _require_reason(value: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("Причина обязательна и не может быть пустой")
+    return stripped
+
+
+class SubmitForReviewCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_workflow_version: int | None = Field(default=None, gt=0)
+
+
+class ApprovePtoCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    comment: str | None = None
+    expected_approval_version: int | None = Field(default=None, gt=0)
+    expected_workflow_version: int | None = Field(default=None, gt=0)
+
+
+class ApproveOgsCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # AUTOMATIC не применяется по умолчанию; OVERRIDE — только CHIEF_WELDER (§9).
+    method: Literal["MANUAL", "AUTOMATIC", "OVERRIDE"] = "MANUAL"
+    comment: str | None = None
+    expected_approval_version: int | None = Field(default=None, gt=0)
+    expected_workflow_version: int | None = Field(default=None, gt=0)
+
+
+class RejectCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1)
+    expected_workflow_version: int | None = Field(default=None, gt=0)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, v: str) -> str:
+        return _require_reason(v)
+
+
+class RevokeCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1)
+    expected_workflow_version: int | None = Field(default=None, gt=0)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, v: str) -> str:
+        return _require_reason(v)
+
+
+class BlockCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    block_type: BlockType = "MANUAL_HOLD"
+    scope: BlockScope = "ALL"
+    reason: str = Field(min_length=1)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, v: str) -> str:
+        return _require_reason(v)
+
+
+class UnblockCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    block_id: UUID
+    reason: str | None = None
+
+
+class CancelCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1)
+    expected_workflow_version: int | None = Field(default=None, gt=0)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, v: str) -> str:
+        return _require_reason(v)
+
+
+class SupersedeCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    successor_joint_id: UUID
+    reason: str | None = None
+    expected_source_version: int | None = Field(default=None, gt=0)
+    expected_successor_version: int | None = Field(default=None, gt=0)
+
+
+class JointBlockRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    joint_id: UUID
+    block_type: BlockType
+    scope: BlockScope
+    reason: str
+    created_by: int
+    created_at: datetime
+    released_by: int | None
+    released_at: datetime | None
+    release_reason: str | None
+
+
+class JointEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    joint_id: UUID
+    event_type: str
+    actor_worker_id: int
+    actor_role_code: str | None
+    previous_status: str | None
+    new_status: str | None
+    previous_pto_status: str | None
+    new_pto_status: str | None
+    previous_ogs_status: str | None
+    new_ogs_status: str | None
+    record_version: int
+    approval_version: int
+    workflow_version: int
+    decision_method: str | None
+    reason: str | None
+    created_at: datetime

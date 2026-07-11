@@ -217,6 +217,7 @@ class HrService:
                 "Нельзя назначить активную роль уволенному работнику (dismissed)"
             )
         scope_type = data.scope_type
+        self._validate_role_invariants(data.role_code, scope_type)
         scope_id = self._validate_role_scope(scope_type, data.scope_id)
         if self._repo.find_active_role_duplicate(
             worker_id=worker_id,
@@ -252,6 +253,7 @@ class HrService:
         scope_type = payload.get("scope_type", role.scope_type)
         raw_scope_id = payload.get("scope_id", role.scope_id)
         is_active = payload.get("is_active", role.is_active)
+        self._validate_role_invariants(role.role_code, scope_type)
         scope_id = self._validate_role_scope(scope_type, raw_scope_id)
         if "scope_id" in payload:
             payload["scope_id"] = scope_id
@@ -315,13 +317,25 @@ class HrService:
             raise NotFoundError("Роль работника", role_id)
         return role
 
+    def _validate_role_invariants(self, role_code: str, scope_type: str) -> None:
+        """Доменные инварианты роли (§4 задания, §18 ADR-011).
+
+        CHIEF_WELDER — общесистемная административная роль; допускается только с
+        GLOBAL scope. Дублирует DB CHECK понятной доменной ошибкой.
+        """
+        if role_code == "CHIEF_WELDER" and scope_type != "GLOBAL":
+            raise ConflictError(
+                "Роль CHIEF_WELDER допускается только с scope_type=GLOBAL"
+            )
+
     def _validate_role_scope(
         self, scope_type: str, scope_id: str | None
     ) -> str | None:
         """Проверяет scope_id и возвращает канонический строковый вид.
 
         - GLOBAL: scope_id должен отсутствовать (None);
-        - PROJECT/LINE: обязателен валидный UUID, нормализуется через uuid.UUID(...);
+        - PROJECT/LINE/ENGINEERING_DOCUMENT: обязателен валидный UUID,
+          нормализуется через uuid.UUID(...);
         - остальные scope_type (COMPANY, SITE): scope_id обязателен, но формат
           не фиксируется UUID-ом.
         """
@@ -341,7 +355,7 @@ class HrService:
                 f"Для scope_type={scope_type} поле scope_id обязательно"
             )
 
-        if scope_type in ("PROJECT", "LINE"):
+        if scope_type in ("PROJECT", "LINE", "ENGINEERING_DOCUMENT"):
             try:
                 return str(uuid.UUID(normalized))
             except (ValueError, AttributeError, TypeError) as exc:

@@ -4,6 +4,10 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.engineering.schemas import (
+    ApproveOgsCommand,
+    ApprovePtoCommand,
+    BlockCommand,
+    CancelCommand,
     DocumentRevisionCreate,
     DocumentRevisionRead,
     DocumentType,
@@ -12,13 +16,20 @@ from app.engineering.schemas import (
     EngineeringDocumentRead,
     EngineeringStatus,
     GeometryType,
+    JointBlockRead,
     JointCreate,
+    JointEventRead,
     JointListFilters,
     JointListResponse,
     JointRead,
     JointSortBy,
     JointUpdate,
+    RejectCommand,
+    RevokeCommand,
     SortOrder,
+    SubmitForReviewCommand,
+    SupersedeCommand,
+    UnblockCommand,
     WeldJointType,
 )
 from app.engineering.services import EngineeringService, joint_to_read
@@ -225,9 +236,9 @@ def list_joints(
 def get_joint(
     joint_id: UUID,
     svc: EngineeringService = Depends(_svc),
-    _uid: int = Depends(get_current_user_id),
+    uid: int = Depends(get_current_user_id),
 ):
-    return joint_to_read(svc.get_joint(joint_id))
+    return svc.read_joint(joint_id, uid)
 
 
 @router.patch("/joints/{joint_id}", response_model=JointRead)
@@ -237,4 +248,136 @@ def update_joint(
     svc: EngineeringService = Depends(_svc),
     _uid: int = Depends(get_current_user_id),
 ):
-    return joint_to_read(svc.update_joint(joint_id, data))
+    return svc.update_joint(joint_id, data)
+
+
+# ── Стыки: команды жизненного цикла (Task 5B, §7 ADR-011) ─────────────────────
+# Актор — только из X-User-Id (§17 ADR-011); тело несёт причины/версии.
+
+
+@router.post("/joints/{joint_id}/submit-for-review", response_model=JointRead)
+def submit_for_review(
+    joint_id: UUID,
+    data: SubmitForReviewCommand = SubmitForReviewCommand(),
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.submit_for_review(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/approve-pto", response_model=JointRead)
+def approve_pto(
+    joint_id: UUID,
+    data: ApprovePtoCommand = ApprovePtoCommand(),
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.approve_pto(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/reject-pto", response_model=JointRead)
+def reject_pto(
+    joint_id: UUID,
+    data: RejectCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.reject_pto(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/revoke-pto", response_model=JointRead)
+def revoke_pto(
+    joint_id: UUID,
+    data: RevokeCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.revoke_pto(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/approve-ogs", response_model=JointRead)
+def approve_ogs(
+    joint_id: UUID,
+    data: ApproveOgsCommand = ApproveOgsCommand(),
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.approve_ogs(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/reject-ogs", response_model=JointRead)
+def reject_ogs(
+    joint_id: UUID,
+    data: RejectCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.reject_ogs(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/revoke-ogs", response_model=JointRead)
+def revoke_ogs(
+    joint_id: UUID,
+    data: RevokeCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.revoke_ogs(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/block", response_model=JointRead)
+def block_joint(
+    joint_id: UUID,
+    data: BlockCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.block(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/unblock", response_model=JointRead)
+def unblock_joint(
+    joint_id: UUID,
+    data: UnblockCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.unblock(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/cancel", response_model=JointRead)
+def cancel_joint(
+    joint_id: UUID,
+    data: CancelCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.cancel(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/supersede", response_model=JointRead)
+def supersede_joint(
+    joint_id: UUID,
+    data: SupersedeCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.supersede(joint_id, data, actor_worker_id=uid)
+
+
+@router.get("/joints/{joint_id}/blocks", response_model=list[JointBlockRead])
+def list_joint_blocks(
+    joint_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_blocks(joint_id)
+
+
+@router.get("/joints/{joint_id}/events", response_model=list[JointEventRead])
+def list_joint_events(
+    joint_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_events(joint_id)

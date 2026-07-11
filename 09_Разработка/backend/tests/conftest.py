@@ -13,6 +13,8 @@ from app.engineering.models import (
     DocumentRevision,
     EngineeringDocument,
     Joint,
+    JointBlock,
+    JointEvent,
     JointSequence,
 )
 from app.hr.models import Worker, WorkerRole
@@ -192,6 +194,24 @@ def _purge_test_data(db: Session) -> None:
     # project.* и engineering.document_revisions c ondelete RESTRICT. Стыки
     # помечены created_by тестовых workers. Счётчики last_value чистим по
     # project_id, чтобы не оставлять сирот.
+    joint_ids = [
+        row[0]
+        for row in db.query(Joint.id)
+        .filter(Joint.created_by.in_(worker_ids))
+        .all()
+    ]
+    if joint_ids:
+        # События и блокировки Task 5B ссылаются на joints c RESTRICT — удаляем
+        # раньше. Самоссылку supersede обнуляем, иначе RESTRICT блокирует удаление.
+        db.query(JointEvent).filter(JointEvent.joint_id.in_(joint_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(JointBlock).filter(JointBlock.joint_id.in_(joint_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(Joint).filter(Joint.id.in_(joint_ids)).update(
+            {Joint.superseded_by_joint_id: None}, synchronize_session=False
+        )
     db.query(Joint).filter(Joint.created_by.in_(worker_ids)).delete(
         synchronize_session=False
     )

@@ -21,6 +21,15 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.engineering.joint_workflow import (
+    APPROVAL_STATES,
+    BLOCK_SCOPES,
+    BLOCK_TYPES,
+    DECISION_METHODS,
+    EVENT_TYPES,
+    JOINT_STATUSES,
+    PENDING_REASONS,
+)
 from app.projects.models import PROJECT_SCHEMA
 from app.shared.db import Base
 
@@ -42,11 +51,9 @@ _STATUS_CHECK = "status IN (" + ", ".join(
     f"'{code}'" for code in ENGINEERING_STATUSES
 ) + ")"
 
-# ── Joint (Task 5A, ADR-010) ──────────────────────────────────────────────────
-# Перечисления классификации стыка берутся строго из ADR-010. В рамках Task 5A
-# статус ограничен только DRAFT; PENDING_REVIEW/ACTIVE/CANCELLED/SUPERSEDED
-# вводятся в Task 5B и здесь недопустимы.
-JOINT_STATUSES = ("DRAFT",)
+# ── Joint (Task 5A ядро + Task 5B жизненный цикл, ADR-010 / ADR-011) ──────────
+# Перечисления классификации стыка берутся строго из ADR-010. Статусы жизненного
+# цикла и словари согласований — из joint_workflow (канон ADR-011, §1-5).
 GEOMETRY_TYPES = ("BUTT", "FILLET", "TEE", "LAP", "SLOT", "OTHER")
 WELD_JOINT_TYPES = ("BW", "SW", "FW", "OTHER")
 CONNECTION_CODES = ("C", "U", "T", "N", "P", "OTHER")
@@ -88,6 +95,49 @@ _CONNECTION_CODE_CHECK = (
 # coordinate_system (ADR-010).
 _COORDINATE_SYSTEM_CHECK = (
     "(position_x IS NULL AND position_y IS NULL) OR coordinate_system IS NOT NULL"
+)
+
+# ── Инварианты согласований Joint (Task 5B, §5 ADR-011 / §2 задания) ──────────
+_PTO_STATUS_CHECK = _in_check("pto_status", APPROVAL_STATES)
+_OGS_STATUS_CHECK = _in_check("ogs_status", APPROVAL_STATES)
+_PTO_PENDING_REASON_CHECK = (
+    "pto_pending_reason IS NULL OR " + _in_check("pto_pending_reason", PENDING_REASONS)
+)
+_OGS_PENDING_REASON_CHECK = (
+    "ogs_pending_reason IS NULL OR " + _in_check("ogs_pending_reason", PENDING_REASONS)
+)
+_PTO_DECISION_METHOD_CHECK = (
+    "pto_decision_method IS NULL OR "
+    + _in_check("pto_decision_method", DECISION_METHODS)
+)
+_OGS_DECISION_METHOD_CHECK = (
+    "ogs_decision_method IS NULL OR "
+    + _in_check("ogs_decision_method", DECISION_METHODS)
+)
+# NOT_SUBMITTED → способ решения обязан быть NULL (§2 задания); принятое решение
+# (APPROVED/REJECTED/REVOKED) → способ обязателен.
+_PTO_METHOD_CONSISTENCY_CHECK = (
+    "(pto_status = 'NOT_SUBMITTED' AND pto_decision_method IS NULL) "
+    "OR (pto_status = 'PENDING') "
+    "OR (pto_status IN ('APPROVED', 'REJECTED', 'REVOKED') "
+    "AND pto_decision_method IS NOT NULL)"
+)
+_OGS_METHOD_CONSISTENCY_CHECK = (
+    "(ogs_status = 'NOT_SUBMITTED' AND ogs_decision_method IS NULL) "
+    "OR (ogs_status = 'PENDING') "
+    "OR (ogs_status IN ('APPROVED', 'REJECTED', 'REVOKED') "
+    "AND ogs_decision_method IS NOT NULL)"
+)
+# Причина ожидания хранится только пока сторона в PENDING (§5 ADR-011).
+_PTO_PENDING_PRESENCE_CHECK = (
+    "(pto_status = 'PENDING') OR (pto_pending_reason IS NULL)"
+)
+_OGS_PENDING_PRESENCE_CHECK = (
+    "(ogs_status = 'PENDING') OR (ogs_pending_reason IS NULL)"
+)
+# Joint не может заменить сам себя (§6 задания, §30 ADR-011).
+_NO_SELF_SUPERSEDE_CHECK = (
+    "superseded_by_joint_id IS NULL OR superseded_by_joint_id <> id"
 )
 
 
@@ -200,7 +250,56 @@ class Joint(Base):
             name="ck_engineering_joints_joint_no_normalized_not_empty",
         ),
         CheckConstraint(_JOINT_STATUS_CHECK, name="ck_engineering_joints_status"),
-        CheckConstraint("version > 0", name="ck_engineering_joints_version_positive"),
+        CheckConstraint(
+            "record_version > 0",
+            name="ck_engineering_joints_record_version_positive",
+        ),
+        CheckConstraint(
+            "approval_version > 0",
+            name="ck_engineering_joints_approval_version_positive",
+        ),
+        CheckConstraint(
+            "workflow_version > 0",
+            name="ck_engineering_joints_workflow_version_positive",
+        ),
+        CheckConstraint(_PTO_STATUS_CHECK, name="ck_engineering_joints_pto_status"),
+        CheckConstraint(_OGS_STATUS_CHECK, name="ck_engineering_joints_ogs_status"),
+        CheckConstraint(
+            _PTO_PENDING_REASON_CHECK,
+            name="ck_engineering_joints_pto_pending_reason",
+        ),
+        CheckConstraint(
+            _OGS_PENDING_REASON_CHECK,
+            name="ck_engineering_joints_ogs_pending_reason",
+        ),
+        CheckConstraint(
+            _PTO_DECISION_METHOD_CHECK,
+            name="ck_engineering_joints_pto_decision_method",
+        ),
+        CheckConstraint(
+            _OGS_DECISION_METHOD_CHECK,
+            name="ck_engineering_joints_ogs_decision_method",
+        ),
+        CheckConstraint(
+            _PTO_METHOD_CONSISTENCY_CHECK,
+            name="ck_engineering_joints_pto_method_consistency",
+        ),
+        CheckConstraint(
+            _OGS_METHOD_CONSISTENCY_CHECK,
+            name="ck_engineering_joints_ogs_method_consistency",
+        ),
+        CheckConstraint(
+            _PTO_PENDING_PRESENCE_CHECK,
+            name="ck_engineering_joints_pto_pending_presence",
+        ),
+        CheckConstraint(
+            _OGS_PENDING_PRESENCE_CHECK,
+            name="ck_engineering_joints_ogs_pending_presence",
+        ),
+        CheckConstraint(
+            _NO_SELF_SUPERSEDE_CHECK,
+            name="ck_engineering_joints_no_self_supersede",
+        ),
         CheckConstraint(
             _GEOMETRY_TYPE_CHECK, name="ck_engineering_joints_geometry_type"
         ),
@@ -285,9 +384,59 @@ class Joint(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="DRAFT"
     )
-    version: Mapped[int] = mapped_column(
+
+    # ── Три версии (Task 5B, §15 ADR-011 / §3 задания) ────────────────────────
+    # record_version — concurrency (прежняя version Task 5A, переименование);
+    # approval_version — значимые инженерные/технологические данные (к ней
+    # привязаны согласования); workflow_version — переходы/блокировки/замена.
+    record_version: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="1"
     )
+    approval_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1"
+    )
+    workflow_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1"
+    )
+
+    # ── Согласование ПТО (§5-7 ADR-011) ───────────────────────────────────────
+    pto_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="NOT_SUBMITTED"
+    )
+    pto_pending_reason: Mapped[str | None] = mapped_column(String(30))
+    pto_decision_method: Mapped[str | None] = mapped_column(String(20))
+    # approval_version, к которой относится текущее решение ПТО (§2 задания, §36
+    # ADR-011). Устаревшее (не равное approval_version) не активирует Joint.
+    pto_approval_version: Mapped[int | None] = mapped_column(Integer)
+    pto_decided_by: Mapped[int | None] = mapped_column(Integer)
+    pto_decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pto_comment: Mapped[str | None] = mapped_column(Text)
+
+    # ── Согласование ОГС (§5, §8-9 ADR-011) ───────────────────────────────────
+    ogs_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="NOT_SUBMITTED"
+    )
+    ogs_pending_reason: Mapped[str | None] = mapped_column(String(30))
+    ogs_decision_method: Mapped[str | None] = mapped_column(String(20))
+    ogs_approval_version: Mapped[int | None] = mapped_column(Integer)
+    ogs_decided_by: Mapped[int | None] = mapped_column(Integer)
+    ogs_decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ogs_comment: Mapped[str | None] = mapped_column(Text)
+
+    # ── Отправка на согласование / отмена / замена ────────────────────────────
+    submitted_by: Mapped[int | None] = mapped_column(Integer)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_reason: Mapped[str | None] = mapped_column(Text)
+    cancelled_by: Mapped[int | None] = mapped_column(Integer)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Самоссылка замены: source → successor (§6 задания). predecessor/successor
+    # определяются по этой связи; исходный Joint не удаляется.
+    superseded_by_joint_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(f"{ENGINEERING_SCHEMA}.joints.id", ondelete="RESTRICT"),
+    )
+    superseded_by: Mapped[int | None] = mapped_column(Integer)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Инженерные поля по сторонам соединения (1/2).
     dn_1: Mapped[Decimal | None] = mapped_column(Numeric)
@@ -392,3 +541,101 @@ class DocumentRevision(Base):
     )
     approved_by: Mapped[int | None] = mapped_column(Integer)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class JointBlock(Base):
+    """Блокировка Joint (Task 5B, §20 ADR-011).
+
+    Блокировка — отдельная запись, а не статус жизненного цикла: у одного Joint
+    может быть несколько активных блокировок, при этом сам Joint остаётся ACTIVE
+    (инвариант §41.14). Активная блокировка — `released_at IS NULL`. История
+    сохраняется: закрытие проставляет released_*, запись не удаляется.
+    """
+
+    __tablename__ = "joint_blocks"
+    __table_args__ = (
+        CheckConstraint(
+            _in_check("block_type", BLOCK_TYPES),
+            name="ck_engineering_joint_blocks_type",
+        ),
+        CheckConstraint(
+            _in_check("scope", BLOCK_SCOPES),
+            name="ck_engineering_joint_blocks_scope",
+        ),
+        CheckConstraint(
+            "length(trim(reason)) > 0",
+            name="ck_engineering_joint_blocks_reason_not_empty",
+        ),
+        Index("ix_engineering_joint_blocks_joint_id", "joint_id"),
+        # Быстрый поиск активных блокировок Joint.
+        Index(
+            "ix_engineering_joint_blocks_active",
+            "joint_id",
+            postgresql_where="released_at IS NULL",
+        ),
+        {"schema": ENGINEERING_SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    joint_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(f"{ENGINEERING_SCHEMA}.joints.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    block_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    released_by: Mapped[int | None] = mapped_column(Integer)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    release_reason: Mapped[str | None] = mapped_column(Text)
+
+
+class JointEvent(Base):
+    """Неизменяемое событие истории Joint (Task 5B, §37 ADR-011).
+
+    Append-only: API удаления/редактирования нет. Фиксирует актора, роль, версии,
+    способ решения, основание и снимок статусов до/после (§37, §10 задания).
+    """
+
+    __tablename__ = "joint_events"
+    __table_args__ = (
+        CheckConstraint(
+            _in_check("event_type", EVENT_TYPES),
+            name="ck_engineering_joint_events_type",
+        ),
+        Index("ix_engineering_joint_events_joint_id", "joint_id"),
+        Index("ix_engineering_joint_events_created_at", "created_at"),
+        {"schema": ENGINEERING_SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    joint_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(f"{ENGINEERING_SCHEMA}.joints.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    actor_worker_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    actor_role_code: Mapped[str | None] = mapped_column(String(50))
+    previous_status: Mapped[str | None] = mapped_column(String(20))
+    new_status: Mapped[str | None] = mapped_column(String(20))
+    previous_pto_status: Mapped[str | None] = mapped_column(String(20))
+    new_pto_status: Mapped[str | None] = mapped_column(String(20))
+    previous_ogs_status: Mapped[str | None] = mapped_column(String(20))
+    new_ogs_status: Mapped[str | None] = mapped_column(String(20))
+    record_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    approval_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    workflow_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    decision_method: Mapped[str | None] = mapped_column(String(20))
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

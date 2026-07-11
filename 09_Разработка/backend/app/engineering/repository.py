@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from uuid import UUID
 
 from sqlalchemy import asc, desc, or_, text
@@ -9,6 +10,8 @@ from app.engineering.models import (
     DocumentRevision,
     EngineeringDocument,
     Joint,
+    JointBlock,
+    JointEvent,
 )
 from app.engineering.schemas import EngineeringDocumentListFilters, JointListFilters
 
@@ -212,3 +215,66 @@ class EngineeringRepo:
         self.db.commit()
         self.db.refresh(joint)
         return joint
+
+    # --- joint blocks (Task 5B) ---
+
+    def add_block(self, block: JointBlock) -> JointBlock:
+        """Добавляет запись блокировки в текущую транзакцию (без commit)."""
+        self.db.add(block)
+        self.db.flush()
+        return block
+
+    def get_block(self, block_id: UUID) -> JointBlock | None:
+        return self.db.query(JointBlock).filter(JointBlock.id == block_id).first()
+
+    def list_blocks(self, joint_id: UUID) -> list[JointBlock]:
+        return (
+            self.db.query(JointBlock)
+            .filter(JointBlock.joint_id == joint_id)
+            .order_by(JointBlock.created_at, JointBlock.id)
+            .all()
+        )
+
+    def active_blocks(self, joint_id: UUID) -> list[JointBlock]:
+        return (
+            self.db.query(JointBlock)
+            .filter(
+                JointBlock.joint_id == joint_id,
+                JointBlock.released_at.is_(None),
+            )
+            .all()
+        )
+
+    def blocked_joint_ids(self, joint_ids: Iterable[UUID]) -> set[UUID]:
+        """Множество joint_id из набора, имеющих хотя бы одну активную блокировку.
+
+        Один агрегатный запрос — без N+1 при построении списка (§23 ADR-011)."""
+        ids = list(joint_ids)
+        if not ids:
+            return set()
+        rows = (
+            self.db.query(JointBlock.joint_id)
+            .filter(
+                JointBlock.joint_id.in_(ids),
+                JointBlock.released_at.is_(None),
+            )
+            .distinct()
+            .all()
+        )
+        return {row[0] for row in rows}
+
+    # --- joint events (Task 5B, append-only) ---
+
+    def add_event(self, event: JointEvent) -> JointEvent:
+        """Добавляет событие истории в текущую транзакцию (без commit)."""
+        self.db.add(event)
+        self.db.flush()
+        return event
+
+    def list_events(self, joint_id: UUID) -> list[JointEvent]:
+        return (
+            self.db.query(JointEvent)
+            .filter(JointEvent.joint_id == joint_id)
+            .order_by(JointEvent.created_at, JointEvent.id)
+            .all()
+        )

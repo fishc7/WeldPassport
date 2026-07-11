@@ -141,13 +141,23 @@ class WorkerRole(Base):
         CheckConstraint(
             "role_code IN ("
             "'WELDER', 'FOREMAN', 'MASTER', 'PTO_ENGINEER', 'OTK_INSPECTOR', "
-            "'NDT_SPECIALIST', 'OGS_ENGINEER', 'CONFIRMING_PERSON', 'CLOSING_RESPONSIBLE'"
+            "'NDT_SPECIALIST', 'OGS_ENGINEER', 'CONFIRMING_PERSON', "
+            "'CLOSING_RESPONSIBLE', 'PTO_MANAGER', 'CHIEF_WELDER', 'AUDITOR'"
             ")",
             name="ck_hr_worker_roles_role_code",
         ),
         CheckConstraint(
-            "scope_type IN ('GLOBAL', 'COMPANY', 'PROJECT', 'SITE', 'LINE')",
+            "scope_type IN ("
+            "'GLOBAL', 'COMPANY', 'PROJECT', 'SITE', 'LINE', 'ENGINEERING_DOCUMENT'"
+            ")",
             name="ck_hr_worker_roles_scope_type",
+        ),
+        # CHIEF_WELDER — общесистемная административная роль: допускается только с
+        # GLOBAL scope (§4 задания, §18 ADR-011). Дублируется доменной проверкой
+        # в HrService.
+        CheckConstraint(
+            "role_code <> 'CHIEF_WELDER' OR scope_type = 'GLOBAL'",
+            name="ck_hr_worker_roles_chief_welder_global",
         ),
         {"schema": HR_SCHEMA},
     )

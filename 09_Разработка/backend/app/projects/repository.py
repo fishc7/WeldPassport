@@ -81,6 +81,21 @@ class ProjectRepo:
             .first()
         )
 
+    def active_company_ids(self, project_id: UUID) -> set[int]:
+        """id организаций, действующих в проекте (valid_to IS NULL).
+
+        Используется для COMPANY-scope при иерархической проверке прав на Joint."""
+        rows = (
+            self.db.query(ProjectCompany.company_id)
+            .filter(
+                ProjectCompany.project_id == project_id,
+                ProjectCompany.valid_to.is_(None),
+            )
+            .distinct()
+            .all()
+        )
+        return {row[0] for row in rows}
+
     def list_project_companies(self, project_id: UUID) -> list[ProjectCompany]:
         return (
             self.db.query(ProjectCompany)

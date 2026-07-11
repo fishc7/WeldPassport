@@ -15,9 +15,16 @@ WorkerRoleCode = Literal[
     "OGS_ENGINEER",
     "CONFIRMING_PERSON",
     "CLOSING_RESPONSIBLE",
+    # Task 5B (Р-11-3): исключительные/совместные решения и диагностика.
+    "PTO_MANAGER",
+    "CHIEF_WELDER",
+    "AUDITOR",
 ]
 
-ScopeType = Literal["GLOBAL", "COMPANY", "PROJECT", "SITE", "LINE"]
+# Task 5B (Р-11-4): ENGINEERING_DOCUMENT добавлен аддитивно; COMPANY/SITE сохранены.
+ScopeType = Literal[
+    "GLOBAL", "COMPANY", "PROJECT", "SITE", "LINE", "ENGINEERING_DOCUMENT"
+]
 
 
 class DepartmentBase(BaseModel):
