@@ -768,6 +768,31 @@ ORIGIN-связь при создании Joint; соответствие сни
 **Checkpoint:** ChatGPT — атомарность, идемпотентность, отсутствие расхода
 system_code при неуспехе; финальная регрессия Tasks 1–6.
 
+**Статус:** ✅ **закрыт** (инженерный контур `Project → Line → EngineeringDocument → DocumentRevision → Joint` завершён).
+
+---
+
+## Следующий этап — WeldOperation (Session 005)
+
+> **Предусловие:** к Task 8A переходят **только после** принятия
+> [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 005|Architecture Session 005]]
+> и [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012]].
+> Детальное ТЗ Task 8A в этом документе **не раскрывается**.
+
+Канон: Session 005 (решения 005-A — 005-CE) · ADR-012.
+
+| Task | Содержание |
+|------|-----------|
+| **8A — WeldOperation Core** | Базовая сущность, lifecycle, этапы, автор / ответственный, организационный снимок |
+| **8B — Qualification & WPS Validation** | Проверка допуска, клейма, WPS; маршрутизация ОГС при нарушениях |
+| **8C — OGS Review & Confirmation** | Review ОГС, подтверждение сварщика, раздельные статусы |
+| **8D — Corrections & Supersede** | `WeldOperationCorrection`, атомарное применение, `reweld` |
+| **8E — Import & Conflict Resolution** | Импорт, идемпотентность, конфликты |
+| **8F — Integration Boundaries** | Границы МТО, ОТК, НК; `InspectionApplicabilityDecision` |
+
+**Не входит в Task 8:** локальный ремонт, `RepairOperation`, `Defect`, полный lifecycle
+Inspection / NDTInspection, полноценный МТО, учёт бригад (`Crew`).
+
 ---
 
 ## Самопроверка плана
@@ -805,8 +830,10 @@ system_code при неуспехе; финальная регрессия Tasks
 ## Связанные документы
 
 - [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 004|Session 004]]
+- [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 005|Session 005]] (WeldOperation)
 - [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009]]
 - [[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010]] (принят — замещает Joint-часть ADR-009)
+- [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012]] (принят — канон WeldOperation, Tasks 8A — 8F)
 - [[docs/ARCHITECTURE#5.3. Физическая модель БД и API Production/Joints MVP (Session 004)|ARCHITECTURE §5.3]]
 
-*Версия плана: 2026-07-11 (ревизия по ADR-010, принят). Задач: 8 (1–4, 5A, 5B, 6, 7). Ветка: feature/engineering-joints-mvp.*
+*Версия плана: 2026-07-12 (Task 7 закрыт; добавлены Tasks 8A — 8F по Session 005 / ADR-012). Задач: 8 завершённых (1–4, 5A, 5B, 6, 7) + 6 запланированных (8A — 8F). Ветка: feature/engineering-joints-mvp.*
