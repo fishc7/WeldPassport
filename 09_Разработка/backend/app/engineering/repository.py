@@ -11,6 +11,7 @@ from app.engineering.models import (
     EngineeringDocument,
     Joint,
     JointBlock,
+    JointBulkRequest,
     JointDocumentRevision,
     JointEvent,
 )
@@ -163,6 +164,26 @@ class EngineeringRepo:
             )
             .first()
         )
+
+    def find_active_joint_numbers_for_revision(
+        self,
+        document_revision_id: UUID,
+        normalized_joint_numbers: set[str],
+    ) -> set[str]:
+        """Нормализованные номера из набора, уже существующие как активные Joint в
+        данной ревизии. Один запрос (`IN`) — без N+1 при проверке пакета (§13)."""
+        if not normalized_joint_numbers:
+            return set()
+        rows = (
+            self.db.query(Joint.joint_no_normalized)
+            .filter(
+                Joint.current_document_revision_id == document_revision_id,
+                Joint.joint_no_normalized.in_(normalized_joint_numbers),
+                Joint.status.notin_(("CANCELLED", "SUPERSEDED")),
+            )
+            .all()
+        )
+        return {row[0] for row in rows}
 
     def _apply_joint_filters(self, query, filters: JointListFilters):
         if filters.project_id is not None:
@@ -342,3 +363,27 @@ class EngineeringRepo:
             .order_by(JointEvent.created_at, JointEvent.id)
             .all()
         )
+
+    # --- joint bulk requests (Task 7, идемпотентность) ---
+
+    def get_joint_bulk_request(
+        self, project_id: UUID, idempotency_key: str
+    ) -> JointBulkRequest | None:
+        return (
+            self.db.query(JointBulkRequest)
+            .filter(
+                JointBulkRequest.project_id == project_id,
+                JointBulkRequest.idempotency_key == idempotency_key,
+            )
+            .first()
+        )
+
+    def add_joint_bulk_request(
+        self, request: JointBulkRequest
+    ) -> JointBulkRequest:
+        """Добавляет запись пакета в текущую транзакцию (add + flush, без commit).
+
+        Commit — вместе с созданными Joint и связями (один commit на пакет)."""
+        self.db.add(request)
+        self.db.flush()
+        return request

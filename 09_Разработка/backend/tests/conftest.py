@@ -14,6 +14,7 @@ from app.engineering.models import (
     EngineeringDocument,
     Joint,
     JointBlock,
+    JointBulkRequest,
     JointDocumentRevision,
     JointEvent,
     JointSequence,
@@ -221,6 +222,11 @@ def _purge_test_data(db: Session) -> None:
         synchronize_session=False
     )
     if project_ids:
+        # Идемпотентные bulk-запросы (Task 7): FK project_id → projects RESTRICT,
+        # удаляем раньше проектов.
+        db.query(JointBulkRequest).filter(
+            JointBulkRequest.project_id.in_(project_ids)
+        ).delete(synchronize_session=False)
         db.query(JointSequence).filter(
             JointSequence.project_id.in_(project_ids)
         ).delete(synchronize_session=False)

@@ -1,8 +1,9 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
+from app.engineering.joint_bulk import JointBulkService
 from app.engineering.schemas import (
     ApproveOgsCommand,
     ApprovePtoCommand,
@@ -19,6 +20,8 @@ from app.engineering.schemas import (
     GeometryType,
     InvalidateLinkCommand,
     JointBlockRead,
+    JointBulkCreate,
+    JointBulkResponse,
     JointCreate,
     JointDocumentRevisionCreate,
     JointDocumentRevisionRead,
@@ -48,6 +51,10 @@ router = APIRouter(prefix="/engineering", tags=["engineering"])
 
 def _svc(db: Session = Depends(get_db)) -> EngineeringService:
     return EngineeringService(db)
+
+
+def _bulk_svc(db: Session = Depends(get_db)) -> JointBulkService:
+    return JointBulkService(db)
 
 
 # ── Документы ─────────────────────────────────────────────────────────────────
@@ -203,6 +210,22 @@ def create_joint(
     _uid: int = Depends(get_current_user_id),
 ):
     return joint_to_read(svc.create_joint(data))
+
+
+# Маршрут /joints/bulk объявлен ДО динамического /joints/{joint_id}, чтобы строка
+# "bulk" не интерпретировалась как UUID пути (§6 задания). Первый успех — 201;
+# идемпотентный повтор — 200 (Response.status_code переопределяет default).
+@router.post("/joints/bulk", response_model=JointBulkResponse, status_code=201)
+def bulk_create_joints(
+    data: JointBulkCreate,
+    response: Response,
+    svc: JointBulkService = Depends(_bulk_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    result = svc.create_bulk(payload=data, actor_worker_id=uid)
+    if result.replayed:
+        response.status_code = 200
+    return result.response_payload
 
 
 @router.get("/joints", response_model=JointListResponse)

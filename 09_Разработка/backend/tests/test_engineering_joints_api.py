@@ -347,6 +347,64 @@ def test_document_without_line_ok(client: TestClient, db: Session) -> None:
     assert body["line_id"] == str(ctx.line.id)
 
 
+# ── Единое правило источника Joint: только APPROVED document + APPROVED revision ─
+
+
+def _source_status_rejected(
+    client: TestClient, ctx: Context
+) -> None:
+    resp = client.post(
+        f"{ENGINEERING_URL}/joints",
+        json=ctx.payload(joint_no="J-1"),
+        headers=ctx.headers(),
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "DOCUMENT_REVISION_NOT_ALLOWED"
+
+
+def test_create_rejects_draft_document(client: TestClient, db: Session) -> None:
+    ctx = Context(db, code="SRCDD")
+    ctx.document.status = "DRAFT"
+    db.add(ctx.document)
+    db.commit()
+    _source_status_rejected(client, ctx)
+
+
+def test_create_rejects_draft_revision(client: TestClient, db: Session) -> None:
+    ctx = Context(db, code="SRCDR")
+    ctx.revision.status = "DRAFT"
+    db.add(ctx.revision)
+    db.commit()
+    _source_status_rejected(client, ctx)
+
+
+def test_create_rejects_cancelled_document(client: TestClient, db: Session) -> None:
+    ctx = Context(db, code="SRCCD")
+    ctx.document.status = "CANCELLED"
+    db.add(ctx.document)
+    db.commit()
+    _source_status_rejected(client, ctx)
+
+
+def test_create_rejects_superseded_revision(client: TestClient, db: Session) -> None:
+    ctx = Context(db, code="SRCSR")
+    ctx.revision.status = "SUPERSEDED"
+    db.add(ctx.revision)
+    db.commit()
+    _source_status_rejected(client, ctx)
+
+
+def test_create_allows_approved_document_and_revision(
+    client: TestClient, db: Session
+) -> None:
+    # APPROVED + APPROVED (значения по умолчанию в Context) → создание разрешено.
+    ctx = Context(db, code="SRCOK")
+    assert ctx.document.status == "APPROVED"
+    assert ctx.revision.status == "APPROVED"
+    body = _create(client, ctx, joint_no="J-1")
+    assert body["status"] == "DRAFT"
+
+
 # ── Валидация схемы ───────────────────────────────────────────────────────────
 
 

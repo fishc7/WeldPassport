@@ -598,3 +598,87 @@ class JointEventRead(BaseModel):
     decision_method: str | None
     reason: str | None
     created_at: datetime
+
+
+# ── Bulk Joint Import (Task 7, ADR-010) ───────────────────────────────────────
+# Bulk — альтернативный способ выполнения того же сценария создания Joint. Строки
+# содержат только инженерные поля (через общий _JointEngineeringFields, чтобы
+# правила не расходились с JointCreate) + обязательный joint_no; общие поля пакета
+# (project_id, line_id, document_revision_id, created_by, idempotency_key) — в
+# конверте JointBulkCreate. Порядок items значим (влияет на row_index и hash).
+
+
+class JointBulkItem(_JointEngineeringFields):
+    """Одна строка пакета: joint_no + инженерные поля, разрешённые JointCreate.
+
+    Общие поля пакета (project_id/line_id/document_revision_id/created_by/системные/
+    workflow/версии/audit) внутри строки запрещены (`extra="forbid"`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    joint_no: str = Field(min_length=1, max_length=100)
+
+    @field_validator("joint_no")
+    @classmethod
+    def _joint_no_not_blank(cls, v: str) -> str:
+        return _reject_blank_keep_original(v)
+
+    @model_validator(mode="after")
+    def _validate_coordinates(self) -> "JointBulkItem":
+        if (
+            self.position_x is not None or self.position_y is not None
+        ) and self.coordinate_system is None:
+            raise ValueError(
+                "coordinate_system обязателен при заданных position_x/position_y"
+            )
+        return self
+
+
+class JointBulkCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: UUID
+    line_id: UUID
+    document_revision_id: UUID
+    created_by: int = Field(gt=0)
+    idempotency_key: str
+    items: list[JointBulkItem] = Field(min_length=1, max_length=500)
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def _idempotency_key_trimmed(cls, v: str) -> str:
+        """Хранится после trim; после обрезки длина 1..100 (§4 задания)."""
+        stripped = v.strip()
+        if not (1 <= len(stripped) <= 100):
+            raise ValueError(
+                "idempotency_key после trim должен содержать от 1 до 100 символов"
+            )
+        return stripped
+
+
+class JointBulkResultItem(BaseModel):
+    row_index: int
+    id: UUID
+    system_code: str
+    joint_no: str
+
+
+class JointBulkResponse(BaseModel):
+    bulk_request_id: UUID
+    project_id: UUID
+    line_id: UUID
+    document_revision_id: UUID
+    created_by: int
+    created_count: int
+    items: list[JointBulkResultItem]
+
+
+class JointBulkValidationError(BaseModel):
+    """Одна ошибка бизнес-валидации пакета. Для общей ошибки `row_index` опущен в
+    сериализованном JSON (не `null`) через `model_dump(exclude_none=True)`."""
+
+    row_index: int | None = None
+    field: str
+    code: str
+    message: str

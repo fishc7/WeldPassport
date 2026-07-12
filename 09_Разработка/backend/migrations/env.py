@@ -58,6 +58,7 @@ ENGINEERING_MANAGED_TABLES = {
     "joint_blocks",
     "joint_events",
     "joint_document_revisions",
+    "joint_bulk_requests",
 }
 
 

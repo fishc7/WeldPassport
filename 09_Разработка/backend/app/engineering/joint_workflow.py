@@ -238,6 +238,52 @@ ALREADY_CURRENT_REVISION = "ALREADY_CURRENT_REVISION"
 DUPLICATE_LINK = "DUPLICATE_LINK"
 JOINT_NO_CONFLICT = "JOINT_NO_CONFLICT"
 
+# ── Машинные коды bulk-импорта (Task 7, §6, §15 задания) ──────────────────────
+BULK_VALIDATION_FAILED = "BULK_VALIDATION_FAILED"
+IDEMPOTENCY_KEY_CONFLICT = "IDEMPOTENCY_KEY_CONFLICT"
+# Общий контекст.
+PROJECT_NOT_FOUND = "PROJECT_NOT_FOUND"
+LINE_NOT_FOUND = "LINE_NOT_FOUND"
+DOCUMENT_REVISION_NOT_FOUND = "DOCUMENT_REVISION_NOT_FOUND"
+LINE_PROJECT_MISMATCH = "LINE_PROJECT_MISMATCH"
+DOCUMENT_PROJECT_MISMATCH = "DOCUMENT_PROJECT_MISMATCH"
+DOCUMENT_LINE_MISMATCH = "DOCUMENT_LINE_MISMATCH"
+DOCUMENT_REVISION_NOT_ALLOWED = "DOCUMENT_REVISION_NOT_ALLOWED"
+CREATED_BY_MISMATCH = "CREATED_BY_MISMATCH"
+INSUFFICIENT_SCOPE = "INSUFFICIENT_SCOPE"
+# Строки.
+DUPLICATE_JOINT_NO_IN_BATCH = "DUPLICATE_JOINT_NO_IN_BATCH"
+JOINT_NO_ALREADY_EXISTS_IN_REVISION = "JOINT_NO_ALREADY_EXISTS_IN_REVISION"
+
+# Роли, которым разрешено создание Joint (одиночное и bulk). Совпадает с ролями
+# Task 5A + административная CHIEF_WELDER; новых ролей bulk не вводит (§7 задания).
+BULK_CREATE_ROLES: frozenset[str] = frozenset(
+    {"MASTER", "FOREMAN", "PTO_ENGINEER", "OGS_ENGINEER", "CHIEF_WELDER"}
+)
+
+# Единое правило источника Joint (архитектурное ревью Task 7): Joint (одиночный и
+# bulk) создаётся ТОЛЬКО из APPROVED документа И APPROVED ревизии. Статусы DRAFT /
+# CANCELLED / SUPERSEDED отклоняются контролируемой ошибкой DOCUMENT_REVISION_NOT_ALLOWED.
+JOINT_SOURCE_ALLOWED_STATUSES: frozenset[str] = frozenset({"APPROVED"})
+
+
+def joint_source_status_error(
+    document_status: str, revision_status: str
+) -> str | None:
+    """Общий доменный helper проверки годности источника Joint.
+
+    Возвращает машинный код `DOCUMENT_REVISION_NOT_ALLOWED`, если документ-основание
+    или его ревизия не в статусе `APPROVED`; иначе `None`. Чистая функция без БД —
+    вызывается и одиночным (`EngineeringService.create_joint`), и массовым
+    (`JointBulkService.create_bulk`) созданием, чтобы правило не расходилось.
+    """
+    if (
+        document_status not in JOINT_SOURCE_ALLOWED_STATUSES
+        or revision_status not in JOINT_SOURCE_ALLOWED_STATUSES
+    ):
+        return DOCUMENT_REVISION_NOT_ALLOWED
+    return None
+
 
 # ── available_actions (§22-23 ADR-011, §11 задания) ───────────────────────────
 # Полный перечень укрупнённых действий. Frontend не дублирует эту логику (§22).

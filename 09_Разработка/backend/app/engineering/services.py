@@ -501,7 +501,65 @@ class EngineeringService:
             raise ValidationError(
                 "Линия документа-основания не совпадает с линией стыка"
             )
+
+        # Единое правило источника Joint (архитектурное ревью Task 7): и документ,
+        # и ревизия обязаны быть APPROVED. Тот же доменный helper использует bulk.
+        if jw.joint_source_status_error(document.status, revision.status) is not None:
+            raise DomainError(
+                422,
+                jw.DOCUMENT_REVISION_NOT_ALLOWED,
+                "Создание Joint возможно только из APPROVED документа и ревизии "
+                f"(документ: {document.status}, ревизия: {revision.status})",
+            )
         return revision
+
+    def _stage_joint(
+        self,
+        project,
+        *,
+        line_id: UUID,
+        revision_id: UUID,
+        joint_no: str,
+        engineering_values: dict,
+        created_by: int,
+    ) -> Joint:
+        """Строит Joint и его ORIGIN/PRIMARY-связь истории в текущей транзакции.
+
+        Выдаёт `system_code` (транзакционная последовательность проекта), собирает
+        Joint (DRAFT, origin==current, версии=1, согласования — server_default
+        NOT_SUBMITTED) и добавляет ORIGIN/PRIMARY-связь со снимком (Task 6, правило
+        3). Без commit — переиспользуется одиночным созданием и bulk-импортом, чтобы
+        доменная логика (нормализация, номер, снимок) не расходилась.
+        """
+        sequence = self._repo.next_system_sequence(project.id)
+        system_code = f"{project.code}-JNT-{sequence:04d}"
+        joint = Joint(
+            project_id=project.id,
+            line_id=line_id,
+            origin_document_revision_id=revision_id,
+            current_document_revision_id=revision_id,
+            system_code=system_code,
+            joint_no=joint_no,
+            joint_no_normalized=normalize_joint_no(joint_no),
+            status="DRAFT",
+            record_version=1,
+            approval_version=1,
+            workflow_version=1,
+            created_by=created_by,
+            updated_by=created_by,
+            **engineering_values,
+        )
+        self._repo.add_joint(joint)
+        self._repo.add_link(
+            self._build_link(
+                joint,
+                document_revision_id=joint.origin_document_revision_id,
+                revision_role="ORIGIN",
+                document_role="PRIMARY",
+                created_by=created_by,
+            )
+        )
+        return joint
 
     def create_joint(self, data: JointCreate) -> Joint:
         project = self._projects.get_project(data.project_id)
@@ -523,39 +581,15 @@ class EngineeringService:
 
         # Сервисная валидация иерархии/дубля выполнена ДО выдачи номера, чтобы
         # неуспех не расходовал последовательность (номера не переиспользуются).
-        sequence = self._repo.next_system_sequence(project.id)
-        system_code = f"{project.code}-JNT-{sequence:04d}"
-
         engineering_values = data.model_dump(include=set(_JOINT_ENGINEERING_FIELDS))
-        joint = Joint(
-            project_id=data.project_id,
-            line_id=data.line_id,
-            origin_document_revision_id=data.document_revision_id,
-            current_document_revision_id=data.document_revision_id,
-            system_code=system_code,
-            joint_no=data.joint_no,
-            joint_no_normalized=normalized,
-            status="DRAFT",
-            # Три версии стартуют с 1; согласования — NOT_SUBMITTED (server_default).
-            record_version=1,
-            approval_version=1,
-            workflow_version=1,
-            created_by=data.created_by,
-            updated_by=data.created_by,
-            **engineering_values,
-        )
         try:
-            # Joint и ORIGIN-связь истории ревизий создаются одной транзакцией
-            # (Task 6, правило 3): у нового Joint всегда есть ORIGIN/PRIMARY-связь.
-            self._repo.add_joint(joint)
-            self._repo.add_link(
-                self._build_link(
-                    joint,
-                    document_revision_id=joint.origin_document_revision_id,
-                    revision_role="ORIGIN",
-                    document_role="PRIMARY",
-                    created_by=data.created_by,
-                )
+            joint = self._stage_joint(
+                project,
+                line_id=data.line_id,
+                revision_id=data.document_revision_id,
+                joint_no=data.joint_no,
+                engineering_values=engineering_values,
+                created_by=data.created_by,
             )
             return self._repo.save_joint(joint)
         except IntegrityError as exc:

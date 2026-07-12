@@ -18,6 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -495,6 +496,59 @@ class Joint(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+
+class JointBulkRequest(Base):
+    """Идемпотентная запись успешного массового создания Joint (Task 7, ADR-010).
+
+    Хранит только успешные пакеты (`status = 'COMPLETED'`; неуспешные попытки не
+    сохраняются). `response_payload` — полный сохранённый ответ; при идемпотентном
+    повторе с тем же `(project_id, idempotency_key)` и `request_hash` возвращается
+    как есть, без пересборки из текущего состояния Joint. `idempotency_key` хранится
+    после `strip()`, регистр значим; один ключ допустим в разных проектах
+    (UNIQUE на пару). Запись не обновляется и не удаляется физически.
+
+    `created_by` — hr.workers.id (актор) без FK, в стиле существующих поля-акторов
+    (Р-3 ADR-010: переходный период, FK на hr.workers не добавляется).
+    """
+
+    __tablename__ = "joint_bulk_requests"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "idempotency_key",
+            name="uq_engineering_joint_bulk_requests_project_key",
+        ),
+        CheckConstraint(
+            "status = 'COMPLETED'",
+            name="ck_engineering_joint_bulk_requests_status",
+        ),
+        CheckConstraint(
+            "length(trim(idempotency_key)) > 0",
+            name="ck_engineering_joint_bulk_requests_key_not_empty",
+        ),
+        Index("ix_engineering_joint_bulk_requests_project_id", "project_id"),
+        {"schema": ENGINEERING_SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    project_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(f"{PROJECT_SCHEMA}.projects.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="COMPLETED"
+    )
+    response_payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 
