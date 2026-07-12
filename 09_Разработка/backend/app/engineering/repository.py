@@ -11,6 +11,7 @@ from app.engineering.models import (
     EngineeringDocument,
     Joint,
     JointBlock,
+    JointDocumentRevision,
     JointEvent,
 )
 from app.engineering.schemas import EngineeringDocumentListFilters, JointListFilters
@@ -205,16 +206,79 @@ class EngineeringRepo:
         query = query.order_by(direction(sort_column), asc(Joint.id))
         return query.offset(filters.offset).limit(filters.limit).all()
 
-    def create_joint(self, joint: Joint) -> Joint:
+    def add_joint(self, joint: Joint) -> Joint:
+        """Добавляет Joint в текущую транзакцию (add + flush, без commit).
+
+        Позволяет создать Joint и связанную ORIGIN-запись истории ревизий одной
+        транзакцией (Task 6): id стыка доступен сразу после flush.
+        """
         self.db.add(joint)
-        self.db.commit()
-        self.db.refresh(joint)
+        self.db.flush()
         return joint
 
     def save_joint(self, joint: Joint) -> Joint:
         self.db.commit()
         self.db.refresh(joint)
         return joint
+
+    # --- joint ↔ document_revision links (Task 6) ---
+
+    def add_link(self, link: JointDocumentRevision) -> JointDocumentRevision:
+        """Добавляет связь-снимок в текущую транзакцию (add + flush, без commit)."""
+        self.db.add(link)
+        self.db.flush()
+        return link
+
+    def save_link(self, link: JointDocumentRevision) -> JointDocumentRevision:
+        self.db.commit()
+        self.db.refresh(link)
+        return link
+
+    def get_link(self, link_id: UUID) -> JointDocumentRevision | None:
+        return (
+            self.db.query(JointDocumentRevision)
+            .filter(JointDocumentRevision.id == link_id)
+            .first()
+        )
+
+    def list_links(
+        self,
+        joint_id: UUID,
+        *,
+        link_status: str | None = None,
+        document_role: str | None = None,
+        revision_role: str | None = None,
+    ) -> list[JointDocumentRevision]:
+        query = self.db.query(JointDocumentRevision).filter(
+            JointDocumentRevision.joint_id == joint_id
+        )
+        if link_status is not None:
+            query = query.filter(JointDocumentRevision.link_status == link_status)
+        if document_role is not None:
+            query = query.filter(
+                JointDocumentRevision.document_role == document_role
+            )
+        if revision_role is not None:
+            query = query.filter(
+                JointDocumentRevision.revision_role == revision_role
+            )
+        # Стабильная сортировка: created_at, затем id (§8 задания).
+        return query.order_by(
+            JointDocumentRevision.created_at, JointDocumentRevision.id
+        ).all()
+
+    def active_primary_link(
+        self, joint_id: UUID
+    ) -> JointDocumentRevision | None:
+        return (
+            self.db.query(JointDocumentRevision)
+            .filter(
+                JointDocumentRevision.joint_id == joint_id,
+                JointDocumentRevision.link_status == "ACTIVE",
+                JointDocumentRevision.document_role == "PRIMARY",
+            )
+            .first()
+        )
 
     # --- joint blocks (Task 5B) ---
 

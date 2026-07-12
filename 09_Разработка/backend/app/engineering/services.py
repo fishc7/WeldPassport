@@ -15,6 +15,7 @@ from app.engineering.models import (
     EngineeringDocument,
     Joint,
     JointBlock,
+    JointDocumentRevision,
     JointEvent,
 )
 from app.engineering.repository import EngineeringRepo
@@ -26,13 +27,16 @@ from app.engineering.schemas import (
     DocumentRevisionCreate,
     EngineeringDocumentCreate,
     EngineeringDocumentListFilters,
+    InvalidateLinkCommand,
     JointCreate,
+    JointDocumentRevisionCreate,
     JointListFilters,
     JointListResponse,
     JointRead,
     JointUpdate,
     RejectCommand,
     RevokeCommand,
+    SetCurrentRevisionCommand,
     SubmitForReviewCommand,
     SupersedeCommand,
     UnblockCommand,
@@ -100,6 +104,20 @@ _JOINT_ENGINEERING_FIELDS = (
     "location_note",
     "document_note",
 )
+
+# Единый источник соответствия «колонка снимка → поле Joint» (Task 6). Снимок
+# фиксирует идентичность (joint_no + нормализация + line_id) и все инженерные поля
+# Task 5A. По этому же mapping поля Joint восстанавливаются из выбранного снимка при
+# смене текущей ревизии (обратное отображение snapshot_* → поле Joint). Единый
+# источник истины и для создания снимка, и для восстановления.
+_SNAPSHOT_JOINT_FIELDS = (
+    "joint_no",
+    "joint_no_normalized",
+    "line_id",
+) + _JOINT_ENGINEERING_FIELDS
+SNAPSHOT_FIELD_MAP: dict[str, str] = {
+    f"snapshot_{field}": field for field in _SNAPSHOT_JOINT_FIELDS
+}
 
 
 def normalize_joint_no(value: str) -> str:
@@ -527,7 +545,19 @@ class EngineeringService:
             **engineering_values,
         )
         try:
-            return self._repo.create_joint(joint)
+            # Joint и ORIGIN-связь истории ревизий создаются одной транзакцией
+            # (Task 6, правило 3): у нового Joint всегда есть ORIGIN/PRIMARY-связь.
+            self._repo.add_joint(joint)
+            self._repo.add_link(
+                self._build_link(
+                    joint,
+                    document_revision_id=joint.origin_document_revision_id,
+                    revision_role="ORIGIN",
+                    document_role="PRIMARY",
+                    created_by=data.created_by,
+                )
+            )
+            return self._repo.save_joint(joint)
         except IntegrityError as exc:
             self._db.rollback()
             raise ConflictError(
@@ -723,6 +753,35 @@ class EngineeringService:
         return frozenset(
             worker_role_codes_for_joint(self._db, worker_id, _LIFECYCLE_ROLES, ctx)
         )
+
+    def _require_document_roles(
+        self,
+        *,
+        document: EngineeringDocument,
+        joint: Joint,
+        worker_id: int,
+        allowed: frozenset[str],
+        action: str,
+    ) -> None:
+        """Проверяет активную роль актора в scope конкретного документа (Task 6, §7).
+
+        Иерархия scope (GLOBAL/PROJECT/LINE/ENGINEERING_DOCUMENT/COMPANY) — как в
+        §19 ADR-011, но привязка к переданному EngineeringDocument: при смене
+        текущей ревизии права проверяются и на старый, и на новый документ.
+        """
+        ctx = JointScopeContext(
+            project_id=document.project_id,
+            line_id=document.line_id if document.line_id is not None else joint.line_id,
+            engineering_document_id=document.id,
+            company_ids=frozenset(self._projects.active_company_ids(joint.project_id)),
+        )
+        granted = worker_role_codes_for_joint(self._db, worker_id, allowed, ctx)
+        if not granted:
+            raise RoleDeniedError(
+                jw.ROLE_DENIED,
+                f"Недостаточно прав для действия '{action}': требуется одна из "
+                f"ролей {sorted(allowed)} в scope документа {document.id}",
+            )
 
     def _require_roles(
         self, joint: Joint, worker_id: int, allowed: frozenset[str], action: str
@@ -1403,3 +1462,273 @@ class EngineeringService:
                 "Нарушение целостности при сохранении команды Joint"
             ) from exc
         return self._to_read(joint, actor_worker_id)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Task 6 — история связей Joint ↔ DocumentRevision (IMPLEMENTATION_PLAN)
+    # ══════════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _snapshot_values(joint: Joint) -> dict:
+        """Снимок параметров Joint как словарь snapshot_field → значение (§ Task 6)."""
+        return {
+            snap_field: getattr(joint, joint_field)
+            for snap_field, joint_field in SNAPSHOT_FIELD_MAP.items()
+        }
+
+    @staticmethod
+    def _restore_from_snapshot(joint: Joint, link: JointDocumentRevision) -> None:
+        """Восстанавливает поля Joint из снимка связи (обратное отображение)."""
+        for snap_field, joint_field in SNAPSHOT_FIELD_MAP.items():
+            setattr(joint, joint_field, getattr(link, snap_field))
+
+    def _build_link(
+        self,
+        joint: Joint,
+        *,
+        document_revision_id: UUID,
+        revision_role: str,
+        document_role: str,
+        created_by: int,
+        link_status: str = "ACTIVE",
+    ) -> JointDocumentRevision:
+        return JointDocumentRevision(
+            joint_id=joint.id,
+            document_revision_id=document_revision_id,
+            revision_role=revision_role,
+            document_role=document_role,
+            link_status=link_status,
+            created_by=created_by,
+            **self._snapshot_values(joint),
+        )
+
+    def _validate_revision_same_project(
+        self, joint: Joint, revision_id: UUID
+    ) -> DocumentRevision:
+        revision = self._repo.get_revision(revision_id)
+        if revision is None:
+            raise NotFoundError("Ревизия документа", revision_id)
+        document = self._repo.get_document(revision.engineering_document_id)
+        if document is None or document.project_id != joint.project_id:
+            raise ValidationError(
+                "Ревизия принадлежит документу другого проекта"
+            )
+        return revision
+
+    def list_revision_links(
+        self,
+        joint_id: UUID,
+        *,
+        link_status: str | None = None,
+        document_role: str | None = None,
+        revision_role: str | None = None,
+    ) -> list[JointDocumentRevision]:
+        self.get_joint(joint_id)
+        return self._repo.list_links(
+            joint_id,
+            link_status=link_status,
+            document_role=document_role,
+            revision_role=revision_role,
+        )
+
+    def create_revision_link(
+        self,
+        joint_id: UUID,
+        data: JointDocumentRevisionCreate,
+        *,
+        actor_worker_id: int,
+    ) -> JointDocumentRevision:
+        """Новая связь-снимок текущего состояния Joint (не меняет current, правило 4)."""
+        joint = self.get_joint(joint_id)
+        self._reject_terminal(joint)
+        # Создавать связь могут ПТО и ОГС в допустимом scope (Task 6, §5 задания).
+        self._require_roles(
+            joint,
+            actor_worker_id,
+            jw.PTO_ROLES | jw.OGS_ROLES,
+            "create_revision_link",
+        )
+        self._validate_revision_same_project(joint, data.document_revision_id)
+        link = self._build_link(
+            joint,
+            document_revision_id=data.document_revision_id,
+            revision_role=data.revision_role,
+            document_role=data.document_role,
+            created_by=actor_worker_id,
+        )
+        try:
+            self._repo.add_link(link)
+            return self._repo.save_link(link)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Активная связь с таким номером стыка в этой ревизии уже существует"
+            ) from exc
+
+    def invalidate_link(
+        self,
+        joint_id: UUID,
+        link_id: UUID,
+        data: InvalidateLinkCommand,
+        *,
+        actor_worker_id: int,
+    ) -> JointDocumentRevision:
+        """Аннулирование связи (правила 5-8). Снимок сохраняется в истории."""
+        joint = self.get_joint(joint_id)
+        self._reject_terminal(joint)
+        self._require_roles(
+            joint, actor_worker_id, jw.PTO_ROLES | jw.OGS_ROLES, "invalidate_link"
+        )
+        link = self._repo.get_link(link_id)
+        if link is None or link.joint_id != joint.id:
+            raise NotFoundError("Связь ревизии", link_id)
+        if link.link_status == "INVALIDATED":
+            # Повторное аннулирование — контролируемый 409 (§6 задания).
+            raise DomainError(
+                409, jw.LINK_NOT_ACTIVE, "Связь уже аннулирована"
+            )
+        # Текущую активную PRIMARY нельзя аннулировать до смены текущей ревизии
+        # (§6 задания): активная PRIMARY по инварианту соответствует current.
+        if link.document_role == "PRIMARY":
+            raise DomainError(
+                409,
+                jw.CANNOT_INVALIDATE_PRIMARY,
+                "Текущую PRIMARY-связь нельзя аннулировать до смены текущей ревизии",
+            )
+        # ORIGIN-связь в Task 6 не аннулируется даже после снятия PRIMARY: она
+        # остаётся неизменным основанием истории Joint (§6 задания — безопасный
+        # вариант: запрет).
+        if link.revision_role == "ORIGIN":
+            raise DomainError(
+                409,
+                jw.CANNOT_INVALIDATE_ORIGIN,
+                "ORIGIN-связь нельзя аннулировать: она — неизменное основание истории",
+            )
+        now = _now()
+        link.link_status = "INVALIDATED"
+        link.invalidated_reason = data.reason
+        link.invalidated_by = actor_worker_id
+        link.invalidated_at = now
+        # updated_* меняются только при аннулировании (§ Task 6).
+        link.updated_by = actor_worker_id
+        link.updated_at = now
+        return self._repo.save_link(link)
+
+    def set_current_revision(
+        self,
+        joint_id: UUID,
+        data: SetCurrentRevisionCommand,
+        *,
+        actor_worker_id: int,
+    ) -> JointRead:
+        """Смена текущей ревизии Joint по выбранной ACTIVE-связи (правила 6,10-15).
+
+        Восстанавливает поля Joint из снимка выбранной связи, назначает её PRIMARY,
+        снимает прежнюю PRIMARY без изменения её снимка, проверяет права на старый и
+        новый документы и выборочно сбрасывает затронутые согласования (Task 5B).
+        """
+        joint = self.get_joint(joint_id)
+        self._reject_terminal(joint)
+
+        link = self._repo.get_link(data.link_id)
+        if link is None or link.joint_id != joint.id:
+            raise NotFoundError("Связь ревизии", data.link_id)
+        if link.link_status != "ACTIVE":
+            raise DomainError(
+                409,
+                jw.LINK_NOT_ACTIVE,
+                "Аннулированную связь нельзя сделать текущей PRIMARY",
+            )
+
+        # Права ПТО/ОГС на старый и новый документы по иерархии scope (§7 задания).
+        allowed = jw.PTO_ROLES | jw.OGS_ROLES
+        new_revision = self._validate_revision_same_project(
+            joint, link.document_revision_id
+        )
+        new_document = self.get_document(new_revision.engineering_document_id)
+        self._require_document_roles(
+            document=new_document, joint=joint, worker_id=actor_worker_id,
+            allowed=allowed, action="set_current_revision(new)",
+        )
+        old_revision = self._repo.get_revision(joint.current_document_revision_id)
+        if old_revision is not None:
+            old_document = self._repo.get_document(
+                old_revision.engineering_document_id
+            )
+            if old_document is not None:
+                self._require_document_roles(
+                    document=old_document, joint=joint, worker_id=actor_worker_id,
+                    allowed=allowed, action="set_current_revision(old)",
+                )
+
+        # Уже текущая PRIMARY — контролируемый 409 (§7 задания): команда не скрывает
+        # ошибку клиента, повторный выбор текущей связи не проходит молча.
+        if (
+            link.document_role == "PRIMARY"
+            and joint.current_document_revision_id == link.document_revision_id
+        ):
+            raise DomainError(
+                409,
+                jw.ALREADY_CURRENT_REVISION,
+                "Связь уже является текущей PRIMARY-ревизией Joint",
+            )
+
+        # Три версии Task 5B (§7-8 задания): проверяем все переданные ожидаемые.
+        if (
+            data.expected_record_version is not None
+            and data.expected_record_version != joint.record_version
+        ):
+            raise VersionConflictError(
+                jw.RECORD_VERSION_CONFLICT,
+                expected_version=data.expected_record_version,
+                current_version=joint.record_version,
+            )
+        self._check_approval_version(joint, data.expected_approval_version)
+        self._check_workflow_version(joint, data.expected_workflow_version)
+
+        # Затронутые согласования — по фактически изменившимся значимым полям
+        # (текущее значение Joint vs его снимок в выбранной связи).
+        changed_fields = {
+            field
+            for field in _JOINT_ENGINEERING_FIELDS
+            if getattr(joint, field) != getattr(link, f"snapshot_{field}")
+        }
+        significant = changed_fields & jw.SIGNIFICANT_FIELDS
+
+        before = _snapshot(joint)
+
+        # Снимаем прежнюю PRIMARY (без изменения её снимка), затем назначаем новую;
+        # промежуточный flush исключает временное нарушение уникальности PRIMARY.
+        prev_primary = self._repo.active_primary_link(joint.id)
+        if prev_primary is not None and prev_primary.id != link.id:
+            prev_primary.document_role = "ADDITIONAL"
+            self._db.flush()
+        link.document_role = "PRIMARY"
+
+        # Смена текущей ревизии и восстановление полей Joint из снимка (§7 задания).
+        joint.current_document_revision_id = link.document_revision_id
+        self._restore_from_snapshot(joint, link)
+        joint.updated_by = actor_worker_id
+
+        # Версии и выборочный сброс согласований (§7 задания, §9/§15 Task 5B).
+        # Смена PRIMARY — всегда workflow-переход: record и workflow растут всегда;
+        # approval — только при значимом изменении инженерных данных.
+        joint.record_version += 1
+        joint.workflow_version += 1
+        if significant:
+            joint.approval_version += 1
+            self._reset_affected_approvals(
+                joint,
+                jw.affected_sides(significant),
+                actor_worker_id=actor_worker_id,
+            )
+            if joint.status == "ACTIVE":
+                joint.status = "PENDING_REVIEW"
+
+        self._record_event(
+            joint,
+            "CURRENT_REVISION_CHANGED",
+            actor_worker_id=actor_worker_id,
+            actor_role_code=None,
+            before=before,
+        )
+        return self._save_and_read(joint, actor_worker_id)

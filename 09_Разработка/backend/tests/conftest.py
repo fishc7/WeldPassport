@@ -14,6 +14,7 @@ from app.engineering.models import (
     EngineeringDocument,
     Joint,
     JointBlock,
+    JointDocumentRevision,
     JointEvent,
     JointSequence,
 )
@@ -201,14 +202,18 @@ def _purge_test_data(db: Session) -> None:
         .all()
     ]
     if joint_ids:
-        # События и блокировки Task 5B ссылаются на joints c RESTRICT — удаляем
-        # раньше. Самоссылку supersede обнуляем, иначе RESTRICT блокирует удаление.
+        # События, блокировки и связи ревизий (Task 5B/6) ссылаются на joints c
+        # RESTRICT — удаляем раньше. Самоссылку supersede обнуляем, иначе RESTRICT
+        # блокирует удаление.
         db.query(JointEvent).filter(JointEvent.joint_id.in_(joint_ids)).delete(
             synchronize_session=False
         )
         db.query(JointBlock).filter(JointBlock.joint_id.in_(joint_ids)).delete(
             synchronize_session=False
         )
+        db.query(JointDocumentRevision).filter(
+            JointDocumentRevision.joint_id.in_(joint_ids)
+        ).delete(synchronize_session=False)
         db.query(Joint).filter(Joint.id.in_(joint_ids)).update(
             {Joint.superseded_by_joint_id: None}, synchronize_session=False
         )

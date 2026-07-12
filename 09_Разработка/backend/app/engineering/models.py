@@ -26,9 +26,12 @@ from app.engineering.joint_workflow import (
     BLOCK_SCOPES,
     BLOCK_TYPES,
     DECISION_METHODS,
+    DOCUMENT_ROLES,
     EVENT_TYPES,
     JOINT_STATUSES,
+    LINK_STATUSES,
     PENDING_REASONS,
+    REVISION_ROLES,
 )
 from app.projects.models import PROJECT_SCHEMA
 from app.shared.db import Base
@@ -639,3 +642,172 @@ class JointEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+# ── Связь Joint ↔ DocumentRevision с неизменяемым снимком (Task 6, ADR-010) ────
+# Аннулированная связь остаётся историей: link_status=INVALIDATED требует полного
+# аудита аннулирования, ACTIVE — его отсутствия.
+_LINK_INVALIDATION_CHECK = (
+    "(link_status = 'ACTIVE' AND invalidated_at IS NULL "
+    "AND invalidated_by IS NULL AND invalidated_reason IS NULL) "
+    "OR (link_status = 'INVALIDATED' AND invalidated_at IS NOT NULL "
+    "AND invalidated_by IS NOT NULL "
+    "AND length(trim(invalidated_reason)) > 0)"
+)
+
+
+class JointDocumentRevision(Base):
+    """Неизменяемая история связи Joint ↔ DocumentRevision (Task 6, ADR-010).
+
+    Каждая связь фиксирует полный снимок основных инженерных параметров стыка на
+    момент создания. Снимок хранится в колонках с префиксом `snapshot_`, явно
+    отделяющим историческую копию от текущих полей Joint, и неизменяем (PATCH
+    снимка нет); меняется только статус связи при аннулировании (`invalidated_*`,
+    `updated_*`). Физического удаления нет. Инварианты:
+
+    * при создании Joint автоматически существует ORIGIN-связь (revision_role=ORIGIN,
+      document_role=PRIMARY, link_status=ACTIVE);
+    * ровно одна активная PRIMARY-связь на Joint, соответствующая
+      `current_document_revision_id` (partial unique index);
+    * `snapshot_joint_no_normalized` уникален среди ACTIVE-связей внутри одной
+      DocumentRevision (partial unique index);
+    * ровно одна ORIGIN-связь на Joint независимо от link_status (partial unique);
+    * аннулированная связь остаётся в истории и не может стать текущей PRIMARY.
+    """
+
+    __tablename__ = "joint_document_revisions"
+    __table_args__ = (
+        CheckConstraint(
+            _in_check("revision_role", REVISION_ROLES),
+            name="ck_engineering_joint_doc_revisions_revision_role",
+        ),
+        CheckConstraint(
+            _in_check("document_role", DOCUMENT_ROLES),
+            name="ck_engineering_joint_doc_revisions_document_role",
+        ),
+        CheckConstraint(
+            _in_check("link_status", LINK_STATUSES),
+            name="ck_engineering_joint_doc_revisions_link_status",
+        ),
+        CheckConstraint(
+            "length(trim(snapshot_joint_no_normalized)) > 0",
+            name="ck_engineering_joint_doc_revisions_snapshot_norm_not_empty",
+        ),
+        # Аннулирование непротиворечиво: INVALIDATED ⇒ заполнены invalidated_*,
+        # ACTIVE ⇒ они пусты.
+        CheckConstraint(
+            _LINK_INVALIDATION_CHECK,
+            name="ck_engineering_joint_doc_revisions_invalidation",
+        ),
+        Index(
+            "ix_engineering_joint_doc_revisions_joint_id", "joint_id"
+        ),
+        Index(
+            "ix_engineering_joint_doc_revisions_revision_id",
+            "document_revision_id",
+        ),
+        # snapshot_joint_no_normalized уникален среди ACTIVE-связей одной ревизии.
+        Index(
+            "uq_engineering_joint_doc_revisions_active_no",
+            "document_revision_id",
+            "snapshot_joint_no_normalized",
+            unique=True,
+            postgresql_where="link_status = 'ACTIVE'",
+        ),
+        # Ровно одна активная PRIMARY-связь на Joint (= current_document_revision_id).
+        Index(
+            "uq_engineering_joint_doc_revisions_active_primary",
+            "joint_id",
+            unique=True,
+            postgresql_where="link_status = 'ACTIVE' AND document_role = 'PRIMARY'",
+        ),
+        # Ровно одна ORIGIN-связь на Joint (не зависит от link_status: ORIGIN неизменна).
+        Index(
+            "uq_engineering_joint_doc_revisions_origin",
+            "joint_id",
+            unique=True,
+            postgresql_where="revision_role = 'ORIGIN'",
+        ),
+        {"schema": ENGINEERING_SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    joint_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(f"{ENGINEERING_SCHEMA}.joints.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    document_revision_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            f"{ENGINEERING_SCHEMA}.document_revisions.id", ondelete="RESTRICT"
+        ),
+        nullable=False,
+    )
+    revision_role: Mapped[str] = mapped_column(String(20), nullable=False)
+    document_role: Mapped[str] = mapped_column(String(20), nullable=False)
+    link_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="ACTIVE"
+    )
+
+    # ── Аудит и аннулирование ─────────────────────────────────────────────────
+    created_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    # updated_* меняются ТОЛЬКО при аннулировании (§ Task 6): снимок неизменяем.
+    updated_by: Mapped[int | None] = mapped_column(Integer)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    invalidated_reason: Mapped[str | None] = mapped_column(Text)
+    invalidated_by: Mapped[int | None] = mapped_column(Integer)
+    invalidated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # ── Неизменяемый снимок основных параметров Joint на момент связи ─────────
+    # Идентичность (joint_no + нормализация + line_id) и все инженерные поля Task 5A.
+    # snapshot_line_id обязателен: смена ревизии восстанавливает инженерную привязку.
+    snapshot_joint_no: Mapped[str] = mapped_column(String(100), nullable=False)
+    snapshot_joint_no_normalized: Mapped[str] = mapped_column(
+        String(100), nullable=False
+    )
+    snapshot_line_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    snapshot_dn_1: Mapped[Decimal | None] = mapped_column(Numeric)
+    snapshot_dn_2: Mapped[Decimal | None] = mapped_column(Numeric)
+    snapshot_thickness_1: Mapped[Decimal | None] = mapped_column(Numeric)
+    snapshot_thickness_2: Mapped[Decimal | None] = mapped_column(Numeric)
+    snapshot_material_id_1: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    snapshot_material_id_2: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    snapshot_material_text_1: Mapped[str | None] = mapped_column(String(255))
+    snapshot_material_text_2: Mapped[str | None] = mapped_column(String(255))
+    snapshot_component_type_1: Mapped[str | None] = mapped_column(String(50))
+    snapshot_component_type_2: Mapped[str | None] = mapped_column(String(50))
+    snapshot_component_item_id_1: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True)
+    )
+    snapshot_component_item_id_2: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True)
+    )
+    snapshot_component_text_1: Mapped[str | None] = mapped_column(String(255))
+    snapshot_component_text_2: Mapped[str | None] = mapped_column(String(255))
+    snapshot_geometry_type: Mapped[str | None] = mapped_column(String(20))
+    snapshot_weld_joint_type: Mapped[str | None] = mapped_column(String(20))
+    snapshot_connection_code: Mapped[str | None] = mapped_column(String(20))
+    snapshot_required_root_method: Mapped[str | None] = mapped_column(String(50))
+    snapshot_required_fill_method: Mapped[str | None] = mapped_column(String(50))
+    snapshot_required_cap_method: Mapped[str | None] = mapped_column(String(50))
+    snapshot_planned_wps_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    snapshot_heat_treatment_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    snapshot_heat_treatment_type: Mapped[str | None] = mapped_column(String(50))
+    snapshot_heat_treatment_note: Mapped[str | None] = mapped_column(Text)
+    snapshot_sheet_no: Mapped[str | None] = mapped_column(String(50))
+    snapshot_drawing_zone: Mapped[str | None] = mapped_column(String(50))
+    snapshot_position_x: Mapped[Decimal | None] = mapped_column(Numeric)
+    snapshot_position_y: Mapped[Decimal | None] = mapped_column(Numeric)
+    snapshot_coordinate_system: Mapped[str | None] = mapped_column(String(50))
+    snapshot_location_note: Mapped[str | None] = mapped_column(Text)
+    snapshot_document_note: Mapped[str | None] = mapped_column(Text)

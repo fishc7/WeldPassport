@@ -57,6 +57,7 @@ ENGINEERING_MANAGED_TABLES = {
     "joint_sequences",
     "joint_blocks",
     "joint_events",
+    "joint_document_revisions",
 }
 
 

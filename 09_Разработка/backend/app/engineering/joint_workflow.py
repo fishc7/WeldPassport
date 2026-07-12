@@ -84,6 +84,23 @@ BlockScope = Literal["PRODUCTION", "EDITING", "APPROVAL", "ALL"]
 # Активная блокировка с такой областью запрещает автоматическую активацию (§11).
 ACTIVATION_BLOCKING_SCOPES: frozenset[str] = frozenset({"APPROVAL", "ALL"})
 
+# ── История связей Joint ↔ DocumentRevision (Task 6, IMPLEMENTATION_PLAN) ──────
+# Единый источник словарей для модели, миграции и Pydantic-схем. ORIGIN и PRIMARY —
+# системные: ORIGIN проставляется при создании Joint, PRIMARY назначается только
+# при создании Joint и смене текущей ревизии (пользователь их не задаёт).
+REVISION_ROLES: tuple[str, ...] = ("ORIGIN", "CONFIRMED", "MODIFIED", "REMOVED")
+RevisionRole = Literal["ORIGIN", "CONFIRMED", "MODIFIED", "REMOVED"]
+
+# Назначение документа для стыка. PRIMARY — текущая ведущая связь (одна активная на
+# Joint, соответствует current_document_revision_id).
+DOCUMENT_ROLES: tuple[str, ...] = ("PRIMARY", "ADDITIONAL", "EXECUTIVE", "REFERENCE")
+DocumentRole = Literal["PRIMARY", "ADDITIONAL", "EXECUTIVE", "REFERENCE"]
+
+# Состояние связи. ACTIVE — действующая; INVALIDATED — аннулированная (сохраняется
+# в истории, не может стать текущей PRIMARY).
+LINK_STATUSES: tuple[str, ...] = ("ACTIVE", "INVALIDATED")
+LinkStatus = Literal["ACTIVE", "INVALIDATED"]
+
 # ── Типы событий истории (§37 ADR-011) ────────────────────────────────────────
 EVENT_TYPES: tuple[str, ...] = (
     "SUBMITTED_FOR_REVIEW",
@@ -103,6 +120,8 @@ EVENT_TYPES: tuple[str, ...] = (
     "UNBLOCKED",
     "CANCELLED",
     "SUPERSEDED",
+    # Task 6 — смена текущей ревизии Joint (история §37, снимок в joint_document_revisions).
+    "CURRENT_REVISION_CHANGED",
 )
 
 # ── Роли (Р-11-3, §18 ADR-011) ────────────────────────────────────────────────
@@ -209,6 +228,15 @@ CANNOT_CANCEL = "CANNOT_CANCEL"
 CANNOT_SUPERSEDE = "CANNOT_SUPERSEDE"
 ROLE_DENIED = "ROLE_DENIED"
 SCOPE_DENIED = "SCOPE_DENIED"
+
+# ── Машинные коды истории ревизий (Task 6, §9 задания) ────────────────────────
+LINK_NOT_ACTIVE = "LINK_NOT_ACTIVE"
+FOREIGN_LINK = "FOREIGN_LINK"
+CANNOT_INVALIDATE_PRIMARY = "CANNOT_INVALIDATE_PRIMARY"
+CANNOT_INVALIDATE_ORIGIN = "CANNOT_INVALIDATE_ORIGIN"
+ALREADY_CURRENT_REVISION = "ALREADY_CURRENT_REVISION"
+DUPLICATE_LINK = "DUPLICATE_LINK"
+JOINT_NO_CONFLICT = "JOINT_NO_CONFLICT"
 
 
 # ── available_actions (§22-23 ADR-011, §11 задания) ───────────────────────────

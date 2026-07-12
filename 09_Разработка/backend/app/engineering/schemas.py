@@ -10,8 +10,11 @@ from app.engineering.joint_workflow import (
     BlockScope,
     BlockType,
     DecisionMethod,
+    DocumentRole,
     JointStatus,
+    LinkStatus,
     PendingReason,
+    RevisionRole,
 )
 
 DocumentType = Literal["ISOMETRIC", "DRAWING", "WELD_MAP", "OTHER"]
@@ -476,6 +479,103 @@ class JointBlockRead(BaseModel):
     released_by: int | None
     released_at: datetime | None
     release_reason: str | None
+
+
+# ── История связей Joint ↔ DocumentRevision (Task 6) ──────────────────────────
+# Актор берётся из auth-контекста (X-User-Id), не из тела. ORIGIN/PRIMARY —
+# системные роли (при создании Joint и смене текущей ревизии), пользователем не
+# задаются: create-link принимает только пользовательские роли.
+
+
+class JointDocumentRevisionCreate(BaseModel):
+    """Новая связь-снимок текущего состояния Joint с ревизией (не меняет current)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    document_revision_id: UUID
+    # ORIGIN — только системная; PRIMARY назначается лишь через set-current-revision.
+    revision_role: Literal["CONFIRMED", "MODIFIED", "REMOVED"] = "MODIFIED"
+    document_role: Literal["ADDITIONAL", "EXECUTIVE", "REFERENCE"] = "ADDITIONAL"
+
+
+class InvalidateLinkCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, v: str) -> str:
+        return _require_reason(v)
+
+
+class SetCurrentRevisionCommand(BaseModel):
+    """Сделать выбранную ACTIVE-связь текущей PRIMARY-ревизией Joint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    link_id: UUID
+    # Три версии Task 5B: смена PRIMARY — workflow-переход; восстановление значимых
+    # данных может задеть согласования, поэтому проверяется и approval_version.
+    expected_record_version: int | None = Field(default=None, gt=0)
+    expected_approval_version: int | None = Field(default=None, gt=0)
+    expected_workflow_version: int | None = Field(default=None, gt=0)
+
+
+class JointDocumentRevisionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    joint_id: UUID
+    document_revision_id: UUID
+    revision_role: RevisionRole
+    document_role: DocumentRole
+    link_status: LinkStatus
+
+    # Неизменяемый снимок параметров Joint на момент связи (префикс snapshot_
+    # явно отделяет историческую копию от текущих полей Joint).
+    snapshot_joint_no: str
+    snapshot_joint_no_normalized: str
+    snapshot_line_id: UUID
+    snapshot_dn_1: Decimal | None
+    snapshot_dn_2: Decimal | None
+    snapshot_thickness_1: Decimal | None
+    snapshot_thickness_2: Decimal | None
+    snapshot_material_id_1: UUID | None
+    snapshot_material_id_2: UUID | None
+    snapshot_material_text_1: str | None
+    snapshot_material_text_2: str | None
+    snapshot_component_type_1: str | None
+    snapshot_component_type_2: str | None
+    snapshot_component_item_id_1: UUID | None
+    snapshot_component_item_id_2: UUID | None
+    snapshot_component_text_1: str | None
+    snapshot_component_text_2: str | None
+    snapshot_geometry_type: GeometryType | None
+    snapshot_weld_joint_type: WeldJointType | None
+    snapshot_connection_code: ConnectionCode | None
+    snapshot_required_root_method: str | None
+    snapshot_required_fill_method: str | None
+    snapshot_required_cap_method: str | None
+    snapshot_planned_wps_id: UUID | None
+    snapshot_heat_treatment_required: bool
+    snapshot_heat_treatment_type: str | None
+    snapshot_heat_treatment_note: str | None
+    snapshot_sheet_no: str | None
+    snapshot_drawing_zone: str | None
+    snapshot_position_x: Decimal | None
+    snapshot_position_y: Decimal | None
+    snapshot_coordinate_system: str | None
+    snapshot_location_note: str | None
+    snapshot_document_note: str | None
+
+    created_by: int
+    created_at: datetime
+    updated_by: int | None
+    updated_at: datetime | None
+    invalidated_reason: str | None
+    invalidated_by: int | None
+    invalidated_at: datetime | None
 
 
 class JointEventRead(BaseModel):

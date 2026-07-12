@@ -10,22 +10,29 @@ from app.engineering.schemas import (
     CancelCommand,
     DocumentRevisionCreate,
     DocumentRevisionRead,
+    DocumentRole,
     DocumentType,
     EngineeringDocumentCreate,
     EngineeringDocumentListFilters,
     EngineeringDocumentRead,
     EngineeringStatus,
     GeometryType,
+    InvalidateLinkCommand,
     JointBlockRead,
     JointCreate,
+    JointDocumentRevisionCreate,
+    JointDocumentRevisionRead,
     JointEventRead,
     JointListFilters,
     JointListResponse,
     JointRead,
     JointSortBy,
     JointUpdate,
+    LinkStatus,
     RejectCommand,
+    RevisionRole,
     RevokeCommand,
+    SetCurrentRevisionCommand,
     SortOrder,
     SubmitForReviewCommand,
     SupersedeCommand,
@@ -381,3 +388,64 @@ def list_joint_events(
     _uid: int = Depends(get_current_user_id),
 ):
     return svc.list_events(joint_id)
+
+
+# ── Стыки: история связей с ревизиями (Task 6) ────────────────────────────────
+
+
+@router.get(
+    "/joints/{joint_id}/document-revisions",
+    response_model=list[JointDocumentRevisionRead],
+)
+def list_joint_document_revisions(
+    joint_id: UUID,
+    link_status: LinkStatus | None = Query(default=None),
+    document_role: DocumentRole | None = Query(default=None),
+    revision_role: RevisionRole | None = Query(default=None),
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_revision_links(
+        joint_id,
+        link_status=link_status,
+        document_role=document_role,
+        revision_role=revision_role,
+    )
+
+
+@router.post(
+    "/joints/{joint_id}/document-revisions",
+    response_model=JointDocumentRevisionRead,
+    status_code=201,
+)
+def create_joint_document_revision(
+    joint_id: UUID,
+    data: JointDocumentRevisionCreate,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.create_revision_link(joint_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/joints/{joint_id}/document-revisions/{link_id}/invalidate",
+    response_model=JointDocumentRevisionRead,
+)
+def invalidate_joint_document_revision(
+    joint_id: UUID,
+    link_id: UUID,
+    data: InvalidateLinkCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.invalidate_link(joint_id, link_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/set-current-revision", response_model=JointRead)
+def set_current_revision(
+    joint_id: UUID,
+    data: SetCurrentRevisionCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.set_current_revision(joint_id, data, actor_worker_id=uid)
