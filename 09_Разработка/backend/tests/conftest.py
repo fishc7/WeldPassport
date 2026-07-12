@@ -19,6 +19,8 @@ from app.engineering.models import (
     JointEvent,
     JointSequence,
     WeldOperation,
+    WeldOperationOgsReview,
+    WeldOperationWelderConfirmation,
 )
 from app.hr.models import Worker, WorkerRole
 from app.main import app
@@ -182,7 +184,21 @@ def _purge_test_data(db: Session) -> None:
 
     # Сварочные операции (Task 8A) удаляем раньше стыков и профилей сварщиков:
     # FK engineering.weld_operations → engineering.joints и welding.welders c
-    # ondelete RESTRICT. Операции помечены created_by тестовых workers.
+    # ondelete RESTRICT. Операции помечены created_by тестовых workers. Историю
+    # решений Task 8C (confirmation/review) удаляем первой: FK → weld_operations.
+    operation_ids = [
+        row[0]
+        for row in db.query(WeldOperation.id)
+        .filter(WeldOperation.created_by.in_(worker_ids))
+        .all()
+    ]
+    if operation_ids:
+        db.query(WeldOperationWelderConfirmation).filter(
+            WeldOperationWelderConfirmation.weld_operation_id.in_(operation_ids)
+        ).delete(synchronize_session=False)
+        db.query(WeldOperationOgsReview).filter(
+            WeldOperationOgsReview.weld_operation_id.in_(operation_ids)
+        ).delete(synchronize_session=False)
     db.query(WeldOperation).filter(
         WeldOperation.created_by.in_(worker_ids)
     ).delete(synchronize_session=False)

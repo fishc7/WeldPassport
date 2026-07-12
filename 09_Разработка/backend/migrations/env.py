@@ -59,6 +59,9 @@ ENGINEERING_MANAGED_TABLES = {
     "joint_events",
     "joint_document_revisions",
     "joint_bulk_requests",
+    "weld_operations",
+    "weld_operation_welder_confirmations",
+    "weld_operation_ogs_reviews",
 }
 
 

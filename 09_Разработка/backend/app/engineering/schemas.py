@@ -3,7 +3,14 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from app.engineering.joint_workflow import (
     ApprovalState,
@@ -15,6 +22,11 @@ from app.engineering.joint_workflow import (
     LinkStatus,
     PendingReason,
     RevisionRole,
+)
+from app.engineering.weld_operation_review import (
+    OgsReviewStatus,
+    ReasonCode,
+    WelderConfirmationStatus,
 )
 from app.engineering.weld_operation_validation import (
     QualificationValidationStatus,
@@ -869,6 +881,28 @@ class WeldOperationRead(BaseModel):
     validation_checked_at: datetime | None
     validation_source_version: int
 
+    # ── Подтверждение сварщика и review ОГС (Task 8C, §4-5, §12). Независимые оси;
+    # клиент их не задаёт через create/update/complete — только через команды. ────
+    welder_confirmation_status: WelderConfirmationStatus
+    welder_confirmation_version: int
+    welder_confirmed_at: datetime | None
+    welder_confirmed_by: int | None
+    welder_confirmation_comment: str | None
+
+    ogs_review_status: OgsReviewStatus
+    ogs_review_version: int
+    ogs_reviewed_at: datetime | None
+    ogs_reviewed_by: int | None
+    ogs_review_comment: str | None
+    ogs_review_reason_codes: list[str]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def requires_ogs_review(self) -> bool:
+        """Read-only признак: требуется ручное решение ОГС (§12). Однозначно
+        вычисляется сервером из ogs_review_status; отдельной колонкой не хранится."""
+        return self.ogs_review_status == "PENDING"
+
 
 class WeldOperationValidateRequest(BaseModel):
     """Запуск/обновление автоматической проверки DRAFT (§10.3). Тело не требуется;
@@ -890,6 +924,8 @@ class WeldOperationListFilters(BaseModel):
     welding_method: str | None = None
     qualification_validation_status: QualificationValidationStatus | None = None
     wps_validation_status: WpsValidationStatus | None = None
+    welder_confirmation_status: WelderConfirmationStatus | None = None
+    ogs_review_status: OgsReviewStatus | None = None
     performed_from: date | None = None
     performed_to: date | None = None
     limit: int = Field(default=100, ge=1, le=500)
@@ -901,3 +937,102 @@ class WeldOperationListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# ── Task 8C: команды подтверждения сварщика и review ОГС ──────────────────────
+# Actor берётся только из X-User-Id (§6): actor-поля в теле запрещены. Optimistic
+# concurrency разделена по независимым осям (§11): confirmation и review проверяют
+# свою версию и производственную record_version.
+
+
+class WelderConfirmCommand(BaseModel):
+    """Подтверждение фактического сварщика мастером/прорабом (§10.1). Comment
+    необязателен. Actor-поля в теле запрещены (extra="forbid")."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int = Field(gt=0)
+    expected_confirmation_version: int = Field(gt=0)
+    comment: str | None = None
+
+
+class WelderDisputeCommand(BaseModel):
+    """Оспаривание сведений о сварщике (§10.2). Comment обязателен и непустой."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int = Field(gt=0)
+    expected_confirmation_version: int = Field(gt=0)
+    comment: str = Field(min_length=1)
+
+    @field_validator("comment")
+    @classmethod
+    def _comment_not_blank(cls, v: str) -> str:
+        return _require_non_blank(v)
+
+
+class OgsReviewApproveCommand(BaseModel):
+    """Принятие технологического факта ОГС (§10.3). reason_codes могут быть пусты
+    при PASS/PASS; при FAIL/INDETERMINATE обязателен код-исключение (проверяет
+    сервис). Неизвестные коды отклоняются схемой (§9)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int = Field(gt=0)
+    expected_review_version: int = Field(gt=0)
+    reason_codes: list[ReasonCode] = Field(default_factory=list)
+    comment: str | None = None
+
+
+class OgsReviewRejectCommand(BaseModel):
+    """Отклонение технологического факта ОГС (§10.4). reason_codes обязателен и
+    непуст; comment обязателен и непустой."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int = Field(gt=0)
+    expected_review_version: int = Field(gt=0)
+    reason_codes: list[ReasonCode] = Field(min_length=1)
+    comment: str = Field(min_length=1)
+
+    @field_validator("comment")
+    @classmethod
+    def _comment_not_blank(cls, v: str) -> str:
+        return _require_non_blank(v)
+
+
+class WeldOperationWelderConfirmationRead(BaseModel):
+    """Запись истории подтверждения сварщика (§10.5), append-only."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    weld_operation_id: UUID
+    decision: WelderConfirmationStatus
+    previous_status: WelderConfirmationStatus
+    confirmation_version: int
+    comment: str | None
+    decided_by: int
+    decided_at: datetime
+    created_at: datetime
+
+
+class WeldOperationOgsReviewRead(BaseModel):
+    """Запись истории review ОГС (§10.6), append-only, со снимком validation."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    weld_operation_id: UUID
+    decision: OgsReviewStatus
+    previous_status: OgsReviewStatus
+    review_version: int
+    qualification_validation_status: QualificationValidationStatus
+    qualification_validation_codes: list[str]
+    wps_validation_status: WpsValidationStatus
+    wps_validation_codes: list[str]
+    reason_codes: list[str]
+    comment: str | None
+    decided_by: int
+    decided_at: datetime
+    created_at: datetime

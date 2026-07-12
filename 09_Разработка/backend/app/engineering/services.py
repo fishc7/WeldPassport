@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.engineering import joint_workflow as jw
+from app.engineering import weld_operation_review as wor
 from app.engineering import weld_operation_validation as wov
 from app.engineering import weld_operation_workflow as wow
 from app.engineering.models import (
@@ -20,6 +21,8 @@ from app.engineering.models import (
     JointDocumentRevision,
     JointEvent,
     WeldOperation,
+    WeldOperationOgsReview,
+    WeldOperationWelderConfirmation,
 )
 from app.engineering.repository import EngineeringRepo
 from app.engineering.schemas import (
@@ -43,6 +46,8 @@ from app.engineering.schemas import (
     SubmitForReviewCommand,
     SupersedeCommand,
     UnblockCommand,
+    OgsReviewApproveCommand,
+    OgsReviewRejectCommand,
     WeldOperationCancelRequest,
     WeldOperationCompleteRequest,
     WeldOperationCreate,
@@ -51,6 +56,8 @@ from app.engineering.schemas import (
     WeldOperationRead,
     WeldOperationUpdate,
     WeldOperationValidateRequest,
+    WelderConfirmCommand,
+    WelderDisputeCommand,
 )
 from app.hr.repository import HrRepo
 from app.projects.repository import ProjectRepo
@@ -2259,6 +2266,15 @@ class WeldOperationService:
         # блокируют COMPLETED (§4.1). Всё в одной транзакции с переходом lifecycle.
         self._run_validation(op, joint)
 
+        # Первичная маршрутизация review ОГС по validation-результату Task 8B и
+        # статусу подтверждения сварщика (Task 8C, §5.2). При завершении черновик
+        # ещё PENDING (не DISPUTED): PASS/PASS → NOT_REQUIRED, иначе → PENDING.
+        op.ogs_review_status = wor.initial_ogs_review_status(
+            op.qualification_validation_status,
+            op.wps_validation_status,
+            op.welder_confirmation_status,
+        )
+
         op.lifecycle_status = "COMPLETED"
         op.completed_by = actor_worker_id
         op.completed_at = _now()
@@ -2311,3 +2327,380 @@ class WeldOperationService:
             raise ConflictError(
                 "Нарушение целостности при отмене сварочной операции"
             ) from exc
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Task 8C — Welder Confirmation & OGS Review (ADR-012)
+    # ══════════════════════════════════════════════════════════════════════════
+    # Две независимые оси решения человека поверх завершённого производственного
+    # факта: подтверждение исполнителя (MASTER/FOREMAN) и технологическое решение
+    # ОГС (OGS_ENGINEER/CHIEF_WELDER). Оси не объединяются между собой, с lifecycle
+    # и с автоматическими validation-статусами Task 8B (§2-3). Actor — только из
+    # X-User-Id. Каждое решение атомарно: history insert + projection update +
+    # version increment в одной транзакции (§16).
+
+    # --- общие guard'ы (§4.2, §6, §11) ---
+
+    def _get_operation_locked(self, operation_id: UUID) -> WeldOperation:
+        op = self._repo.get_operation_for_update(operation_id)
+        if op is None:
+            raise NotFoundError("Сварочная операция", operation_id)
+        return op
+
+    def _require_joint_roles(
+        self,
+        joint: Joint,
+        worker_id: int,
+        roles: frozenset[str],
+        code: str,
+        message: str,
+    ) -> set[str]:
+        """Актор имеет одну из ролей в подходящем scope Joint (CHIEF_WELDER — глобально)."""
+        ctx = self._joint_scope_ctx(joint)
+        granted = worker_role_codes_for_joint(self._db, worker_id, roles, ctx)
+        if not granted:
+            raise RoleDeniedError(code, message)
+        return granted
+
+    def _require_ogs_reviewer(
+        self, joint: Joint, worker_id: int, action: str
+    ) -> None:
+        """Решение ОГС принимает OGS_ENGINEER (в scope) или CHIEF_WELDER (§6.2)."""
+        self._require_joint_roles(
+            joint,
+            worker_id,
+            wor.OGS_REVIEW_ROLES,
+            wor.OGS_REVIEW_NOT_ALLOWED,
+            f"Недостаточно прав для действия '{action}': требуется роль "
+            "OGS_ENGINEER или CHIEF_WELDER в подходящем scope",
+        )
+
+    @staticmethod
+    def _require_completed(op: WeldOperation) -> None:
+        """Команды Task 8C доступны только для завершённой операции (§4.2, §5.3)."""
+        if op.lifecycle_status != "COMPLETED":
+            raise DomainError(
+                409,
+                wor.WELD_OPERATION_NOT_COMPLETED,
+                "Команда доступна только для завершённой операции (COMPLETED): "
+                "подтверждается уже зафиксированный производственный факт",
+            )
+
+    @staticmethod
+    def _check_confirmation_version(op: WeldOperation, expected: int) -> None:
+        if expected != op.welder_confirmation_version:
+            raise VersionConflictError(
+                wor.WELDER_CONFIRMATION_VERSION_CONFLICT,
+                expected_version=expected,
+                current_version=op.welder_confirmation_version,
+            )
+
+    @staticmethod
+    def _check_review_version(op: WeldOperation, expected: int) -> None:
+        if expected != op.ogs_review_version:
+            raise VersionConflictError(
+                wor.OGS_REVIEW_VERSION_CONFLICT,
+                expected_version=expected,
+                current_version=op.ogs_review_version,
+            )
+
+    @staticmethod
+    def _is_blank(value: str | None) -> bool:
+        return value is None or not value.strip()
+
+    # --- подтверждение сварщика (§10.1-10.2) ---
+
+    def _apply_confirmation(
+        self,
+        operation_id: UUID,
+        decision: str,
+        comment: str | None,
+        *,
+        expected_record_version: int,
+        expected_confirmation_version: int,
+        actor_worker_id: int,
+    ) -> WeldOperation:
+        action = "confirm" if decision == wor.WELDER_CONFIRMATION_CONFIRMED else "dispute"
+        op = self._get_operation_locked(operation_id)
+        joint = self._require_joint(op.joint_id)
+        # Подтверждает/оспаривает MASTER/FOREMAN (в scope) или CHIEF_WELDER (§6.1) —
+        # тот же набор ролей действия Task 8A; OGS/ПТО сюда не проходят.
+        self._require_actor(joint, actor_worker_id, action)
+        self._require_completed(op)
+        self._check_version(op, expected_record_version)
+        self._check_confirmation_version(op, expected_confirmation_version)
+
+        noop = wor.confirmation_noop_code(op.welder_confirmation_status, decision)
+        if noop is not None:
+            raise DomainError(
+                409,
+                noop,
+                f"Подтверждение уже в статусе {op.welder_confirmation_status}: "
+                "повтор без изменения не создаёт запись истории",
+            )
+
+        previous_status = op.welder_confirmation_status
+        new_version = op.welder_confirmation_version + 1
+        decided_at = _now()
+        stored_comment = comment if not self._is_blank(comment) else None
+
+        history = WeldOperationWelderConfirmation(
+            weld_operation_id=op.id,
+            decision=decision,
+            previous_status=previous_status,
+            confirmation_version=new_version,
+            comment=stored_comment,
+            decided_by=actor_worker_id,
+            decided_at=decided_at,
+        )
+        self._repo.add_welder_confirmation(history)
+
+        op.welder_confirmation_status = decision
+        op.welder_confirmation_version = new_version
+        op.welder_confirmed_at = decided_at
+        op.welder_confirmed_by = actor_worker_id
+        op.welder_confirmation_comment = stored_comment
+        # Маршрутизация review ОГС по итогу подтверждения (§10.1, §10.2): не
+        # переписывает уже принятое явное решение ОГС; не меняет validation.
+        self._route_ogs_after_confirmation(op, decision)
+
+        try:
+            return self._repo.save_operation(op)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Нарушение целостности при подтверждении сварщика"
+            ) from exc
+
+    def _route_ogs_after_confirmation(
+        self, op: WeldOperation, decision: str
+    ) -> None:
+        """Автоматическая маршрутизация review при подтверждении/оспаривании.
+
+        Не создаёт review-history и не увеличивает ogs_review_version — это
+        системная маршрутизация, а не решение ОГС. При наличии хотя бы одного
+        явного review ОГС автоматический сброс запрещён (§10.1)."""
+        if self._repo.count_ogs_reviews(op.id) > 0:
+            return
+        if decision == wor.WELDER_CONFIRMATION_DISPUTED:
+            # Спор направляет ещё не рассмотренную операцию на ручной review (§10.2).
+            op.ogs_review_status = wor.OGS_REVIEW_PENDING
+        elif decision == wor.WELDER_CONFIRMATION_CONFIRMED:
+            # Снятие спора при чистом автоматическом результате возвращает
+            # автоматически созданный PENDING в NOT_REQUIRED (§10.1).
+            if (
+                op.ogs_review_status == wor.OGS_REVIEW_PENDING
+                and op.qualification_validation_status == "PASS"
+                and op.wps_validation_status == "PASS"
+            ):
+                op.ogs_review_status = wor.OGS_REVIEW_NOT_REQUIRED
+
+    def confirm_welder(
+        self,
+        operation_id: UUID,
+        data: WelderConfirmCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperation:
+        return self._apply_confirmation(
+            operation_id,
+            wor.WELDER_CONFIRMATION_CONFIRMED,
+            data.comment,
+            expected_record_version=data.expected_record_version,
+            expected_confirmation_version=data.expected_confirmation_version,
+            actor_worker_id=actor_worker_id,
+        )
+
+    def dispute_welder(
+        self,
+        operation_id: UUID,
+        data: WelderDisputeCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperation:
+        return self._apply_confirmation(
+            operation_id,
+            wor.WELDER_CONFIRMATION_DISPUTED,
+            data.comment,
+            expected_record_version=data.expected_record_version,
+            expected_confirmation_version=data.expected_confirmation_version,
+            actor_worker_id=actor_worker_id,
+        )
+
+    # --- review ОГС (§10.3-10.4) ---
+
+    def _apply_review(
+        self,
+        operation_id: UUID,
+        decision: str,
+        reason_codes: list[str],
+        comment: str | None,
+        *,
+        expected_record_version: int,
+        expected_review_version: int,
+        actor_worker_id: int,
+    ) -> WeldOperation:
+        action = "approve" if decision == wor.OGS_REVIEW_APPROVED else "reject"
+        op = self._get_operation_locked(operation_id)
+        joint = self._require_joint(op.joint_id)
+        self._require_ogs_reviewer(joint, actor_worker_id, action)
+        self._require_completed(op)
+        self._check_version(op, expected_record_version)
+        self._check_review_version(op, expected_review_version)
+
+        noop = wor.review_noop_code(op.ogs_review_status, decision)
+        if noop is not None:
+            raise DomainError(
+                409,
+                noop,
+                f"Решение ОГС уже в статусе {op.ogs_review_status}: повтор без "
+                "изменения не создаёт запись истории",
+            )
+
+        normalized = wor.normalize_reason_codes(reason_codes)
+        self._validate_review_reasons(op, decision, normalized, comment)
+
+        previous_status = op.ogs_review_status
+        new_version = op.ogs_review_version + 1
+        decided_at = _now()
+        stored_comment = comment if not self._is_blank(comment) else None
+
+        # Неизменяемый снимок validation Task 8B, объясняющий решение (§8.2).
+        history = WeldOperationOgsReview(
+            weld_operation_id=op.id,
+            decision=decision,
+            previous_status=previous_status,
+            review_version=new_version,
+            qualification_validation_status=op.qualification_validation_status,
+            qualification_validation_codes=list(op.qualification_validation_codes),
+            wps_validation_status=op.wps_validation_status,
+            wps_validation_codes=list(op.wps_validation_codes),
+            reason_codes=normalized,
+            comment=stored_comment,
+            decided_by=actor_worker_id,
+            decided_at=decided_at,
+        )
+        self._repo.add_ogs_review(history)
+
+        op.ogs_review_status = decision
+        op.ogs_review_version = new_version
+        op.ogs_reviewed_at = decided_at
+        op.ogs_reviewed_by = actor_worker_id
+        op.ogs_review_comment = stored_comment
+        op.ogs_review_reason_codes = normalized
+        # Решение ОГС не меняет lifecycle, confirmation, validation и не исправляет
+        # производственный факт (§10.3-10.4).
+
+        try:
+            return self._repo.save_operation(op)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Нарушение целостности при review ОГС"
+            ) from exc
+
+    def _validate_review_reasons(
+        self,
+        op: WeldOperation,
+        decision: str,
+        normalized: list[str],
+        comment: str | None,
+    ) -> None:
+        """Проверка обоснования решения ОГС (§5.1, §9). Reject-требования (непустой
+        набор кодов и комментарий) уже гарантированы схемой; здесь — правила,
+        зависящие от validation-результата и состава кодов."""
+        if wor.requires_comment(normalized) and self._is_blank(comment):
+            raise DomainError(
+                422,
+                wor.OGS_REVIEW_COMMENT_REQUIRED,
+                "Код OTHER требует непустого комментария",
+            )
+        if decision == wor.OGS_REVIEW_REJECTED:
+            if not normalized:
+                raise DomainError(
+                    422,
+                    wor.OGS_REVIEW_REASON_REQUIRED,
+                    "Отклонение требует хотя бы один reason code",
+                )
+            return
+        # APPROVED: принятие исключения поверх FAIL/INDETERMINATE требует кода
+        # исключения и содержательного комментария (§5.1).
+        if wor.requires_exception_reason(
+            op.qualification_validation_status, op.wps_validation_status
+        ):
+            if not wor.has_exception_reason(normalized):
+                raise DomainError(
+                    422,
+                    wor.OGS_REVIEW_EXCEPTION_REASON_REQUIRED,
+                    "Принятие операции с отрицательным или неопределённым "
+                    "результатом проверки требует reason code исключения",
+                )
+            if self._is_blank(comment):
+                raise DomainError(
+                    422,
+                    wor.OGS_REVIEW_COMMENT_REQUIRED,
+                    "Принятие исключения требует содержательного комментария",
+                )
+
+    def approve_review(
+        self,
+        operation_id: UUID,
+        data: OgsReviewApproveCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperation:
+        return self._apply_review(
+            operation_id,
+            wor.OGS_REVIEW_APPROVED,
+            list(data.reason_codes),
+            data.comment,
+            expected_record_version=data.expected_record_version,
+            expected_review_version=data.expected_review_version,
+            actor_worker_id=actor_worker_id,
+        )
+
+    def reject_review(
+        self,
+        operation_id: UUID,
+        data: OgsReviewRejectCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperation:
+        return self._apply_review(
+            operation_id,
+            wor.OGS_REVIEW_REJECTED,
+            list(data.reason_codes),
+            data.comment,
+            expected_record_version=data.expected_record_version,
+            expected_review_version=data.expected_review_version,
+            actor_worker_id=actor_worker_id,
+        )
+
+    # --- история решений (§10.5-10.6, append-only) ---
+
+    def list_welder_confirmations(
+        self, operation_id: UUID, *, actor_worker_id: int
+    ) -> list[WeldOperationWelderConfirmation]:
+        op = self.get_operation(operation_id)
+        joint = self._require_joint(op.joint_id)
+        self._require_joint_roles(
+            joint,
+            actor_worker_id,
+            wor.WELDER_CONFIRMATION_HISTORY_ROLES,
+            jw.ROLE_DENIED,
+            "Недостаточно прав для просмотра истории подтверждений сварщика",
+        )
+        return self._repo.list_welder_confirmations(operation_id)
+
+    def list_ogs_reviews(
+        self, operation_id: UUID, *, actor_worker_id: int
+    ) -> list[WeldOperationOgsReview]:
+        op = self.get_operation(operation_id)
+        joint = self._require_joint(op.joint_id)
+        self._require_joint_roles(
+            joint,
+            actor_worker_id,
+            wor.OGS_REVIEW_HISTORY_ROLES,
+            wor.OGS_REVIEW_NOT_ALLOWED,
+            "Недостаточно прав для просмотра истории review ОГС",
+        )
+        return self._repo.list_ogs_reviews(operation_id)

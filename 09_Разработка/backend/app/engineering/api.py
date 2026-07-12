@@ -33,6 +33,9 @@ from app.engineering.schemas import (
     JointSortBy,
     JointUpdate,
     LinkStatus,
+    OgsReviewApproveCommand,
+    OgsReviewRejectCommand,
+    OgsReviewStatus,
     RejectCommand,
     RevisionRole,
     RevokeCommand,
@@ -42,15 +45,20 @@ from app.engineering.schemas import (
     SupersedeCommand,
     UnblockCommand,
     WeldJointType,
+    WelderConfirmationStatus,
+    WelderConfirmCommand,
+    WelderDisputeCommand,
     WeldOperationCancelRequest,
     WeldOperationCompleteRequest,
     WeldOperationCreate,
     WeldOperationListFilters,
     WeldOperationListResponse,
+    WeldOperationOgsReviewRead,
     WeldOperationRead,
     WeldOperationStatus,
     WeldOperationUpdate,
     WeldOperationValidateRequest,
+    WeldOperationWelderConfirmationRead,
     WeldStage,
 )
 from app.engineering.weld_operation_validation import (
@@ -514,6 +522,10 @@ def _weld_operation_subfilters(
         default=None
     ),
     wps_validation_status: WpsValidationStatus | None = Query(default=None),
+    welder_confirmation_status: WelderConfirmationStatus | None = Query(
+        default=None
+    ),
+    ogs_review_status: OgsReviewStatus | None = Query(default=None),
     performed_from: date | None = Query(default=None),
     performed_to: date | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
@@ -530,6 +542,8 @@ def _weld_operation_subfilters(
         welding_method=welding_method,
         qualification_validation_status=qualification_validation_status,
         wps_validation_status=wps_validation_status,
+        welder_confirmation_status=welder_confirmation_status,
+        ogs_review_status=ogs_review_status,
         performed_from=performed_from,
         performed_to=performed_to,
         limit=limit,
@@ -624,6 +638,87 @@ def cancel_weld_operation(
     uid: int = Depends(get_current_user_id),
 ):
     return svc.cancel_operation(operation_id, data, actor_worker_id=uid)
+
+
+# ── WeldOperation: подтверждение сварщика и review ОГС (Task 8C, ADR-012) ──────
+# Actor — только из X-User-Id (§6). Отдельные команды поверх завершённого факта;
+# производственный факт не редактируется. Физического DELETE истории нет (§8).
+
+
+@router.post(
+    "/weld-operations/{operation_id}/welder-confirmation/confirm",
+    response_model=WeldOperationRead,
+)
+def confirm_welder(
+    operation_id: UUID,
+    data: WelderConfirmCommand,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.confirm_welder(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/welder-confirmation/dispute",
+    response_model=WeldOperationRead,
+)
+def dispute_welder(
+    operation_id: UUID,
+    data: WelderDisputeCommand,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.dispute_welder(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/ogs-review/approve",
+    response_model=WeldOperationRead,
+)
+def approve_ogs_review(
+    operation_id: UUID,
+    data: OgsReviewApproveCommand,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.approve_review(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/ogs-review/reject",
+    response_model=WeldOperationRead,
+)
+def reject_ogs_review(
+    operation_id: UUID,
+    data: OgsReviewRejectCommand,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.reject_review(operation_id, data, actor_worker_id=uid)
+
+
+@router.get(
+    "/weld-operations/{operation_id}/welder-confirmations",
+    response_model=list[WeldOperationWelderConfirmationRead],
+)
+def list_welder_confirmations(
+    operation_id: UUID,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.list_welder_confirmations(operation_id, actor_worker_id=uid)
+
+
+@router.get(
+    "/weld-operations/{operation_id}/ogs-reviews",
+    response_model=list[WeldOperationOgsReviewRead],
+)
+def list_ogs_reviews(
+    operation_id: UUID,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.list_ogs_reviews(operation_id, actor_worker_id=uid)
 
 
 @router.get(

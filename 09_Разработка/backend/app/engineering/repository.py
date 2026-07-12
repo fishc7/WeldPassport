@@ -15,6 +15,8 @@ from app.engineering.models import (
     JointDocumentRevision,
     JointEvent,
     WeldOperation,
+    WeldOperationOgsReview,
+    WeldOperationWelderConfirmation,
 )
 from app.engineering.schemas import (
     EngineeringDocumentListFilters,
@@ -472,6 +474,15 @@ class EngineeringRepo:
                 WeldOperation.wps_validation_status
                 == filters.wps_validation_status
             )
+        if filters.welder_confirmation_status is not None:
+            query = query.filter(
+                WeldOperation.welder_confirmation_status
+                == filters.welder_confirmation_status
+            )
+        if filters.ogs_review_status is not None:
+            query = query.filter(
+                WeldOperation.ogs_review_status == filters.ogs_review_status
+            )
         if filters.performed_from is not None:
             query = query.filter(WeldOperation.performed_on >= filters.performed_from)
         if filters.performed_to is not None:
@@ -491,3 +502,65 @@ class EngineeringRepo:
             asc(WeldOperation.joint_id), asc(WeldOperation.sequence_no)
         )
         return query.offset(filters.offset).limit(filters.limit).all()
+
+    # --- weld operation confirmation / review history (Task 8C, append-only) ---
+
+    def get_operation_for_update(
+        self, operation_id: UUID
+    ) -> WeldOperation | None:
+        """Операция с блокировкой строки (`FOR UPDATE`) для команд Task 8C.
+
+        Сериализует параллельные confirmation/review одной операции: проверка
+        версий, вставка history и обновление projection выполняются атомарно."""
+        return (
+            self.db.query(WeldOperation)
+            .filter(WeldOperation.id == operation_id)
+            .with_for_update()
+            .first()
+        )
+
+    def add_welder_confirmation(
+        self, record: WeldOperationWelderConfirmation
+    ) -> WeldOperationWelderConfirmation:
+        """Добавляет запись подтверждения в текущую транзакцию (без commit)."""
+        self.db.add(record)
+        self.db.flush()
+        return record
+
+    def list_welder_confirmations(
+        self, operation_id: UUID
+    ) -> list[WeldOperationWelderConfirmation]:
+        return (
+            self.db.query(WeldOperationWelderConfirmation)
+            .filter(
+                WeldOperationWelderConfirmation.weld_operation_id == operation_id
+            )
+            .order_by(asc(WeldOperationWelderConfirmation.confirmation_version))
+            .all()
+        )
+
+    def add_ogs_review(
+        self, record: WeldOperationOgsReview
+    ) -> WeldOperationOgsReview:
+        """Добавляет запись review ОГС в текущую транзакцию (без commit)."""
+        self.db.add(record)
+        self.db.flush()
+        return record
+
+    def count_ogs_reviews(self, operation_id: UUID) -> int:
+        """Число явных решений ОГС по операции (§10.1: есть ли явный review)."""
+        return (
+            self.db.query(func.count(WeldOperationOgsReview.id))
+            .filter(WeldOperationOgsReview.weld_operation_id == operation_id)
+            .scalar()
+        )
+
+    def list_ogs_reviews(
+        self, operation_id: UUID
+    ) -> list[WeldOperationOgsReview]:
+        return (
+            self.db.query(WeldOperationOgsReview)
+            .filter(WeldOperationOgsReview.weld_operation_id == operation_id)
+            .order_by(asc(WeldOperationOgsReview.review_version))
+            .all()
+        )

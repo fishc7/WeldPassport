@@ -35,6 +35,12 @@ from app.engineering.joint_workflow import (
     PENDING_REASONS,
     REVISION_ROLES,
 )
+from app.engineering.weld_operation_review import (
+    OGS_REVIEW_DECISIONS,
+    OGS_REVIEW_STATUSES,
+    WELDER_CONFIRMATION_DECISIONS,
+    WELDER_CONFIRMATION_STATUSES,
+)
 from app.engineering.weld_operation_workflow import (
     WELD_OPERATION_STATUSES,
     WELD_STAGES,
@@ -932,6 +938,35 @@ _WPS_VALIDATION_CODES_CHECK = (
     "AND jsonb_array_length(wps_validation_codes) = 0)"
 )
 
+# ── Инварианты Task 8C (§7.3 задания): независимые оси confirmation/review ──────
+_WELDER_CONFIRMATION_STATUS_CHECK = _in_check(
+    "welder_confirmation_status", WELDER_CONFIRMATION_STATUSES
+)
+_OGS_REVIEW_STATUS_CHECK = _in_check("ogs_review_status", OGS_REVIEW_STATUSES)
+# PENDING → actor/time пусты; CONFIRMED/DISPUTED → actor и time обязательны (§7.3).
+_WELDER_CONFIRMATION_ACTOR_CHECK = (
+    "(welder_confirmation_status = 'PENDING' "
+    "AND welder_confirmed_at IS NULL AND welder_confirmed_by IS NULL) "
+    "OR (welder_confirmation_status IN ('CONFIRMED', 'DISPUTED') "
+    "AND welder_confirmed_at IS NOT NULL AND welder_confirmed_by IS NOT NULL)"
+)
+# NOT_REQUIRED/PENDING → actor/time пусты; APPROVED/REJECTED → обязательны (§7.3).
+_OGS_REVIEW_ACTOR_CHECK = (
+    "(ogs_review_status IN ('NOT_REQUIRED', 'PENDING') "
+    "AND ogs_reviewed_at IS NULL AND ogs_reviewed_by IS NULL) "
+    "OR (ogs_review_status IN ('APPROVED', 'REJECTED') "
+    "AND ogs_reviewed_at IS NOT NULL AND ogs_reviewed_by IS NOT NULL)"
+)
+# reason codes — всегда JSON-массив; при REJECTED хотя бы один код (§7.3). Более
+# сложное правило APPROVED-поверх-FAIL обеспечивается сервисом (§7.3).
+_OGS_REVIEW_REASON_ARRAY_CHECK = (
+    "jsonb_typeof(ogs_review_reason_codes) = 'array'"
+)
+_OGS_REVIEW_REJECT_REASON_CHECK = (
+    "ogs_review_status <> 'REJECTED' "
+    "OR jsonb_array_length(ogs_review_reason_codes) > 0"
+)
+
 
 class WeldOperation(Base):
     """Производственный факт сварки одного этапа одним сварщиком (Task 8A).
@@ -1005,6 +1040,39 @@ class WeldOperation(Base):
             _WPS_VALIDATION_CODES_CHECK,
             name="ck_engineering_weld_operations_wps_validation_codes",
         ),
+        # ── Task 8C: подтверждение сварщика и review ОГС (§7.3) ────────────────
+        CheckConstraint(
+            _WELDER_CONFIRMATION_STATUS_CHECK,
+            name="ck_engineering_weld_operations_welder_confirmation_status",
+        ),
+        CheckConstraint(
+            _OGS_REVIEW_STATUS_CHECK,
+            name="ck_engineering_weld_operations_ogs_review_status",
+        ),
+        CheckConstraint(
+            "welder_confirmation_version > 0",
+            name="ck_engineering_weld_operations_welder_confirmation_version",
+        ),
+        CheckConstraint(
+            "ogs_review_version > 0",
+            name="ck_engineering_weld_operations_ogs_review_version",
+        ),
+        CheckConstraint(
+            _WELDER_CONFIRMATION_ACTOR_CHECK,
+            name="ck_engineering_weld_operations_welder_confirmation_actor",
+        ),
+        CheckConstraint(
+            _OGS_REVIEW_ACTOR_CHECK,
+            name="ck_engineering_weld_operations_ogs_review_actor",
+        ),
+        CheckConstraint(
+            _OGS_REVIEW_REASON_ARRAY_CHECK,
+            name="ck_engineering_weld_operations_ogs_review_reason_array",
+        ),
+        CheckConstraint(
+            _OGS_REVIEW_REJECT_REASON_CHECK,
+            name="ck_engineering_weld_operations_ogs_review_reject_reason",
+        ),
         Index("ix_engineering_weld_operations_joint_id", "joint_id"),
         Index(
             "ix_engineering_weld_operations_actual_welder_id", "actual_welder_id"
@@ -1024,6 +1092,14 @@ class WeldOperation(Base):
         Index(
             "ix_engineering_weld_operations_wps_validation_status",
             "wps_validation_status",
+        ),
+        Index(
+            "ix_engineering_weld_operations_welder_confirmation_status",
+            "welder_confirmation_status",
+        ),
+        Index(
+            "ix_engineering_weld_operations_ogs_review_status",
+            "ogs_review_status",
         ),
         {"schema": ENGINEERING_SCHEMA},
     )
@@ -1141,3 +1217,168 @@ class WeldOperation(Base):
         JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list
     )
     wps_validation_snapshot: Mapped[dict | None] = mapped_column(JSONB)
+
+    # ── Подтверждение сварщика (Task 8C, §4, §7.1). Проекция последнего решения;
+    # полная история — engineering.weld_operation_welder_confirmations. Клиент эти
+    # поля не задаёт: их выставляют команды confirm/dispute. welder_confirmed_by —
+    # актор последнего решения (CONFIRMED или DISPUTED), hr.workers.id без FK. ────
+    welder_confirmation_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="PENDING"
+    )
+    welder_confirmation_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1"
+    )
+    welder_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    welder_confirmed_by: Mapped[int | None] = mapped_column(Integer)
+    welder_confirmation_comment: Mapped[str | None] = mapped_column(Text)
+
+    # ── Review ОГС (Task 8C, §5, §7.2). Проекция последнего решения; полная
+    # история — engineering.weld_operation_ogs_reviews. Начальное значение DRAFT —
+    # PENDING; при завершении пересчитывается в NOT_REQUIRED/PENDING (§5.2). ──────
+    ogs_review_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="PENDING"
+    )
+    ogs_review_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1"
+    )
+    ogs_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    ogs_reviewed_by: Mapped[int | None] = mapped_column(Integer)
+    ogs_review_comment: Mapped[str | None] = mapped_column(Text)
+    ogs_review_reason_codes: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list
+    )
+
+
+# ── История подтверждений сварщика (Task 8C, §8.1) ────────────────────────────
+# Append-only: API редактирования/удаления нет. Каждое реальное решение
+# CONFIRMED/DISPUTED фиксирует актора, предыдущий статус и версию. Текущее решение
+# — проекция в weld_operations; здесь неизменяемая полная история.
+
+
+class WeldOperationWelderConfirmation(Base):
+    """Неизменяемая запись решения по подтверждению исполнителя (Task 8C, §8.1).
+
+    UNIQUE(weld_operation_id, confirmation_version) — одна версия подтверждения на
+    операцию. `decided_by` — hr.workers.id без FK (переходный период, как в
+    WeldOperation)."""
+
+    __tablename__ = "weld_operation_welder_confirmations"
+    __table_args__ = (
+        UniqueConstraint(
+            "weld_operation_id",
+            "confirmation_version",
+            name="uq_engineering_weld_op_welder_confirmations_version",
+        ),
+        CheckConstraint(
+            _in_check("decision", WELDER_CONFIRMATION_DECISIONS),
+            name="ck_engineering_weld_op_welder_confirmations_decision",
+        ),
+        CheckConstraint(
+            "confirmation_version > 0",
+            name="ck_engineering_weld_op_welder_confirmations_version_positive",
+        ),
+        Index(
+            "ix_engineering_weld_op_welder_confirmations_operation_id",
+            "weld_operation_id",
+        ),
+        {"schema": ENGINEERING_SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    weld_operation_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            f"{ENGINEERING_SCHEMA}.weld_operations.id", ondelete="CASCADE"
+        ),
+        nullable=False,
+    )
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    previous_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    confirmation_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text)
+    decided_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+# ── История review ОГС (Task 8C, §8.2) ────────────────────────────────────────
+# Append-only. Хранит неизменяемый снимок validation-результатов Task 8B, на
+# основании которых принято решение (§8.2). Полный снимок WeldOperation НЕ хранит.
+
+
+class WeldOperationOgsReview(Base):
+    """Неизменяемая запись технологического решения ОГС (Task 8C, §8.2).
+
+    UNIQUE(weld_operation_id, review_version) — одна версия review на операцию.
+    validation-снимок объясняет решение ОГС; validation-статусы Task 8B этой
+    записью не изменяются (§3.3). `decided_by` — hr.workers.id без FK."""
+
+    __tablename__ = "weld_operation_ogs_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "weld_operation_id",
+            "review_version",
+            name="uq_engineering_weld_op_ogs_reviews_version",
+        ),
+        CheckConstraint(
+            _in_check("decision", OGS_REVIEW_DECISIONS),
+            name="ck_engineering_weld_op_ogs_reviews_decision",
+        ),
+        CheckConstraint(
+            "review_version > 0",
+            name="ck_engineering_weld_op_ogs_reviews_version_positive",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(reason_codes) = 'array'",
+            name="ck_engineering_weld_op_ogs_reviews_reason_array",
+        ),
+        Index(
+            "ix_engineering_weld_op_ogs_reviews_operation_id",
+            "weld_operation_id",
+        ),
+        {"schema": ENGINEERING_SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    weld_operation_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            f"{ENGINEERING_SCHEMA}.weld_operations.id", ondelete="CASCADE"
+        ),
+        nullable=False,
+    )
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    previous_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    review_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Неизменяемый снимок validation-результатов Task 8B (§8.2).
+    qualification_validation_status: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )
+    qualification_validation_codes: Mapped[list] = mapped_column(
+        JSONB, nullable=False
+    )
+    wps_validation_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    wps_validation_codes: Mapped[list] = mapped_column(JSONB, nullable=False)
+
+    reason_codes: Mapped[list] = mapped_column(JSONB, nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text)
+    decided_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
