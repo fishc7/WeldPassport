@@ -462,6 +462,16 @@ class EngineeringRepo:
             query = query.filter(
                 WeldOperation.welding_method == filters.welding_method
             )
+        if filters.qualification_validation_status is not None:
+            query = query.filter(
+                WeldOperation.qualification_validation_status
+                == filters.qualification_validation_status
+            )
+        if filters.wps_validation_status is not None:
+            query = query.filter(
+                WeldOperation.wps_validation_status
+                == filters.wps_validation_status
+            )
         if filters.performed_from is not None:
             query = query.filter(WeldOperation.performed_on >= filters.performed_from)
         if filters.performed_to is not None:

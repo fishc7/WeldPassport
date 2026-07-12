@@ -11,7 +11,8 @@
 from __future__ import annotations
 
 from datetime import date
-from uuid import uuid4
+from decimal import Decimal
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,10 +20,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.engineering.models import DocumentRevision, EngineeringDocument, WeldOperation
+from app.engineering.models import (
+    DocumentRevision,
+    EngineeringDocument,
+    Joint,
+    WeldOperation,
+)
 from app.hr.models import Worker, WorkerRole
 from app.projects.models import Company, Line, Project, ProjectCompany
-from app.welding.models import Welder
+from app.welding.models import Welder, WelderAdmission
 
 from .conftest import TEST_COMPANY_ID
 
@@ -372,13 +378,19 @@ def test_list_by_joint_convenience_endpoint(client: TestClient, db: Session) -> 
 
 
 def test_null_wps_does_not_block(client: TestClient, db: Session) -> None:
-    """Task 8B не входит: nullable actual_wps_id не мешает создать и завершить."""
+    """Task 8B: отсутствие WPS по-прежнему не блокирует completion, но автоматический
+    результат WPS теперь INDETERMINATE (§18.20)."""
     ctx = Ctx(db, "AWPS")
     ctx.prepare_joint(client)
     op = _create_op(client, ctx, actual_wps_id=None).json()
     assert op["actual_wps_id"] is None
+    assert op["wps_validation_status"] == "NOT_CHECKED"
     resp = _complete(client, ctx, op["id"])
     assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["lifecycle_status"] == "COMPLETED"
+    assert body["wps_validation_status"] == "INDETERMINATE"
+    assert "PLANNED_WPS_MISSING" in body["wps_validation_codes"]
 
 
 def test_mismatched_stamp_does_not_block(client: TestClient, db: Session) -> None:
@@ -610,3 +622,313 @@ def test_sequential_numbers_are_gap_free(client: TestClient, db: Session) -> Non
         for s in ("ROOT", "FILL", "CAP", "BACK_WELD", "TACK")
     ]
     assert numbers == [1, 2, 3, 4, 5]
+
+
+# ══ D. Автоматическая проверка допуска и WPS (Task 8B, §18) ═══════════════════
+
+
+def _validate(client, ctx: Ctx, op_id: str, worker: Worker | None = None, **body):
+    return client.post(
+        f"{ENGINEERING_URL}/weld-operations/{op_id}/validate",
+        json=body,
+        headers=ctx.headers(worker or ctx.master),
+    )
+
+
+def _set_joint(db: Session, joint_id: str, **fields) -> Joint:
+    """Прямая правка инженерных полей Joint для сценариев проверки (в обход API)."""
+    joint = db.query(Joint).filter(Joint.id == UUID(joint_id)).first()
+    for name, value in fields.items():
+        setattr(joint, name, value)
+    db.commit()
+    db.refresh(joint)
+    return joint
+
+
+def _add_admission(db: Session, welder: Welder, **over) -> WelderAdmission:
+    """Действующий допуск, покрывающий эталонную операцию (ROOT/RAD, DN 100, т.8)."""
+    params = dict(
+        worker_id=welder.worker_id,
+        stamp_code=welder.stamp_code,
+        admission_status="active",
+        welding_methods=["RAD"],
+        material_groups=[],
+        diameter_min=Decimal("15"),
+        diameter_max=Decimal("150"),
+        thickness_min=Decimal("2"),
+        thickness_max=Decimal("12"),
+        valid_from=date(2020, 1, 1),
+        valid_until=date(2035, 1, 1),
+    )
+    params.update(over)
+    admission = WelderAdmission(**params)
+    db.add(admission)
+    db.commit()
+    db.refresh(admission)
+    return admission
+
+
+def test_new_draft_returns_not_checked(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DNC")
+    ctx.prepare_joint(client)
+    body = _create_op(client, ctx).json()
+    assert body["qualification_validation_status"] == "NOT_CHECKED"
+    assert body["wps_validation_status"] == "NOT_CHECKED"
+    assert body["qualification_validation_codes"] == []
+    assert body["wps_validation_codes"] == []
+    assert body["validation_checked_at"] is None
+    assert body["validation_source_version"] == 1
+    assert body["qualification_snapshot"] is None
+    assert body["wps_validation_snapshot"] is None
+
+
+def test_validate_computes_and_persists(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DVC")
+    ctx.prepare_joint(client)
+    op = _create_op(client, ctx).json()
+    resp = _validate(client, ctx, op["id"])
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # У сварщика нет допуска → qualification FAIL; WPS не задан → INDETERMINATE.
+    assert body["qualification_validation_status"] == "FAIL"
+    assert "NO_ACTIVE_ADMISSION" in body["qualification_validation_codes"]
+    assert body["wps_validation_status"] == "INDETERMINATE"
+    assert body["validation_checked_at"] is not None
+    # Результат сохранён (виден в GET).
+    got = client.get(
+        f"{ENGINEERING_URL}/weld-operations/{op['id']}",
+        headers=ctx.headers(ctx.master),
+    ).json()
+    assert got["qualification_validation_status"] == "FAIL"
+
+
+def test_validate_does_not_change_lifecycle(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DVL")
+    ctx.prepare_joint(client)
+    op = _create_op(client, ctx).json()
+    body = _validate(client, ctx, op["id"]).json()
+    assert body["lifecycle_status"] == "DRAFT"
+
+
+def test_validate_increments_record_version(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DVR")
+    ctx.prepare_joint(client)
+    op = _create_op(client, ctx).json()
+    body = _validate(client, ctx, op["id"]).json()
+    assert body["record_version"] == op["record_version"] + 1
+
+
+def test_validate_recomputes_for_draft(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DVRC")
+    ctx.prepare_joint(client)
+    _set_joint(db, ctx.joint_id, dn_1=Decimal("100"), thickness_1=Decimal("8"))
+    op = _create_op(client, ctx).json()
+    first = _validate(client, ctx, op["id"]).json()
+    assert first["qualification_validation_status"] == "FAIL"
+    # Появился действующий допуск → повторная проверка DRAFT пересчитывает → PASS.
+    _add_admission(db, ctx.welder)
+    second = _validate(client, ctx, op["id"]).json()
+    assert second["qualification_validation_status"] == "PASS"
+    assert second["qualification_snapshot"] is not None
+
+
+def test_significant_change_resets_validation(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DSR")
+    ctx.prepare_joint(client)
+    op = _create_op(client, ctx).json()
+    validated = _validate(client, ctx, op["id"]).json()
+    assert validated["qualification_validation_status"] != "NOT_CHECKED"
+    patched = _patch(
+        client, ctx, op["id"],
+        expected_record_version=validated["record_version"], welding_method="RD",
+    ).json()
+    assert patched["qualification_validation_status"] == "NOT_CHECKED"
+    assert patched["wps_validation_status"] == "NOT_CHECKED"
+    assert patched["validation_checked_at"] is None
+
+
+def test_insignificant_change_keeps_validation(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DIK")
+    ctx.prepare_joint(client)
+    op = _create_op(client, ctx).json()
+    validated = _validate(client, ctx, op["id"]).json()
+    patched = _patch(
+        client, ctx, op["id"],
+        expected_record_version=validated["record_version"],
+        operation_note="уточнение без влияния на проверку",
+    ).json()
+    assert patched["qualification_validation_status"] == (
+        validated["qualification_validation_status"]
+    )
+    assert patched["validation_checked_at"] is not None
+
+
+def test_complete_runs_validation(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DCR")
+    ctx.prepare_joint(client)
+    op = _create_op(client, ctx).json()
+    body = _complete(client, ctx, op["id"]).json()
+    assert body["lifecycle_status"] == "COMPLETED"
+    assert body["qualification_validation_status"] != "NOT_CHECKED"
+    assert body["wps_validation_status"] != "NOT_CHECKED"
+    assert body["validation_checked_at"] is not None
+
+
+def test_qualification_fail_does_not_block_complete(
+    client: TestClient, db: Session
+) -> None:
+    ctx = Ctx(db, "DQF")
+    ctx.prepare_joint(client)
+    op = _create_op(client, ctx).json()  # у сварщика нет допуска
+    body = _complete(client, ctx, op["id"]).json()
+    assert body["lifecycle_status"] == "COMPLETED"
+    assert body["qualification_validation_status"] == "FAIL"
+
+
+def test_wps_fail_does_not_block_complete(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DWF")
+    ctx.prepare_joint(client)
+    planned = uuid4()
+    _set_joint(db, ctx.joint_id, planned_wps_id=planned)
+    op = _create_op(client, ctx, actual_wps_id=str(uuid4())).json()
+    body = _complete(client, ctx, op["id"]).json()
+    assert body["lifecycle_status"] == "COMPLETED"
+    assert body["wps_validation_status"] == "FAIL"
+    assert "WPS_MISMATCH" in body["wps_validation_codes"]
+
+
+def test_indeterminate_does_not_block_complete(
+    client: TestClient, db: Session
+) -> None:
+    ctx = Ctx(db, "DIN")
+    ctx.prepare_joint(client)
+    # Есть допуск, но у Joint нет DN/толщины → qualification INDETERMINATE.
+    _add_admission(db, ctx.welder)
+    op = _create_op(client, ctx).json()
+    body = _complete(client, ctx, op["id"]).json()
+    assert body["lifecycle_status"] == "COMPLETED"
+    assert body["qualification_validation_status"] == "INDETERMINATE"
+    assert "JOINT_DATA_INCOMPLETE" in body["qualification_validation_codes"]
+
+
+def test_completed_contains_snapshots(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DCS")
+    ctx.prepare_joint(client)
+    planned = uuid4()
+    _set_joint(
+        db, ctx.joint_id,
+        dn_1=Decimal("100"), thickness_1=Decimal("8"),
+        planned_wps_id=planned, required_root_method="RAD",
+    )
+    _add_admission(db, ctx.welder)
+    op = _create_op(client, ctx, actual_wps_id=str(planned)).json()
+    body = _complete(client, ctx, op["id"]).json()
+    assert body["qualification_validation_status"] == "PASS"
+    assert body["wps_validation_status"] == "PASS"
+    assert body["qualification_snapshot"] is not None
+    assert body["qualification_snapshot"]["admission_id"] is not None
+    assert body["wps_validation_snapshot"]["planned_wps_id"] == str(planned)
+    assert body["validation_checked_at"] is not None
+
+
+def test_validate_forbidden_for_completed(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DVFC")
+    ctx.prepare_joint(client)
+    op = _create_op(client, ctx).json()
+    _complete(client, ctx, op["id"])
+    resp = _validate(client, ctx, op["id"])
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["code"] == "WELD_OPERATION_COMPLETED"
+
+
+def test_validate_forbidden_for_cancelled(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DVFX")
+    ctx.prepare_joint(client)
+    op = _create_op(client, ctx).json()
+    _cancel(client, ctx, op["id"], reason="ошибка")
+    resp = _validate(client, ctx, op["id"])
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["code"] == "WELD_OPERATION_CANCELLED"
+
+
+def test_admission_change_after_completion_keeps_result(
+    client: TestClient, db: Session
+) -> None:
+    ctx = Ctx(db, "DACK")
+    ctx.prepare_joint(client)
+    op = _create_op(client, ctx).json()
+    completed = _complete(client, ctx, op["id"]).json()
+    assert completed["qualification_validation_status"] == "FAIL"
+    # Допуск появился ПОСЛЕ завершения — исторический результат не пересчитывается.
+    _add_admission(db, ctx.welder)
+    got = client.get(
+        f"{ENGINEERING_URL}/weld-operations/{op['id']}",
+        headers=ctx.headers(ctx.master),
+    ).json()
+    assert got["qualification_validation_status"] == "FAIL"
+
+
+def test_joint_wps_change_after_completion_keeps_snapshot(
+    client: TestClient, db: Session
+) -> None:
+    ctx = Ctx(db, "DJWK")
+    ctx.prepare_joint(client)
+    planned = uuid4()
+    _set_joint(db, ctx.joint_id, planned_wps_id=planned, required_root_method="RAD")
+    op = _create_op(client, ctx, actual_wps_id=str(planned)).json()
+    completed = _complete(client, ctx, op["id"]).json()
+    assert completed["wps_validation_status"] == "PASS"
+    # Проектный WPS Joint изменился после завершения — снимок операции неизменен.
+    _set_joint(db, ctx.joint_id, planned_wps_id=uuid4())
+    got = client.get(
+        f"{ENGINEERING_URL}/weld-operations/{op['id']}",
+        headers=ctx.headers(ctx.master),
+    ).json()
+    assert got["wps_validation_snapshot"]["planned_wps_id"] == str(planned)
+
+
+def test_filter_by_qualification_status(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DFQ")
+    ctx.prepare_joint(client)
+    op = _create_op(client, ctx).json()
+    _complete(client, ctx, op["id"])  # qualification FAIL
+    fail = client.get(
+        f"{ENGINEERING_URL}/weld-operations",
+        params={"joint_id": ctx.joint_id, "qualification_validation_status": "FAIL"},
+        headers=ctx.headers(ctx.master),
+    ).json()
+    assert fail["total"] == 1
+    passed = client.get(
+        f"{ENGINEERING_URL}/weld-operations",
+        params={"joint_id": ctx.joint_id, "qualification_validation_status": "PASS"},
+        headers=ctx.headers(ctx.master),
+    ).json()
+    assert passed["total"] == 0
+
+
+def test_filter_by_wps_status(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DFW")
+    ctx.prepare_joint(client)
+    op = _create_op(client, ctx).json()
+    _complete(client, ctx, op["id"])  # WPS INDETERMINATE
+    indet = client.get(
+        f"{ENGINEERING_URL}/joints/{ctx.joint_id}/weld-operations",
+        params={"wps_validation_status": "INDETERMINATE"},
+        headers=ctx.headers(ctx.master),
+    ).json()
+    assert indet["total"] == 1
+    fail = client.get(
+        f"{ENGINEERING_URL}/joints/{ctx.joint_id}/weld-operations",
+        params={"wps_validation_status": "FAIL"},
+        headers=ctx.headers(ctx.master),
+    ).json()
+    assert fail["total"] == 0
+
+
+def test_validate_wrong_version_conflict(client: TestClient, db: Session) -> None:
+    ctx = Ctx(db, "DVW")
+    ctx.prepare_joint(client)
+    op = _create_op(client, ctx).json()
+    resp = _validate(client, ctx, op["id"], expected_record_version=99)
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["code"] == "RECORD_VERSION_CONFLICT"

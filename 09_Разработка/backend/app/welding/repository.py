@@ -27,6 +27,20 @@ class WeldingRepo:
     def get_welder_by_stamp_code(self, stamp_code: str) -> Welder | None:
         return self.db.query(Welder).filter(Welder.stamp_code == stamp_code).first()
 
+    def list_admissions_for_worker(self, worker_id: int) -> list[WelderAdmission]:
+        """Все допуски работника — кандидаты для автоматической проверки (Task 8B).
+
+        Допуски keyed по hr.workers.id; вызывающий сервис резолвит профиль сварщика
+        (welding.welders) в worker_id. Репозиторий только отдаёт записи, бизнес-выбор
+        подходящего допуска и коды — в validation service (§13 задания). Стабильный
+        порядок (valid_from, id) для детерминизма при равных приоритетах."""
+        return (
+            self.db.query(WelderAdmission)
+            .filter(WelderAdmission.worker_id == worker_id)
+            .order_by(WelderAdmission.valid_from, WelderAdmission.id)
+            .all()
+        )
+
     def create_welder(self, welder: Welder) -> Welder:
         self.db.add(welder)
         self.db.commit()

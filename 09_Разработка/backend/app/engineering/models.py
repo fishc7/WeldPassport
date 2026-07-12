@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -898,6 +899,39 @@ _WELD_OP_TIME_CHECK = (
     "started_at IS NULL OR finished_at IS NULL OR finished_at >= started_at"
 )
 
+# ── Инварианты автоматической проверки (Task 8B, §5.4 задания) ─────────────────
+# Одинаковый набор статусов для допуска и WPS; хранятся раздельно.
+_VALIDATION_STATUS_VALUES = ("NOT_CHECKED", "PASS", "FAIL", "INDETERMINATE")
+_QUAL_VALIDATION_STATUS_CHECK = _in_check(
+    "qualification_validation_status", _VALIDATION_STATUS_VALUES
+)
+_WPS_VALIDATION_STATUS_CHECK = _in_check(
+    "wps_validation_status", _VALIDATION_STATUS_VALUES
+)
+# validation_checked_at пуст ⇔ обе проверки ещё NOT_CHECKED; после расчёта — время
+# заполнено и оба статуса уже не NOT_CHECKED (§5.4).
+_VALIDATION_CHECKED_AT_CHECK = (
+    "(validation_checked_at IS NULL "
+    "AND qualification_validation_status = 'NOT_CHECKED' "
+    "AND wps_validation_status = 'NOT_CHECKED') "
+    "OR (validation_checked_at IS NOT NULL "
+    "AND qualification_validation_status <> 'NOT_CHECKED' "
+    "AND wps_validation_status <> 'NOT_CHECKED')"
+)
+# Коды непусты только при FAIL/INDETERMINATE; при NOT_CHECKED/PASS массив пуст (§5.4).
+_QUAL_VALIDATION_CODES_CHECK = (
+    "(qualification_validation_status IN ('FAIL', 'INDETERMINATE') "
+    "AND jsonb_array_length(qualification_validation_codes) > 0) "
+    "OR (qualification_validation_status IN ('NOT_CHECKED', 'PASS') "
+    "AND jsonb_array_length(qualification_validation_codes) = 0)"
+)
+_WPS_VALIDATION_CODES_CHECK = (
+    "(wps_validation_status IN ('FAIL', 'INDETERMINATE') "
+    "AND jsonb_array_length(wps_validation_codes) > 0) "
+    "OR (wps_validation_status IN ('NOT_CHECKED', 'PASS') "
+    "AND jsonb_array_length(wps_validation_codes) = 0)"
+)
+
 
 class WeldOperation(Base):
     """Производственный факт сварки одного этапа одним сварщиком (Task 8A).
@@ -951,6 +985,26 @@ class WeldOperation(Base):
             _WELD_OP_CANCELLATION_CHECK,
             name="ck_engineering_weld_operations_cancellation",
         ),
+        CheckConstraint(
+            _QUAL_VALIDATION_STATUS_CHECK,
+            name="ck_engineering_weld_operations_qual_validation_status",
+        ),
+        CheckConstraint(
+            _WPS_VALIDATION_STATUS_CHECK,
+            name="ck_engineering_weld_operations_wps_validation_status",
+        ),
+        CheckConstraint(
+            _VALIDATION_CHECKED_AT_CHECK,
+            name="ck_engineering_weld_operations_validation_checked_at",
+        ),
+        CheckConstraint(
+            _QUAL_VALIDATION_CODES_CHECK,
+            name="ck_engineering_weld_operations_qual_validation_codes",
+        ),
+        CheckConstraint(
+            _WPS_VALIDATION_CODES_CHECK,
+            name="ck_engineering_weld_operations_wps_validation_codes",
+        ),
         Index("ix_engineering_weld_operations_joint_id", "joint_id"),
         Index(
             "ix_engineering_weld_operations_actual_welder_id", "actual_welder_id"
@@ -963,6 +1017,14 @@ class WeldOperation(Base):
             "ix_engineering_weld_operations_lifecycle_status", "lifecycle_status"
         ),
         Index("ix_engineering_weld_operations_performed_on", "performed_on"),
+        Index(
+            "ix_engineering_weld_operations_qual_validation_status",
+            "qualification_validation_status",
+        ),
+        Index(
+            "ix_engineering_weld_operations_wps_validation_status",
+            "wps_validation_status",
+        ),
         {"schema": ENGINEERING_SCHEMA},
     )
 
@@ -1048,3 +1110,34 @@ class WeldOperation(Base):
     record_version: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="1"
     )
+
+    # ── Автоматическая проверка (Task 8B, §5). Информационный результат: не
+    # блокирует факт и не пересчитывается после COMPLETED. Клиент эти поля не
+    # задаёт — их выставляет система при /validate и complete. ──────────────────
+    validation_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    validation_source_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1"
+    )
+    # Проверка допуска сварщика. Коды — уникальные строки в стабильном порядке.
+    # qualification_admission_id — выбранный при PASS допуск (nullable, без FK:
+    # исторический снимок не должен зависеть от будущих изменений записи, §5.2).
+    qualification_validation_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="NOT_CHECKED"
+    )
+    qualification_validation_codes: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list
+    )
+    qualification_admission_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True)
+    )
+    qualification_snapshot: Mapped[dict | None] = mapped_column(JSONB)
+    # Проверка WPS и проектного метода этапа (отдельный статус, §11).
+    wps_validation_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="NOT_CHECKED"
+    )
+    wps_validation_codes: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list
+    )
+    wps_validation_snapshot: Mapped[dict | None] = mapped_column(JSONB)

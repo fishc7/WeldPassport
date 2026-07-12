@@ -50,7 +50,12 @@ from app.engineering.schemas import (
     WeldOperationRead,
     WeldOperationStatus,
     WeldOperationUpdate,
+    WeldOperationValidateRequest,
     WeldStage,
+)
+from app.engineering.weld_operation_validation import (
+    QualificationValidationStatus,
+    WpsValidationStatus,
 )
 from app.engineering.services import (
     EngineeringService,
@@ -505,6 +510,10 @@ def _weld_operation_subfilters(
     lifecycle_status: WeldOperationStatus | None = Query(default=None),
     weld_stage: WeldStage | None = Query(default=None),
     welding_method: str | None = Query(default=None),
+    qualification_validation_status: QualificationValidationStatus | None = Query(
+        default=None
+    ),
+    wps_validation_status: WpsValidationStatus | None = Query(default=None),
     performed_from: date | None = Query(default=None),
     performed_to: date | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
@@ -519,6 +528,8 @@ def _weld_operation_subfilters(
         lifecycle_status=lifecycle_status,
         weld_stage=weld_stage,
         welding_method=welding_method,
+        qualification_validation_status=qualification_validation_status,
+        wps_validation_status=wps_validation_status,
         performed_from=performed_from,
         performed_to=performed_to,
         limit=limit,
@@ -588,6 +599,19 @@ def complete_weld_operation(
     uid: int = Depends(get_current_user_id),
 ):
     return svc.complete_operation(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/validate",
+    response_model=WeldOperationRead,
+)
+def validate_weld_operation(
+    operation_id: UUID,
+    data: WeldOperationValidateRequest = WeldOperationValidateRequest(),
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.validate_operation(operation_id, data, actor_worker_id=uid)
 
 
 @router.post(

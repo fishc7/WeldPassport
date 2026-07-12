@@ -16,6 +16,10 @@ from app.engineering.joint_workflow import (
     PendingReason,
     RevisionRole,
 )
+from app.engineering.weld_operation_validation import (
+    QualificationValidationStatus,
+    WpsValidationStatus,
+)
 from app.engineering.weld_operation_workflow import WeldOperationStatus, WeldStage
 
 DocumentType = Literal["ISOMETRIC", "DRAWING", "WELD_MAP", "OTHER"]
@@ -851,6 +855,29 @@ class WeldOperationRead(BaseModel):
 
     record_version: int
 
+    # ── Автоматическая проверка (Task 8B, §5, §11). Результаты допуска и WPS
+    # хранятся раздельно; клиент их не задаёт через create/update/complete. ──────
+    qualification_validation_status: QualificationValidationStatus
+    qualification_validation_codes: list[str]
+    qualification_admission_id: UUID | None
+    qualification_snapshot: dict | None
+
+    wps_validation_status: WpsValidationStatus
+    wps_validation_codes: list[str]
+    wps_validation_snapshot: dict | None
+
+    validation_checked_at: datetime | None
+    validation_source_version: int
+
+
+class WeldOperationValidateRequest(BaseModel):
+    """Запуск/обновление автоматической проверки DRAFT (§10.3). Тело не требуется;
+    опциональный expected_record_version сохраняет optimistic concurrency Task 8A."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int | None = Field(default=None, gt=0)
+
 
 class WeldOperationListFilters(BaseModel):
     joint_id: UUID | None = None
@@ -861,6 +888,8 @@ class WeldOperationListFilters(BaseModel):
     lifecycle_status: WeldOperationStatus | None = None
     weld_stage: WeldStage | None = None
     welding_method: str | None = None
+    qualification_validation_status: QualificationValidationStatus | None = None
+    wps_validation_status: WpsValidationStatus | None = None
     performed_from: date | None = None
     performed_to: date | None = None
     limit: int = Field(default=100, ge=1, le=500)

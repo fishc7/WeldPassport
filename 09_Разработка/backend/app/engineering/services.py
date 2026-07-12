@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.engineering import joint_workflow as jw
+from app.engineering import weld_operation_validation as wov
 from app.engineering import weld_operation_workflow as wow
 from app.engineering.models import (
     REQUIRED_WELDING_FIELDS,
@@ -49,6 +50,7 @@ from app.engineering.schemas import (
     WeldOperationListResponse,
     WeldOperationRead,
     WeldOperationUpdate,
+    WeldOperationValidateRequest,
 )
 from app.hr.repository import HrRepo
 from app.projects.repository import ProjectRepo
@@ -1810,6 +1812,29 @@ _WELD_OPERATION_FACT_FIELDS = (
     "operation_note",
 )
 
+# Значимые для автоматической проверки поля операции (§10.2). Их изменение в DRAFT
+# сбрасывает сохранённый результат проверки. joint_id не редактируется PATCH (Task
+# 8A: отсутствует в WeldOperationUpdate). responsible_worker_id намеренно не входит.
+_VALIDATION_SIGNIFICANT_FIELDS = frozenset(
+    {
+        "performed_on",
+        "weld_stage",
+        "welding_method",
+        "actual_welder_id",
+        "actual_wps_id",
+        "welding_position",
+    }
+)
+
+# Поля материала Joint (Task 5A). Наличие любого делает материал «присутствующим»,
+# но каноническую группу в Task 8B определить нельзя (§7.8).
+_JOINT_MATERIAL_FIELDS = (
+    "material_id_1",
+    "material_id_2",
+    "material_text_1",
+    "material_text_2",
+)
+
 
 class WeldOperationService:
     def __init__(self, db: Session) -> None:
@@ -1899,6 +1924,98 @@ class WeldOperationService:
             worker.department_id if worker is not None else None
         )
 
+    # --- автоматическая проверка (Task 8B, §7-10) ---
+
+    @staticmethod
+    def _to_candidate(admission, welder_id: UUID) -> wov.AdmissionCandidate:
+        """Адаптер welding.welder_admissions → нормализованный кандидат валидатора.
+
+        Границы текущей модели допуска (архитектурное решение Task 8B): колонок
+        positions и project scope нет — передаём positions=() (положение на боевых
+        данных не проверяется) и project_id=None (глобальный допуск). Логика этих
+        измерений сохранена в чистом валидаторе и покрыта unit-тестами."""
+        return wov.AdmissionCandidate(
+            id=admission.id,
+            status=admission.admission_status,
+            validity_from=admission.valid_from,
+            validity_to=admission.valid_until,
+            methods=tuple(admission.welding_methods or ()),
+            positions=(),
+            material_groups=tuple(admission.material_groups or ()),
+            dn_min=admission.diameter_min,
+            dn_max=admission.diameter_max,
+            thickness_min=admission.thickness_min,
+            thickness_max=admission.thickness_max,
+            project_id=None,
+            worker_id=admission.worker_id,
+            welder_id=welder_id,
+        )
+
+    def _run_validation(self, op: WeldOperation, joint: Joint) -> None:
+        """Считает обе автоматические проверки и записывает результат в операцию.
+
+        Информационный результат (§4): FAIL/INDETERMINATE не блокируют факт и не
+        отменяют операцию. Для допуска использует performed_on операции (§7.1), а не
+        текущую дату сервера."""
+        welder_specified = op.actual_welder_id is not None
+        welder_profile: wov.WelderProfileView | None = None
+        candidates: list[wov.AdmissionCandidate] = []
+        if welder_specified:
+            welder = self._welding.get_welder(op.actual_welder_id)
+            if welder is not None:
+                welder_profile = wov.WelderProfileView(active=welder.status == "active")
+                admissions = self._welding.list_admissions_for_worker(welder.worker_id)
+                candidates = [
+                    self._to_candidate(admission, welder.id)
+                    for admission in admissions
+                ]
+
+        qualification = wov.validate_qualification(
+            welder_specified=welder_specified,
+            welder_profile=welder_profile,
+            performed_on=op.performed_on,
+            welding_method=op.welding_method,
+            welding_position=op.welding_position,
+            joint_project_id=joint.project_id,
+            dn_sides=(joint.dn_1, joint.dn_2),
+            thickness_sides=(joint.thickness_1, joint.thickness_2),
+            material_present=any(
+                getattr(joint, name) is not None for name in _JOINT_MATERIAL_FIELDS
+            ),
+            candidates=candidates,
+        )
+        wps = wov.validate_wps(
+            weld_stage=op.weld_stage,
+            welding_method=op.welding_method,
+            planned_wps_id=joint.planned_wps_id,
+            actual_wps_id=op.actual_wps_id,
+            required_root_method=joint.required_root_method,
+            required_fill_method=joint.required_fill_method,
+            required_cap_method=joint.required_cap_method,
+        )
+
+        op.qualification_validation_status = qualification.status
+        op.qualification_validation_codes = list(qualification.codes)
+        op.qualification_admission_id = qualification.admission_id
+        op.qualification_snapshot = qualification.snapshot
+        op.wps_validation_status = wps.status
+        op.wps_validation_codes = list(wps.codes)
+        op.wps_validation_snapshot = wps.snapshot
+        op.validation_checked_at = _now()
+        op.validation_source_version = wov.VALIDATION_SOURCE_VERSION
+
+    @staticmethod
+    def _reset_validation(op: WeldOperation) -> None:
+        """Сброс результата при изменении значимого поля DRAFT (§10.2)."""
+        op.qualification_validation_status = "NOT_CHECKED"
+        op.qualification_validation_codes = []
+        op.qualification_admission_id = None
+        op.qualification_snapshot = None
+        op.wps_validation_status = "NOT_CHECKED"
+        op.wps_validation_codes = []
+        op.wps_validation_snapshot = None
+        op.validation_checked_at = None
+
     # --- чтение ---
 
     def get_operation(self, operation_id: UUID) -> WeldOperation:
@@ -1975,6 +2092,50 @@ class WeldOperationService:
                 "Нарушение целостности при создании сварочной операции"
             ) from exc
 
+    # --- явная команда автоматической проверки DRAFT (§10.3) ---
+
+    def validate_operation(
+        self,
+        operation_id: UUID,
+        data: WeldOperationValidateRequest,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperation:
+        """Запуск/пересчёт автоматической проверки DRAFT-операции (§10.3).
+
+        Доступна только для DRAFT: COMPLETED/CANCELLED дают conflict, так как их
+        результат — неизменяемый исторический снимок (§4.2). Актор из X-User-Id —
+        только текущий актор API, не лицо, принявшее решение (§10.3). Lifecycle не
+        меняется; record_version увеличивается."""
+        op = self.get_operation(operation_id)
+        joint = self._require_joint(op.joint_id)
+        self._require_actor(joint, actor_worker_id, "validate")
+        if op.lifecycle_status == "COMPLETED":
+            raise DomainError(
+                409,
+                wow.WELD_OPERATION_COMPLETED,
+                "Результат проверки завершённой операции неизменяем и не "
+                "пересчитывается",
+            )
+        if op.lifecycle_status == "CANCELLED":
+            raise DomainError(
+                409,
+                wow.WELD_OPERATION_CANCELLED,
+                "Отменённую операцию нельзя проверять",
+            )
+        self._check_version(op, data.expected_record_version)
+
+        self._run_validation(op, joint)
+        op.updated_by = actor_worker_id
+        op.record_version += 1
+        try:
+            return self._repo.save_operation(op)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Нарушение целостности при автоматической проверке операции"
+            ) from exc
+
     # --- неизменяемость / статусные guard'ы ---
 
     def _reject_non_draft(self, op: WeldOperation) -> None:
@@ -2039,6 +2200,10 @@ class WeldOperationService:
             self._apply_welder_snapshot(op, new_welder)
         if "responsible_worker_id" in changes:
             self._apply_executor_snapshot(op, changes["responsible_worker_id"])
+        # Изменение значимого поля обнуляет сохранённый результат проверки (§10.2);
+        # служебные поля результат не трогают.
+        if set(changes) & _VALIDATION_SIGNIFICANT_FIELDS:
+            self._reset_validation(op)
         op.updated_by = actor_worker_id
         op.record_version += 1
         try:
@@ -2088,6 +2253,11 @@ class WeldOperationService:
                 "Для завершения обязательны заполненные поля: "
                 + ", ".join(missing),
             )
+
+        # Окончательный автоматический расчёт проверки перед фиксацией факта (§10.4):
+        # результат — исторический снимок завершённой операции. FAIL/INDETERMINATE не
+        # блокируют COMPLETED (§4.1). Всё в одной транзакции с переходом lifecycle.
+        self._run_validation(op, joint)
 
         op.lifecycle_status = "COMPLETED"
         op.completed_by = actor_worker_id
