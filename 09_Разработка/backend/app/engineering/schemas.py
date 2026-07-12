@@ -16,6 +16,7 @@ from app.engineering.joint_workflow import (
     PendingReason,
     RevisionRole,
 )
+from app.engineering.weld_operation_workflow import WeldOperationStatus, WeldStage
 
 DocumentType = Literal["ISOMETRIC", "DRAWING", "WELD_MAP", "OTHER"]
 EngineeringStatus = Literal["DRAFT", "APPROVED", "CANCELLED", "SUPERSEDED"]
@@ -682,3 +683,192 @@ class JointBulkValidationError(BaseModel):
     field: str
     code: str
     message: str
+
+
+# ── WeldOperation (Task 8A, ADR-012 / Session 005) ────────────────────────────
+# Актор (created_by/updated_by/completed_by/cancelled_by) берётся ТОЛЬКО из
+# X-User-Id (§15 задания), не из тела. sequence_no и lifecycle_status назначает
+# система: клиент их не передаёт (extra="forbid" даёт 422 при попытке).
+
+
+def _validate_time_range(started, finished) -> None:
+    if started is not None and finished is not None and finished < started:
+        raise ValueError("finished_at не может быть раньше started_at")
+
+
+class WeldOperationCreate(BaseModel):
+    """Создание черновика операции. Обязательны joint/этап/способ/дата/ответственный;
+    фактический сварщик может быть задан позже, но обязателен для завершения."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    joint_id: UUID
+    responsible_worker_id: int = Field(gt=0)
+    weld_stage: WeldStage
+    welding_method: str = Field(min_length=1, max_length=50)
+    performed_on: date
+
+    actual_welder_id: UUID | None = None
+    entered_stamp_code: str | None = Field(default=None, max_length=100)
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+    actual_wps_id: UUID | None = None
+    welding_position: str | None = Field(default=None, max_length=50)
+    shielding_gas: str | None = Field(default=None, max_length=100)
+    back_purge: bool | None = None
+
+    production_area_id: UUID | None = None
+    production_area_text: str | None = None
+    shift_ref: str | None = Field(default=None, max_length=100)
+    shift_assignment_ref: str | None = Field(default=None, max_length=100)
+    production_report_ref: str | None = Field(default=None, max_length=100)
+    operation_note: str | None = None
+
+    @field_validator("welding_method")
+    @classmethod
+    def _method_not_blank(cls, v: str) -> str:
+        return _require_non_blank(v)
+
+    @model_validator(mode="after")
+    def _validate_times(self) -> "WeldOperationCreate":
+        _validate_time_range(self.started_at, self.finished_at)
+        return self
+
+
+class WeldOperationUpdate(BaseModel):
+    """PATCH черновика: только поля производственного факта. Защищённые поля (id,
+    joint_id, sequence_no, lifecycle_status, аудит, версия) отсутствуют — extra=
+    "forbid" даёт 422. `expected_record_version` обязателен (optimistic locking)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int = Field(gt=0)
+
+    responsible_worker_id: int | None = Field(default=None, gt=0)
+    weld_stage: WeldStage | None = None
+    welding_method: str | None = Field(default=None, min_length=1, max_length=50)
+    performed_on: date | None = None
+
+    actual_welder_id: UUID | None = None
+    entered_stamp_code: str | None = Field(default=None, max_length=100)
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+    actual_wps_id: UUID | None = None
+    welding_position: str | None = Field(default=None, max_length=50)
+    shielding_gas: str | None = Field(default=None, max_length=100)
+    back_purge: bool | None = None
+
+    production_area_id: UUID | None = None
+    production_area_text: str | None = None
+    shift_ref: str | None = Field(default=None, max_length=100)
+    shift_assignment_ref: str | None = Field(default=None, max_length=100)
+    production_report_ref: str | None = Field(default=None, max_length=100)
+    operation_note: str | None = None
+
+    @field_validator("welding_method")
+    @classmethod
+    def _method_not_blank(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return _require_non_blank(v)
+
+    @model_validator(mode="after")
+    def _validate_times(self) -> "WeldOperationUpdate":
+        _validate_time_range(self.started_at, self.finished_at)
+        return self
+
+
+class WeldOperationCompleteRequest(BaseModel):
+    """Завершение операции. Данные заранее записаны через create/PATCH, поэтому
+    тело несёт только опциональную ожидаемую версию (optimistic locking)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int | None = Field(default=None, gt=0)
+
+
+class WeldOperationCancelRequest(BaseModel):
+    """Отмена черновика: производственного факта не было. Причина обязательна."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1)
+    expected_record_version: int | None = Field(default=None, gt=0)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, v: str) -> str:
+        return _require_reason(v)
+
+
+class WeldOperationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    joint_id: UUID
+    sequence_no: int
+    lifecycle_status: WeldOperationStatus
+
+    weld_stage: WeldStage
+    welding_method: str
+    performed_on: date
+    started_at: datetime | None
+    finished_at: datetime | None
+
+    actual_welder_id: UUID | None
+    entered_stamp_code: str | None
+    profile_stamp_snapshot: str | None
+    responsible_worker_id: int
+
+    created_by: int
+    created_at: datetime
+    updated_by: int
+    updated_at: datetime
+    completed_by: int | None
+    completed_at: datetime | None
+    cancelled_by: int | None
+    cancelled_at: datetime | None
+    cancellation_reason: str | None
+
+    executor_company_id: int | None
+    executor_department_id: int | None
+    welder_company_id: int | None
+    welder_department_id: int | None
+
+    production_area_id: UUID | None
+    production_area_text: str | None
+    shift_ref: str | None
+    shift_assignment_ref: str | None
+    production_report_ref: str | None
+
+    actual_wps_id: UUID | None
+    welding_position: str | None
+    shielding_gas: str | None
+    back_purge: bool | None
+    operation_note: str | None
+
+    record_version: int
+
+
+class WeldOperationListFilters(BaseModel):
+    joint_id: UUID | None = None
+    project_id: UUID | None = None
+    line_id: UUID | None = None
+    actual_welder_id: UUID | None = None
+    responsible_worker_id: int | None = None
+    lifecycle_status: WeldOperationStatus | None = None
+    weld_stage: WeldStage | None = None
+    welding_method: str | None = None
+    performed_from: date | None = None
+    performed_to: date | None = None
+    limit: int = Field(default=100, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class WeldOperationListResponse(BaseModel):
+    items: list[WeldOperationRead]
+    total: int
+    limit: int
+    offset: int

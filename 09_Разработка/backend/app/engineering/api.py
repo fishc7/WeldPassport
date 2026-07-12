@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -41,8 +42,21 @@ from app.engineering.schemas import (
     SupersedeCommand,
     UnblockCommand,
     WeldJointType,
+    WeldOperationCancelRequest,
+    WeldOperationCompleteRequest,
+    WeldOperationCreate,
+    WeldOperationListFilters,
+    WeldOperationListResponse,
+    WeldOperationRead,
+    WeldOperationStatus,
+    WeldOperationUpdate,
+    WeldStage,
 )
-from app.engineering.services import EngineeringService, joint_to_read
+from app.engineering.services import (
+    EngineeringService,
+    WeldOperationService,
+    joint_to_read,
+)
 from app.shared.auth import get_current_user_id
 from app.shared.db import get_db
 
@@ -55,6 +69,10 @@ def _svc(db: Session = Depends(get_db)) -> EngineeringService:
 
 def _bulk_svc(db: Session = Depends(get_db)) -> JointBulkService:
     return JointBulkService(db)
+
+
+def _weld_svc(db: Session = Depends(get_db)) -> WeldOperationService:
+    return WeldOperationService(db)
 
 
 # ── Документы ─────────────────────────────────────────────────────────────────
@@ -472,3 +490,126 @@ def set_current_revision(
     uid: int = Depends(get_current_user_id),
 ):
     return svc.set_current_revision(joint_id, data, actor_worker_id=uid)
+
+
+# ── WeldOperation (Task 8A, ADR-012 / Session 005) ────────────────────────────
+# Актор — только из X-User-Id (§15 задания). Физического DELETE нет (§14). Команды
+# complete/cancel — отдельные действия, а не универсальный update.
+
+
+def _weld_operation_subfilters(
+    project_id: UUID | None = Query(default=None),
+    line_id: UUID | None = Query(default=None),
+    actual_welder_id: UUID | None = Query(default=None),
+    responsible_worker_id: int | None = Query(default=None),
+    lifecycle_status: WeldOperationStatus | None = Query(default=None),
+    weld_stage: WeldStage | None = Query(default=None),
+    welding_method: str | None = Query(default=None),
+    performed_from: date | None = Query(default=None),
+    performed_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> WeldOperationListFilters:
+    """Фильтры без joint_id — для вложенного пути, где joint_id берётся из пути."""
+    return WeldOperationListFilters(
+        project_id=project_id,
+        line_id=line_id,
+        actual_welder_id=actual_welder_id,
+        responsible_worker_id=responsible_worker_id,
+        lifecycle_status=lifecycle_status,
+        weld_stage=weld_stage,
+        welding_method=welding_method,
+        performed_from=performed_from,
+        performed_to=performed_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def _weld_operation_filters(
+    joint_id: UUID | None = Query(default=None),
+    filters: WeldOperationListFilters = Depends(_weld_operation_subfilters),
+) -> WeldOperationListFilters:
+    filters.joint_id = joint_id
+    return filters
+
+
+@router.post(
+    "/weld-operations", response_model=WeldOperationRead, status_code=201
+)
+def create_weld_operation(
+    data: WeldOperationCreate,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.create_operation(data, actor_worker_id=uid)
+
+
+@router.get("/weld-operations", response_model=WeldOperationListResponse)
+def list_weld_operations(
+    filters: WeldOperationListFilters = Depends(_weld_operation_filters),
+    svc: WeldOperationService = Depends(_weld_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_operations(filters)
+
+
+@router.get(
+    "/weld-operations/{operation_id}", response_model=WeldOperationRead
+)
+def get_weld_operation(
+    operation_id: UUID,
+    svc: WeldOperationService = Depends(_weld_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.get_operation(operation_id)
+
+
+@router.patch(
+    "/weld-operations/{operation_id}", response_model=WeldOperationRead
+)
+def update_weld_operation(
+    operation_id: UUID,
+    data: WeldOperationUpdate,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.update_operation(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/complete",
+    response_model=WeldOperationRead,
+)
+def complete_weld_operation(
+    operation_id: UUID,
+    data: WeldOperationCompleteRequest = WeldOperationCompleteRequest(),
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.complete_operation(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/cancel", response_model=WeldOperationRead
+)
+def cancel_weld_operation(
+    operation_id: UUID,
+    data: WeldOperationCancelRequest,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.cancel_operation(operation_id, data, actor_worker_id=uid)
+
+
+@router.get(
+    "/joints/{joint_id}/weld-operations",
+    response_model=WeldOperationListResponse,
+)
+def list_joint_weld_operations(
+    joint_id: UUID,
+    filters: WeldOperationListFilters = Depends(_weld_operation_subfilters),
+    svc: WeldOperationService = Depends(_weld_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_operations_for_joint(joint_id, filters)

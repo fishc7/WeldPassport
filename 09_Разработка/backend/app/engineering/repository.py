@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from uuid import UUID
 
-from sqlalchemy import asc, desc, or_, text
+from sqlalchemy import asc, desc, func, or_, text
 from sqlalchemy.orm import Session
 
 from app.engineering.models import (
@@ -14,8 +14,13 @@ from app.engineering.models import (
     JointBulkRequest,
     JointDocumentRevision,
     JointEvent,
+    WeldOperation,
 )
-from app.engineering.schemas import EngineeringDocumentListFilters, JointListFilters
+from app.engineering.schemas import (
+    EngineeringDocumentListFilters,
+    JointListFilters,
+    WeldOperationListFilters,
+)
 
 
 def _ready_for_welding_clauses():
@@ -387,3 +392,92 @@ class EngineeringRepo:
         self.db.add(request)
         self.db.flush()
         return request
+
+    # --- weld operations (Task 8A) ---
+
+    def next_weld_operation_sequence(self, joint_id: UUID) -> int:
+        """Атомарно выдаёт следующий sequence_no операции внутри Joint.
+
+        Блокирует строку Joint (`SELECT ... FOR UPDATE`) на время транзакции:
+        параллельное создание операций одного Joint сериализуется, гонки `MAX()+1`
+        нет. Уникальный индекс (joint_id, sequence_no) — последняя защита. Номера
+        монотонно растут внутри Joint (§9 задания)."""
+        self.db.execute(
+            text(
+                f"SELECT 1 FROM {ENGINEERING_SCHEMA}.joints "
+                "WHERE id = CAST(:jid AS uuid) FOR UPDATE"
+            ),
+            {"jid": str(joint_id)},
+        )
+        current = (
+            self.db.query(func.coalesce(func.max(WeldOperation.sequence_no), 0))
+            .filter(WeldOperation.joint_id == joint_id)
+            .scalar()
+        )
+        return int(current) + 1
+
+    def get_operation(self, operation_id: UUID) -> WeldOperation | None:
+        return (
+            self.db.query(WeldOperation)
+            .filter(WeldOperation.id == operation_id)
+            .first()
+        )
+
+    def add_operation(self, operation: WeldOperation) -> WeldOperation:
+        """Добавляет операцию в текущую транзакцию (add + flush, без commit)."""
+        self.db.add(operation)
+        self.db.flush()
+        return operation
+
+    def save_operation(self, operation: WeldOperation) -> WeldOperation:
+        self.db.commit()
+        self.db.refresh(operation)
+        return operation
+
+    def _apply_operation_filters(self, query, filters: WeldOperationListFilters):
+        # project_id / line_id хранятся на Joint — присоединяем стык при фильтрации.
+        if filters.project_id is not None or filters.line_id is not None:
+            query = query.join(Joint, WeldOperation.joint_id == Joint.id)
+            if filters.project_id is not None:
+                query = query.filter(Joint.project_id == filters.project_id)
+            if filters.line_id is not None:
+                query = query.filter(Joint.line_id == filters.line_id)
+        if filters.joint_id is not None:
+            query = query.filter(WeldOperation.joint_id == filters.joint_id)
+        if filters.actual_welder_id is not None:
+            query = query.filter(
+                WeldOperation.actual_welder_id == filters.actual_welder_id
+            )
+        if filters.responsible_worker_id is not None:
+            query = query.filter(
+                WeldOperation.responsible_worker_id == filters.responsible_worker_id
+            )
+        if filters.lifecycle_status is not None:
+            query = query.filter(
+                WeldOperation.lifecycle_status == filters.lifecycle_status
+            )
+        if filters.weld_stage is not None:
+            query = query.filter(WeldOperation.weld_stage == filters.weld_stage)
+        if filters.welding_method is not None:
+            query = query.filter(
+                WeldOperation.welding_method == filters.welding_method
+            )
+        if filters.performed_from is not None:
+            query = query.filter(WeldOperation.performed_on >= filters.performed_from)
+        if filters.performed_to is not None:
+            query = query.filter(WeldOperation.performed_on <= filters.performed_to)
+        return query
+
+    def count_operations(self, filters: WeldOperationListFilters) -> int:
+        query = self._apply_operation_filters(self.db.query(WeldOperation), filters)
+        return query.count()
+
+    def list_operations(
+        self, filters: WeldOperationListFilters
+    ) -> list[WeldOperation]:
+        query = self._apply_operation_filters(self.db.query(WeldOperation), filters)
+        # Стабильный порядок: по Joint, затем по номеру операции.
+        query = query.order_by(
+            asc(WeldOperation.joint_id), asc(WeldOperation.sequence_no)
+        )
+        return query.offset(filters.offset).limit(filters.limit).all()

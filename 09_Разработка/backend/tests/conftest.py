@@ -18,6 +18,7 @@ from app.engineering.models import (
     JointDocumentRevision,
     JointEvent,
     JointSequence,
+    WeldOperation,
 )
 from app.hr.models import Worker, WorkerRole
 from app.main import app
@@ -178,6 +179,13 @@ def _purge_test_data(db: Session) -> None:
     ]
     if not worker_ids:
         return
+
+    # Сварочные операции (Task 8A) удаляем раньше стыков и профилей сварщиков:
+    # FK engineering.weld_operations → engineering.joints и welding.welders c
+    # ondelete RESTRICT. Операции помечены created_by тестовых workers.
+    db.query(WeldOperation).filter(
+        WeldOperation.created_by.in_(worker_ids)
+    ).delete(synchronize_session=False)
 
     project_ids = [
         row[0]

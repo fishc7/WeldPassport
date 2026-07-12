@@ -34,8 +34,13 @@ from app.engineering.joint_workflow import (
     PENDING_REASONS,
     REVISION_ROLES,
 )
+from app.engineering.weld_operation_workflow import (
+    WELD_OPERATION_STATUSES,
+    WELD_STAGES,
+)
 from app.projects.models import PROJECT_SCHEMA
 from app.shared.db import Base
+from app.welding.models import WELDING_SCHEMA
 
 ENGINEERING_SCHEMA = "engineering"
 
@@ -865,3 +870,181 @@ class JointDocumentRevision(Base):
     snapshot_coordinate_system: Mapped[str | None] = mapped_column(String(50))
     snapshot_location_note: Mapped[str | None] = mapped_column(Text)
     snapshot_document_note: Mapped[str | None] = mapped_column(Text)
+
+
+# ── WeldOperation (Task 8A, ADR-012 / Session 005) ────────────────────────────
+# Неизменяемый после завершения производственный факт: один Joint + один
+# фактический сварщик + один классифицированный этап + один фактически применённый
+# способ. Согласованные UPPERCASE-словари lifecycle/этапов — в weld_operation_workflow.
+_WELD_OP_STATUS_CHECK = _in_check("lifecycle_status", WELD_OPERATION_STATUSES)
+_WELD_OP_STAGE_CHECK = _in_check("weld_stage", WELD_STAGES)
+# COMPLETED требует автора/времени завершения и фактического сварщика (§8.7, §8.11);
+# вне COMPLETED поля завершения пусты (§8.13). Один согласованный CHECK.
+_WELD_OP_COMPLETION_CHECK = (
+    "(lifecycle_status = 'COMPLETED' AND completed_by IS NOT NULL "
+    "AND completed_at IS NOT NULL AND actual_welder_id IS NOT NULL) "
+    "OR (lifecycle_status <> 'COMPLETED' AND completed_by IS NULL "
+    "AND completed_at IS NULL)"
+)
+# CANCELLED требует автора/времени/причины отмены (§8.12); вне CANCELLED — пусто (§8.13).
+_WELD_OP_CANCELLATION_CHECK = (
+    "(lifecycle_status = 'CANCELLED' AND cancelled_by IS NOT NULL "
+    "AND cancelled_at IS NOT NULL AND length(trim(cancellation_reason)) > 0) "
+    "OR (lifecycle_status <> 'CANCELLED' AND cancelled_by IS NULL "
+    "AND cancelled_at IS NULL AND cancellation_reason IS NULL)"
+)
+# Согласованность интервала времени: при наличии обоих finished_at >= started_at (§8.10).
+_WELD_OP_TIME_CHECK = (
+    "started_at IS NULL OR finished_at IS NULL OR finished_at >= started_at"
+)
+
+
+class WeldOperation(Base):
+    """Производственный факт сварки одного этапа одним сварщиком (Task 8A).
+
+    Ядро без квалификационной проверки, WPS-валидации, review ОГС, подтверждения
+    сварщика, корректировок и импорта (Tasks 8B–8E не входят). `sequence_no`
+    выдаётся системой атомарно (блокировка строки Joint + UNIQUE(joint_id,
+    sequence_no)); клиент его не задаёт. `actual_wps_id` — nullable UUID без FK
+    (домен WPS ещё не реализован; отсутствие WPS не блокирует Task 8A).
+    Организационный снимок (executor_/welder_* company/department) и
+    `profile_stamp_snapshot` фиксируются на момент создания и не пересчитываются.
+    Завершённая операция (`COMPLETED`) неизменяема; физического удаления нет.
+    Ссылки на работников (responsible/created/updated/completed/cancelled_by) —
+    hr.workers.id без FK (переходный период, как в Joint).
+    """
+
+    __tablename__ = "weld_operations"
+    __table_args__ = (
+        UniqueConstraint(
+            "joint_id",
+            "sequence_no",
+            name="uq_engineering_weld_operations_joint_sequence",
+        ),
+        CheckConstraint(
+            "sequence_no > 0",
+            name="ck_engineering_weld_operations_sequence_positive",
+        ),
+        CheckConstraint(
+            _WELD_OP_STATUS_CHECK,
+            name="ck_engineering_weld_operations_lifecycle_status",
+        ),
+        CheckConstraint(
+            _WELD_OP_STAGE_CHECK, name="ck_engineering_weld_operations_weld_stage"
+        ),
+        CheckConstraint(
+            "length(trim(welding_method)) > 0",
+            name="ck_engineering_weld_operations_method_not_empty",
+        ),
+        CheckConstraint(
+            "record_version > 0",
+            name="ck_engineering_weld_operations_record_version_positive",
+        ),
+        CheckConstraint(
+            _WELD_OP_TIME_CHECK, name="ck_engineering_weld_operations_time_range"
+        ),
+        CheckConstraint(
+            _WELD_OP_COMPLETION_CHECK,
+            name="ck_engineering_weld_operations_completion",
+        ),
+        CheckConstraint(
+            _WELD_OP_CANCELLATION_CHECK,
+            name="ck_engineering_weld_operations_cancellation",
+        ),
+        Index("ix_engineering_weld_operations_joint_id", "joint_id"),
+        Index(
+            "ix_engineering_weld_operations_actual_welder_id", "actual_welder_id"
+        ),
+        Index(
+            "ix_engineering_weld_operations_responsible_worker_id",
+            "responsible_worker_id",
+        ),
+        Index(
+            "ix_engineering_weld_operations_lifecycle_status", "lifecycle_status"
+        ),
+        Index("ix_engineering_weld_operations_performed_on", "performed_on"),
+        {"schema": ENGINEERING_SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    joint_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(f"{ENGINEERING_SCHEMA}.joints.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    sequence_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="DRAFT"
+    )
+
+    # Классификация факта: один этап и один способ на операцию (005-A).
+    weld_stage: Mapped[str] = mapped_column(String(20), nullable=False)
+    welding_method: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    # Дата/время выполнения. performed_on обязателен; времена — необязательны.
+    performed_on: Mapped[date] = mapped_column(Date, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Фактический сварщик (профиль welding.welders) и клеймо. Введённое клеймо и
+    # исторический снимок профильного клейма хранятся раздельно; сравнение —
+    # Task 8C, в 8A не выполняется. actual_welder_id nullable в DRAFT, обязателен
+    # для завершения (CHECK completion).
+    actual_welder_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(f"{WELDING_SCHEMA}.welders.id", ondelete="RESTRICT"),
+    )
+    entered_stamp_code: Mapped[str | None] = mapped_column(String(100))
+    profile_stamp_snapshot: Mapped[str | None] = mapped_column(String(100))
+
+    # Ответственный мастер/прораб (hr.workers.id, роль MASTER/FOREMAN). Автор и
+    # ответственный могут различаться (§10.2). FK не добавляем (переходный период).
+    responsible_worker_id: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Аудит и переходы. Все *_by — hr.workers.id без FK.
+    created_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    completed_by: Mapped[int | None] = mapped_column(Integer)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_by: Mapped[int | None] = mapped_column(Integer)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancellation_reason: Mapped[str | None] = mapped_column(Text)
+
+    # Исторический организационный снимок на момент создания (§12). Организации/
+    # подразделения — hr-идентификаторы (Integer) без FK: снимок неизменен и не
+    # пересчитывается. Данные, недоступные из текущей модели, остаются NULL.
+    executor_company_id: Mapped[int | None] = mapped_column(Integer)
+    executor_department_id: Mapped[int | None] = mapped_column(Integer)
+    welder_company_id: Mapped[int | None] = mapped_column(Integer)
+    welder_department_id: Mapped[int | None] = mapped_column(Integer)
+
+    # Производственная зона и внешние ссылки (§6.3): без новых справочников —
+    # nullable UUID/строки. FK к несуществующим таблицам не добавляем.
+    production_area_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    production_area_text: Mapped[str | None] = mapped_column(Text)
+    shift_ref: Mapped[str | None] = mapped_column(String(100))
+    shift_assignment_ref: Mapped[str | None] = mapped_column(String(100))
+    production_report_ref: Mapped[str | None] = mapped_column(String(100))
+
+    # Фактически применённый WPS — nullable UUID без FK (домен WPS не реализован).
+    actual_wps_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    welding_position: Mapped[str | None] = mapped_column(String(50))
+    shielding_gas: Mapped[str | None] = mapped_column(String(100))
+    back_purge: Mapped[bool | None] = mapped_column(Boolean)
+    operation_note: Mapped[str | None] = mapped_column(Text)
+
+    # Optimistic locking (как record_version у Joint).
+    record_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1"
+    )

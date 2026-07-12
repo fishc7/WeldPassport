@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.engineering import joint_workflow as jw
+from app.engineering import weld_operation_workflow as wow
 from app.engineering.models import (
     REQUIRED_WELDING_FIELDS,
     DocumentRevision,
@@ -17,6 +18,7 @@ from app.engineering.models import (
     JointBlock,
     JointDocumentRevision,
     JointEvent,
+    WeldOperation,
 )
 from app.engineering.repository import EngineeringRepo
 from app.engineering.schemas import (
@@ -40,8 +42,17 @@ from app.engineering.schemas import (
     SubmitForReviewCommand,
     SupersedeCommand,
     UnblockCommand,
+    WeldOperationCancelRequest,
+    WeldOperationCompleteRequest,
+    WeldOperationCreate,
+    WeldOperationListFilters,
+    WeldOperationListResponse,
+    WeldOperationRead,
+    WeldOperationUpdate,
 )
+from app.hr.repository import HrRepo
 from app.projects.repository import ProjectRepo
+from app.welding.repository import WeldingRepo
 from app.shared.errors import (
     ConflictError,
     DomainError,
@@ -1766,3 +1777,367 @@ class EngineeringService:
             before=before,
         )
         return self._save_and_read(joint, actor_worker_id)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Task 8A — WeldOperation Core (ADR-012 / Session 005)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Минимальное техническое ядро производственного факта сварки. Проверки допуска,
+# WPS, review ОГС, подтверждения сварщика, корректировок и импорта НЕ входят
+# (Tasks 8B–8E). Актор — только из X-User-Id (§15 задания). sequence_no выдаётся
+# системой атомарно; клиент его не задаёт. Завершённая операция неизменяема.
+
+# Поля производственного факта, применяемые из create/PATCH к модели (без служебных).
+_WELD_OPERATION_FACT_FIELDS = (
+    "weld_stage",
+    "welding_method",
+    "performed_on",
+    "started_at",
+    "finished_at",
+    "actual_welder_id",
+    "entered_stamp_code",
+    "responsible_worker_id",
+    "actual_wps_id",
+    "welding_position",
+    "shielding_gas",
+    "back_purge",
+    "production_area_id",
+    "production_area_text",
+    "shift_ref",
+    "shift_assignment_ref",
+    "production_report_ref",
+    "operation_note",
+)
+
+
+class WeldOperationService:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+        self._repo = EngineeringRepo(db)
+        self._projects = ProjectRepo(db)
+        self._hr = HrRepo(db)
+        self._welding = WeldingRepo(db)
+
+    # --- контекст scope и права (§10, §19 ADR-011) ---
+
+    def _joint_scope_ctx(self, joint: Joint) -> JointScopeContext:
+        revision = self._repo.get_revision(joint.current_document_revision_id)
+        engineering_document_id = (
+            revision.engineering_document_id if revision is not None else None
+        )
+        company_ids = self._projects.active_company_ids(joint.project_id)
+        return JointScopeContext(
+            project_id=joint.project_id,
+            line_id=joint.line_id,
+            engineering_document_id=engineering_document_id,
+            company_ids=frozenset(company_ids),
+        )
+
+    def _require_actor(
+        self, joint: Joint, worker_id: int, action: str
+    ) -> None:
+        """Актор должен иметь MASTER/FOREMAN (или админ CHIEF_WELDER) в scope Joint."""
+        ctx = self._joint_scope_ctx(joint)
+        granted = worker_role_codes_for_joint(
+            self._db, worker_id, wow.WELD_OPERATION_ACTOR_ROLES, ctx
+        )
+        if not granted:
+            raise RoleDeniedError(
+                jw.ROLE_DENIED,
+                f"Недостаточно прав для действия '{action}': требуется роль "
+                "MASTER или FOREMAN в подходящем scope",
+            )
+
+    def _require_responsible(self, joint: Joint, responsible_worker_id: int) -> None:
+        """Ответственный — активный MASTER/FOREMAN с доступом к проекту/линии (§10.2)."""
+        ctx = self._joint_scope_ctx(joint)
+        granted = worker_role_codes_for_joint(
+            self._db,
+            responsible_worker_id,
+            wow.WELD_OPERATION_RESPONSIBLE_ROLES,
+            ctx,
+        )
+        if not granted:
+            raise RoleDeniedError(
+                jw.ROLE_DENIED,
+                "Ответственный должен иметь активную роль MASTER или FOREMAN в "
+                "подходящем scope Joint",
+            )
+
+    def _resolve_welder(self, welder_id: UUID | None):
+        """Профиль сварщика существует, если задан (§11.7). None → 404 не бросаем."""
+        if welder_id is None:
+            return None
+        welder = self._welding.get_welder(welder_id)
+        if welder is None:
+            raise NotFoundError("Профиль сварщика", welder_id)
+        return welder
+
+    def _apply_welder_snapshot(self, op: WeldOperation, welder) -> None:
+        """Снимок профильного клейма и организации сварщика (§12). Сравнение с
+        введённым клеймом НЕ выполняется (Task 8C)."""
+        if welder is None:
+            op.profile_stamp_snapshot = None
+            op.welder_company_id = None
+            op.welder_department_id = None
+            return
+        op.profile_stamp_snapshot = welder.stamp_code
+        worker = self._hr.get_worker(welder.worker_id)
+        op.welder_company_id = worker.company_id if worker is not None else None
+        op.welder_department_id = (
+            worker.department_id if worker is not None else None
+        )
+
+    def _apply_executor_snapshot(
+        self, op: WeldOperation, responsible_worker_id: int
+    ) -> None:
+        """Снимок организации-исполнителя по ответственному мастеру/прорабу (§12)."""
+        worker = self._hr.get_worker(responsible_worker_id)
+        op.executor_company_id = worker.company_id if worker is not None else None
+        op.executor_department_id = (
+            worker.department_id if worker is not None else None
+        )
+
+    # --- чтение ---
+
+    def get_operation(self, operation_id: UUID) -> WeldOperation:
+        op = self._repo.get_operation(operation_id)
+        if op is None:
+            raise NotFoundError("Сварочная операция", operation_id)
+        return op
+
+    def _require_joint(self, joint_id: UUID) -> Joint:
+        joint = self._repo.get_joint(joint_id)
+        if joint is None:
+            raise NotFoundError("Стык", joint_id)
+        return joint
+
+    def list_operations(
+        self, filters: WeldOperationListFilters
+    ) -> WeldOperationListResponse:
+        total = self._repo.count_operations(filters)
+        items = self._repo.list_operations(filters)
+        return WeldOperationListResponse(
+            items=[WeldOperationRead.model_validate(op) for op in items],
+            total=total,
+            limit=filters.limit,
+            offset=filters.offset,
+        )
+
+    def list_operations_for_joint(
+        self, joint_id: UUID, filters: WeldOperationListFilters
+    ) -> WeldOperationListResponse:
+        self._require_joint(joint_id)
+        filters.joint_id = joint_id
+        return self.list_operations(filters)
+
+    # --- создание черновика (§11, §13.1) ---
+
+    def create_operation(
+        self, data: WeldOperationCreate, *, actor_worker_id: int
+    ) -> WeldOperation:
+        joint = self._require_joint(data.joint_id)
+        # Joint не в терминальном состоянии — новые производственные события
+        # запрещены для CANCELLED/SUPERSEDED (Session 004 раздел 2; §11.2-11.4).
+        if joint.status in jw.TERMINAL_STATUSES:
+            raise DomainError(
+                409,
+                wow.JOINT_NOT_PRODUCIBLE,
+                f"Joint в статусе {joint.status}: фиксация производственного факта "
+                "запрещена",
+            )
+        self._require_actor(joint, actor_worker_id, "create")
+        self._require_responsible(joint, data.responsible_worker_id)
+        welder = self._resolve_welder(data.actual_welder_id)
+
+        # Номер выдаётся ПОСЛЕ всех проверок (неуспех не занимает номер). Блокировка
+        # строки Joint исключает гонку; UNIQUE(joint_id, sequence_no) — backstop.
+        sequence_no = self._repo.next_weld_operation_sequence(joint.id)
+        fact = data.model_dump(include=set(_WELD_OPERATION_FACT_FIELDS))
+        op = WeldOperation(
+            joint_id=joint.id,
+            sequence_no=sequence_no,
+            lifecycle_status="DRAFT",
+            created_by=actor_worker_id,
+            updated_by=actor_worker_id,
+            record_version=1,
+            **fact,
+        )
+        self._apply_welder_snapshot(op, welder)
+        self._apply_executor_snapshot(op, data.responsible_worker_id)
+        try:
+            self._repo.add_operation(op)
+            return self._repo.save_operation(op)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Нарушение целостности при создании сварочной операции"
+            ) from exc
+
+    # --- неизменяемость / статусные guard'ы ---
+
+    def _reject_non_draft(self, op: WeldOperation) -> None:
+        """PATCH разрешён только для DRAFT (§13.2, §13.4)."""
+        if op.lifecycle_status == "COMPLETED":
+            raise DomainError(
+                409, wow.WELD_OPERATION_COMPLETED, wow.COMPLETED_IMMUTABLE_MESSAGE
+            )
+        if op.lifecycle_status == "CANCELLED":
+            raise DomainError(
+                409,
+                wow.WELD_OPERATION_CANCELLED,
+                "Отменённая операция неизменяема",
+            )
+
+    @staticmethod
+    def _check_version(op: WeldOperation, expected: int | None) -> None:
+        if expected is not None and expected != op.record_version:
+            raise VersionConflictError(
+                jw.RECORD_VERSION_CONFLICT,
+                expected_version=expected,
+                current_version=op.record_version,
+            )
+
+    # --- редактирование черновика (§13.2) ---
+
+    def update_operation(
+        self, operation_id: UUID, data: WeldOperationUpdate, *, actor_worker_id: int
+    ) -> WeldOperation:
+        op = self.get_operation(operation_id)
+        joint = self._require_joint(op.joint_id)
+        self._require_actor(joint, actor_worker_id, "update")
+        self._reject_non_draft(op)
+        self._check_version(op, data.expected_record_version)
+
+        changes = data.model_dump(
+            exclude_unset=True, exclude={"expected_record_version"}
+        )
+
+        # --- валидация ДО мутации ---
+        welder_sentinel = object()
+        new_welder = welder_sentinel
+        if "actual_welder_id" in changes:
+            new_welder = self._resolve_welder(changes["actual_welder_id"])
+        if "responsible_worker_id" in changes:
+            self._require_responsible(joint, changes["responsible_worker_id"])
+        eff_start = changes.get("started_at", op.started_at)
+        eff_finish = changes.get("finished_at", op.finished_at)
+        if (
+            eff_start is not None
+            and eff_finish is not None
+            and eff_finish < eff_start
+        ):
+            raise ValidationError(
+                "finished_at не может быть раньше started_at"
+            )
+
+        # --- мутация ---
+        for field, value in changes.items():
+            setattr(op, field, value)
+        if new_welder is not welder_sentinel:
+            self._apply_welder_snapshot(op, new_welder)
+        if "responsible_worker_id" in changes:
+            self._apply_executor_snapshot(op, changes["responsible_worker_id"])
+        op.updated_by = actor_worker_id
+        op.record_version += 1
+        try:
+            return self._repo.save_operation(op)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Нарушение целостности при изменении сварочной операции"
+            ) from exc
+
+    # --- завершение (§13.3) ---
+
+    def complete_operation(
+        self,
+        operation_id: UUID,
+        data: WeldOperationCompleteRequest,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperation:
+        op = self.get_operation(operation_id)
+        joint = self._require_joint(op.joint_id)
+        self._require_actor(joint, actor_worker_id, "complete")
+        if op.lifecycle_status == "COMPLETED":
+            raise DomainError(
+                409, wow.WELD_OPERATION_COMPLETED, "Операция уже завершена"
+            )
+        if op.lifecycle_status == "CANCELLED":
+            raise DomainError(
+                409,
+                wow.WELD_OPERATION_CANCELLED,
+                "Отменённую операцию нельзя завершить",
+            )
+        self._check_version(op, data.expected_record_version)
+
+        # Минимальные структурные условия завершения (§13.3). Task 8A НЕ блокирует
+        # завершение из-за допуска/WPS/клейма/подтверждения/ОГС.
+        missing = [
+            name
+            for name in ("actual_welder_id", "responsible_worker_id",
+                         "weld_stage", "welding_method", "performed_on")
+            if getattr(op, name) is None
+        ]
+        if missing:
+            raise DomainError(
+                422,
+                wow.WELD_OPERATION_INCOMPLETE,
+                "Для завершения обязательны заполненные поля: "
+                + ", ".join(missing),
+            )
+
+        op.lifecycle_status = "COMPLETED"
+        op.completed_by = actor_worker_id
+        op.completed_at = _now()
+        op.updated_by = actor_worker_id
+        op.record_version += 1
+        try:
+            return self._repo.save_operation(op)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Нарушение целостности при завершении сварочной операции"
+            ) from exc
+
+    # --- отмена черновика (§13.5) ---
+
+    def cancel_operation(
+        self,
+        operation_id: UUID,
+        data: WeldOperationCancelRequest,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperation:
+        op = self.get_operation(operation_id)
+        joint = self._require_joint(op.joint_id)
+        self._require_actor(joint, actor_worker_id, "cancel")
+        if op.lifecycle_status == "COMPLETED":
+            # COMPLETED → CANCELLED — Task 8D (отмена ложной завершённой записи).
+            raise DomainError(
+                409,
+                wow.WELD_OPERATION_COMPLETED,
+                "Завершённую операцию нельзя отменить: отмена ложного факта — "
+                "механизм корректировок (Task 8D)",
+            )
+        if op.lifecycle_status == "CANCELLED":
+            raise DomainError(
+                409, wow.WELD_OPERATION_CANCELLED, "Операция уже отменена"
+            )
+        self._check_version(op, data.expected_record_version)
+
+        op.lifecycle_status = "CANCELLED"
+        op.cancelled_by = actor_worker_id
+        op.cancelled_at = _now()
+        op.cancellation_reason = data.reason
+        op.updated_by = actor_worker_id
+        op.record_version += 1
+        try:
+            return self._repo.save_operation(op)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Нарушение целостности при отмене сварочной операции"
+            ) from exc
