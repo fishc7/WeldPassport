@@ -19,6 +19,7 @@ from app.engineering.models import (
     JointEvent,
     JointSequence,
     WeldOperation,
+    WeldOperationCorrection,
     WeldOperationOgsReview,
     WeldOperationWelderConfirmation,
 )
@@ -199,6 +200,24 @@ def _purge_test_data(db: Session) -> None:
         db.query(WeldOperationOgsReview).filter(
             WeldOperationOgsReview.weld_operation_id.in_(operation_ids)
         ).delete(synchronize_session=False)
+        # Корректировки (Task 8D) ссылаются на source/replacement операции c
+        # RESTRICT — удаляем раньше самих операций. Self-FK замены (supersedes/
+        # superseded_by) обнуляем, иначе RESTRICT блокирует удаление.
+        db.query(WeldOperationCorrection).filter(
+            WeldOperationCorrection.source_operation_id.in_(operation_ids)
+        ).delete(synchronize_session=False)
+        # operation_kind сбрасываем на STANDARD вместе с обнулением ссылок: у REWELD
+        # обнуление supersedes нарушило бы CHECK reweld_required (данные удаляются).
+        db.query(WeldOperation).filter(
+            WeldOperation.id.in_(operation_ids)
+        ).update(
+            {
+                WeldOperation.supersedes_operation_id: None,
+                WeldOperation.superseded_by_operation_id: None,
+                WeldOperation.operation_kind: "STANDARD",
+            },
+            synchronize_session=False,
+        )
     db.query(WeldOperation).filter(
         WeldOperation.created_by.in_(worker_ids)
     ).delete(synchronize_session=False)

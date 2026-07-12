@@ -33,6 +33,13 @@ from app.engineering.schemas import (
     JointSortBy,
     JointUpdate,
     LinkStatus,
+    CorrectionApplyCommand,
+    CorrectionCancelCommand,
+    CorrectionCommentCommand,
+    CorrectionOgsAcceptCommand,
+    CorrectionOptionalCommentCommand,
+    CorrectionRetryApplyCommand,
+    CorrectionVersionCommand,
     OgsReviewApproveCommand,
     OgsReviewRejectCommand,
     OgsReviewStatus,
@@ -50,11 +57,16 @@ from app.engineering.schemas import (
     WelderDisputeCommand,
     WeldOperationCancelRequest,
     WeldOperationCompleteRequest,
+    WeldOperationCorrectionCreate,
+    WeldOperationCorrectionRead,
+    WeldOperationCorrectionUpdate,
     WeldOperationCreate,
     WeldOperationListFilters,
     WeldOperationListResponse,
     WeldOperationOgsReviewRead,
     WeldOperationRead,
+    WeldOperationReweldCreate,
+    WeldOperationReweldDecisionCommand,
     WeldOperationStatus,
     WeldOperationUpdate,
     WeldOperationValidateRequest,
@@ -67,6 +79,7 @@ from app.engineering.weld_operation_validation import (
 )
 from app.engineering.services import (
     EngineeringService,
+    WeldOperationCorrectionService,
     WeldOperationService,
     joint_to_read,
 )
@@ -732,3 +745,224 @@ def list_joint_weld_operations(
     _uid: int = Depends(get_current_user_id),
 ):
     return svc.list_operations_for_joint(joint_id, filters)
+
+
+# ── WeldOperation: корректировки и переварка (Task 8D, ADR-012) ────────────────
+# Actor — только из X-User-Id (§18). Завершённая операция неизменяема: исправление
+# выполняется через отдельную трассируемую корректировку. Статусы корректировки
+# меняются доменными командами, а не обычным PATCH. Физического DELETE нет.
+
+
+def _corr_svc(db: Session = Depends(get_db)) -> WeldOperationCorrectionService:
+    return WeldOperationCorrectionService(db)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/corrections",
+    response_model=WeldOperationCorrectionRead,
+    status_code=201,
+)
+def create_correction(
+    operation_id: UUID,
+    data: WeldOperationCorrectionCreate,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.create_correction(operation_id, data, actor_worker_id=uid)
+
+
+@router.get(
+    "/weld-operations/{operation_id}/corrections",
+    response_model=list[WeldOperationCorrectionRead],
+)
+def list_operation_corrections(
+    operation_id: UUID,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_corrections(operation_id)
+
+
+@router.get(
+    "/weld-operation-corrections/{correction_id}",
+    response_model=WeldOperationCorrectionRead,
+)
+def get_correction(
+    correction_id: UUID,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.get_correction(correction_id)
+
+
+@router.patch(
+    "/weld-operation-corrections/{correction_id}",
+    response_model=WeldOperationCorrectionRead,
+)
+def update_correction(
+    correction_id: UUID,
+    data: WeldOperationCorrectionUpdate,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.update_correction(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/submit",
+    response_model=WeldOperationCorrectionRead,
+)
+def submit_correction(
+    correction_id: UUID,
+    data: CorrectionVersionCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.submit(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/smr-approve",
+    response_model=WeldOperationCorrectionRead,
+)
+def smr_approve_correction(
+    correction_id: UUID,
+    data: CorrectionOptionalCommentCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.smr_approve(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/smr-return",
+    response_model=WeldOperationCorrectionRead,
+)
+def smr_return_correction(
+    correction_id: UUID,
+    data: CorrectionCommentCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.smr_return(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/smr-reject",
+    response_model=WeldOperationCorrectionRead,
+)
+def smr_reject_correction(
+    correction_id: UUID,
+    data: CorrectionCommentCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.smr_reject(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/ogs-accept",
+    response_model=WeldOperationCorrectionRead,
+)
+def ogs_accept_correction(
+    correction_id: UUID,
+    data: CorrectionOgsAcceptCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.ogs_accept(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/ogs-return",
+    response_model=WeldOperationCorrectionRead,
+)
+def ogs_return_correction(
+    correction_id: UUID,
+    data: CorrectionCommentCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.ogs_return(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/ogs-reject",
+    response_model=WeldOperationCorrectionRead,
+)
+def ogs_reject_correction(
+    correction_id: UUID,
+    data: CorrectionCommentCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.ogs_reject(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/cancel",
+    response_model=WeldOperationCorrectionRead,
+)
+def cancel_correction(
+    correction_id: UUID,
+    data: CorrectionCancelCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.cancel(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/apply",
+    response_model=WeldOperationCorrectionRead,
+)
+def apply_correction(
+    correction_id: UUID,
+    data: CorrectionApplyCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.apply(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/retry-apply",
+    response_model=WeldOperationCorrectionRead,
+)
+def retry_apply_correction(
+    correction_id: UUID,
+    data: CorrectionRetryApplyCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.retry_apply(correction_id, data, actor_worker_id=uid)
+
+
+# ── Полная переварка (reweld, Task 8D §16) ────────────────────────────────────
+
+
+@router.post(
+    "/weld-operations/{operation_id}/reweld",
+    response_model=WeldOperationRead,
+    status_code=201,
+)
+def create_reweld(
+    operation_id: UUID,
+    data: WeldOperationReweldCreate,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.create_reweld(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{reweld_id}/reweld-decision",
+    response_model=WeldOperationRead,
+)
+def reweld_decision(
+    reweld_id: UUID,
+    data: WeldOperationReweldDecisionCommand,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.reweld_decision(reweld_id, data, actor_worker_id=uid)

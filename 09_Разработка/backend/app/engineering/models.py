@@ -10,6 +10,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -35,6 +36,15 @@ from app.engineering.joint_workflow import (
     PENDING_REASONS,
     REVISION_ROLES,
 )
+from app.engineering.weld_operation_corrections import (
+    APPLICATION_STATUSES,
+    CORRECTION_LIFECYCLE_STATUSES,
+    CORRECTION_TYPES,
+    IMPACT_LEVELS,
+    OGS_REVIEW_STATUSES as CORRECTION_OGS_REVIEW_STATUSES,
+    SMR_APPROVAL_STATUSES,
+    SOURCE_TYPES,
+)
 from app.engineering.weld_operation_review import (
     OGS_REVIEW_DECISIONS,
     OGS_REVIEW_STATUSES,
@@ -42,6 +52,8 @@ from app.engineering.weld_operation_review import (
     WELDER_CONFIRMATION_STATUSES,
 )
 from app.engineering.weld_operation_workflow import (
+    OPERATION_KINDS,
+    REWELD_REASONS,
     WELD_OPERATION_STATUSES,
     WELD_STAGES,
 )
@@ -885,13 +897,17 @@ class JointDocumentRevision(Base):
 # способ. Согласованные UPPERCASE-словари lifecycle/этапов — в weld_operation_workflow.
 _WELD_OP_STATUS_CHECK = _in_check("lifecycle_status", WELD_OPERATION_STATUSES)
 _WELD_OP_STAGE_CHECK = _in_check("weld_stage", WELD_STAGES)
-# COMPLETED требует автора/времени завершения и фактического сварщика (§8.7, §8.11);
-# вне COMPLETED поля завершения пусты (§8.13). Один согласованный CHECK.
+# COMPLETED требует автора/времени завершения и фактического сварщика (§8.7, §8.11).
+# Task 8D: SUPERSEDED сохраняет поля завершения (это ранее завершённая, затем
+# заменённая операция); CANCELLED может быть как отменённым черновиком, так и
+# отменённой ложной завершённой записью (COMPLETED→CANCELLED), поэтому поля
+# завершения для него не ограничиваем. DRAFT — поля завершения пусты (§8.13).
 _WELD_OP_COMPLETION_CHECK = (
-    "(lifecycle_status = 'COMPLETED' AND completed_by IS NOT NULL "
+    "(lifecycle_status IN ('COMPLETED', 'SUPERSEDED') AND completed_by IS NOT NULL "
     "AND completed_at IS NOT NULL AND actual_welder_id IS NOT NULL) "
-    "OR (lifecycle_status <> 'COMPLETED' AND completed_by IS NULL "
-    "AND completed_at IS NULL)"
+    "OR (lifecycle_status = 'DRAFT' AND completed_by IS NULL "
+    "AND completed_at IS NULL) "
+    "OR (lifecycle_status = 'CANCELLED')"
 )
 # CANCELLED требует автора/времени/причины отмены (§8.12); вне CANCELLED — пусто (§8.13).
 _WELD_OP_CANCELLATION_CHECK = (
@@ -966,6 +982,54 @@ _OGS_REVIEW_REJECT_REASON_CHECK = (
     "ogs_review_status <> 'REJECTED' "
     "OR jsonb_array_length(ogs_review_reason_codes) > 0"
 )
+
+# ── Инварианты замены и переварки WeldOperation (Task 8D, §6, §19 задания) ─────
+_OPERATION_KIND_CHECK = _in_check("operation_kind", OPERATION_KINDS)
+_REWELD_REASON_CHECK = (
+    "reweld_reason IS NULL OR " + _in_check("reweld_reason", REWELD_REASONS)
+)
+# Операция не может заменять сама себя и не может быть заменена сама собой (§6.1).
+_NO_SELF_SUPERSEDE_OP_CHECK = (
+    "(supersedes_operation_id IS NULL OR supersedes_operation_id <> id) "
+    "AND (superseded_by_operation_id IS NULL OR superseded_by_operation_id <> id)"
+)
+# REWELD обязан ссылаться на исходную операцию и иметь причину (§6.2).
+_REWELD_REQUIRED_FIELDS_CHECK = (
+    "operation_kind <> 'REWELD' "
+    "OR (supersedes_operation_id IS NOT NULL AND reweld_reason IS NOT NULL)"
+)
+
+# ── Инварианты корректировки WeldOperation (Task 8D, §7, §19 задания) ──────────
+_CORR_TYPE_CHECK = _in_check("correction_type", CORRECTION_TYPES)
+_CORR_IMPACT_CHECK = _in_check("impact_level", IMPACT_LEVELS)
+_CORR_SOURCE_TYPE_CHECK = _in_check("source_type", SOURCE_TYPES)
+_CORR_LIFECYCLE_CHECK = _in_check("lifecycle_status", CORRECTION_LIFECYCLE_STATUSES)
+_CORR_SMR_STATUS_CHECK = _in_check("smr_approval_status", SMR_APPROVAL_STATUSES)
+_CORR_OGS_STATUS_CHECK = _in_check(
+    "ogs_review_status", CORRECTION_OGS_REVIEW_STATUSES
+)
+_CORR_APP_STATUS_CHECK = _in_check("application_status", APPLICATION_STATUSES)
+# source != replacement (§19: запрет source = replacement).
+_CORR_SOURCE_NOT_REPLACEMENT_CHECK = (
+    "replacement_operation_id IS NULL "
+    "OR replacement_operation_id <> source_operation_id"
+)
+# Отмена ложной записи не создаёт replacement и не имеет after_snapshot (§8.2).
+_CORR_CANCEL_NO_REPLACEMENT_CHECK = (
+    "correction_type <> 'CANCEL_FALSE_RECORD' "
+    "OR (replacement_operation_id IS NULL AND after_snapshot IS NULL)"
+)
+# Применённая корректировка-замена обязана иметь replacement (§19).
+_CORR_APPLIED_REPLACEMENT_CHECK = (
+    "application_status <> 'APPLIED' "
+    "OR correction_type = 'CANCEL_FALSE_RECORD' "
+    "OR replacement_operation_id IS NOT NULL"
+)
+_CORR_REASON_NOT_EMPTY_CHECK = "length(trim(reason)) > 0"
+_CORR_ATTEMPTS_CHECK = "application_attempts >= 0"
+_CORR_CHANGED_FIELDS_ARRAY_CHECK = "jsonb_typeof(changed_fields) = 'array'"
+_CORR_FIELD_CHANGES_OBJECT_CHECK = "jsonb_typeof(field_changes) = 'object'"
+_CORR_BEFORE_SNAPSHOT_OBJECT_CHECK = "jsonb_typeof(before_snapshot) = 'object'"
 
 
 class WeldOperation(Base):
@@ -1072,6 +1136,43 @@ class WeldOperation(Base):
         CheckConstraint(
             _OGS_REVIEW_REJECT_REASON_CHECK,
             name="ck_engineering_weld_operations_ogs_review_reject_reason",
+        ),
+        # ── Task 8D: замена и переварка (§6, §19) ──────────────────────────────
+        CheckConstraint(
+            _OPERATION_KIND_CHECK,
+            name="ck_engineering_weld_operations_operation_kind",
+        ),
+        CheckConstraint(
+            _REWELD_REASON_CHECK,
+            name="ck_engineering_weld_operations_reweld_reason",
+        ),
+        CheckConstraint(
+            _NO_SELF_SUPERSEDE_OP_CHECK,
+            name="ck_engineering_weld_operations_no_self_supersede",
+        ),
+        CheckConstraint(
+            _REWELD_REQUIRED_FIELDS_CHECK,
+            name="ck_engineering_weld_operations_reweld_required",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_operation_id"],
+            [f"{ENGINEERING_SCHEMA}.weld_operations.id"],
+            ondelete="RESTRICT",
+            name="fk_engineering_weld_operations_supersedes",
+        ),
+        ForeignKeyConstraint(
+            ["superseded_by_operation_id"],
+            [f"{ENGINEERING_SCHEMA}.weld_operations.id"],
+            ondelete="RESTRICT",
+            name="fk_engineering_weld_operations_superseded_by",
+        ),
+        Index(
+            "ix_engineering_weld_operations_supersedes_operation_id",
+            "supersedes_operation_id",
+        ),
+        Index(
+            "ix_engineering_weld_operations_superseded_by_operation_id",
+            "superseded_by_operation_id",
         ),
         Index("ix_engineering_weld_operations_joint_id", "joint_id"),
         Index(
@@ -1252,6 +1353,26 @@ class WeldOperation(Base):
         JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list
     )
 
+    # ── Замена и переварка (Task 8D, §6). Трассировка predecessor/successor —
+    # self-FK на weld_operations. supersedes_operation_id — у заменяющей операции;
+    # superseded_by_operation_id — у исходной. operation_kind различает обычную
+    # операцию и полную переварку; reweld_* фиксируют причину и решение ОГС. ──────
+    supersedes_operation_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True)
+    )
+    superseded_by_operation_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True)
+    )
+    operation_kind: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="STANDARD"
+    )
+    reweld_reason: Mapped[str | None] = mapped_column(String(40))
+    reweld_decision_comment: Mapped[str | None] = mapped_column(Text)
+    reweld_decided_by: Mapped[int | None] = mapped_column(Integer)
+    reweld_decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+
 
 # ── История подтверждений сварщика (Task 8C, §8.1) ────────────────────────────
 # Append-only: API редактирования/удаления нет. Каждое реальное решение
@@ -1382,3 +1503,202 @@ class WeldOperationOgsReview(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+# ── Корректировка WeldOperation (Task 8D, §7 задания, ADR-012) ────────────────
+# Контролируемое исправление завершённой операции через отдельную трассируемую
+# сущность: снимки до/после, список изменённых полей, структурированный diff,
+# классификация значимости, lifecycle, согласование СМР и review ОГС, атомарное
+# применение с переводом исходной операции в SUPERSEDED/CANCELLED. Не audit-таблица:
+# несёт полноценную state machine (§25). Физического удаления нет.
+
+
+class WeldOperationCorrection(Base):
+    """Трассируемая корректировка завершённой операции (Task 8D, §7).
+
+    Одна активная корректировка на исходную операцию (partial unique index);
+    replacement — не более чем у одной корректировки (UNIQUE). Actor-поля —
+    hr.workers.id без FK (переходный период, как в WeldOperation). Снимки и diff
+    формируются сервером и не редактируются клиентом (§8)."""
+
+    __tablename__ = "weld_operation_corrections"
+    __table_args__ = (
+        CheckConstraint(
+            _CORR_TYPE_CHECK,
+            name="ck_engineering_weld_op_corrections_type",
+        ),
+        CheckConstraint(
+            _CORR_IMPACT_CHECK,
+            name="ck_engineering_weld_op_corrections_impact",
+        ),
+        CheckConstraint(
+            _CORR_SOURCE_TYPE_CHECK,
+            name="ck_engineering_weld_op_corrections_source_type",
+        ),
+        CheckConstraint(
+            _CORR_LIFECYCLE_CHECK,
+            name="ck_engineering_weld_op_corrections_lifecycle",
+        ),
+        CheckConstraint(
+            _CORR_SMR_STATUS_CHECK,
+            name="ck_engineering_weld_op_corrections_smr_status",
+        ),
+        CheckConstraint(
+            _CORR_OGS_STATUS_CHECK,
+            name="ck_engineering_weld_op_corrections_ogs_status",
+        ),
+        CheckConstraint(
+            _CORR_APP_STATUS_CHECK,
+            name="ck_engineering_weld_op_corrections_application_status",
+        ),
+        CheckConstraint(
+            _CORR_SOURCE_NOT_REPLACEMENT_CHECK,
+            name="ck_engineering_weld_op_corrections_source_not_replacement",
+        ),
+        CheckConstraint(
+            _CORR_CANCEL_NO_REPLACEMENT_CHECK,
+            name="ck_engineering_weld_op_corrections_cancel_no_replacement",
+        ),
+        CheckConstraint(
+            _CORR_APPLIED_REPLACEMENT_CHECK,
+            name="ck_engineering_weld_op_corrections_applied_replacement",
+        ),
+        CheckConstraint(
+            _CORR_REASON_NOT_EMPTY_CHECK,
+            name="ck_engineering_weld_op_corrections_reason_not_empty",
+        ),
+        CheckConstraint(
+            _CORR_ATTEMPTS_CHECK,
+            name="ck_engineering_weld_op_corrections_attempts_non_negative",
+        ),
+        CheckConstraint(
+            "record_version > 0",
+            name="ck_engineering_weld_op_corrections_record_version_positive",
+        ),
+        CheckConstraint(
+            _CORR_CHANGED_FIELDS_ARRAY_CHECK,
+            name="ck_engineering_weld_op_corrections_changed_fields_array",
+        ),
+        CheckConstraint(
+            _CORR_FIELD_CHANGES_OBJECT_CHECK,
+            name="ck_engineering_weld_op_corrections_field_changes_object",
+        ),
+        CheckConstraint(
+            _CORR_BEFORE_SNAPSHOT_OBJECT_CHECK,
+            name="ck_engineering_weld_op_corrections_before_snapshot_object",
+        ),
+        ForeignKeyConstraint(
+            ["source_operation_id"],
+            [f"{ENGINEERING_SCHEMA}.weld_operations.id"],
+            ondelete="RESTRICT",
+            name="fk_engineering_weld_op_corrections_source",
+        ),
+        ForeignKeyConstraint(
+            ["replacement_operation_id"],
+            [f"{ENGINEERING_SCHEMA}.weld_operations.id"],
+            ondelete="RESTRICT",
+            name="fk_engineering_weld_op_corrections_replacement",
+        ),
+        UniqueConstraint(
+            "replacement_operation_id",
+            name="uq_engineering_weld_op_corrections_replacement",
+        ),
+        Index(
+            "ix_engineering_weld_op_corrections_source_operation_id",
+            "source_operation_id",
+        ),
+        Index(
+            "ix_engineering_weld_op_corrections_replacement_operation_id",
+            "replacement_operation_id",
+        ),
+        Index(
+            "ix_engineering_weld_op_corrections_lifecycle_status",
+            "lifecycle_status",
+        ),
+        Index(
+            "ix_engineering_weld_op_corrections_application_status",
+            "application_status",
+        ),
+        # Не более одной активной корректировки на исходную операцию (§12).
+        Index(
+            "uq_engineering_weld_op_corrections_active_source",
+            "source_operation_id",
+            unique=True,
+            postgresql_where=text(
+                "lifecycle_status IN ('DRAFT', 'SUBMITTED', 'APPROVED')"
+            ),
+        ),
+        {"schema": ENGINEERING_SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    source_operation_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    replacement_operation_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True)
+    )
+    correction_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    impact_level: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+
+    changed_fields: Mapped[list] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    before_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    # none_as_null: Python None → SQL NULL (не JSON 'null'), иначе CHECK
+    # after_snapshot IS NULL для CANCEL_FALSE_RECORD не срабатывает.
+    after_snapshot: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    field_changes: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+
+    source_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="MANUAL"
+    )
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="DRAFT"
+    )
+    smr_approval_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default="PENDING"
+    )
+    ogs_review_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default="NOT_REQUIRED"
+    )
+    application_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="NOT_READY"
+    )
+    record_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1"
+    )
+
+    created_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    submitted_by: Mapped[int | None] = mapped_column(Integer)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    smr_decided_by: Mapped[int | None] = mapped_column(Integer)
+    smr_decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    smr_comment: Mapped[str | None] = mapped_column(Text)
+    ogs_decided_by: Mapped[int | None] = mapped_column(Integer)
+    ogs_decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ogs_comment: Mapped[str | None] = mapped_column(Text)
+    applied_by: Mapped[int | None] = mapped_column(Integer)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    application_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    last_application_error: Mapped[str | None] = mapped_column(Text)
+    cancelled_by: Mapped[int | None] = mapped_column(Integer)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_reason: Mapped[str | None] = mapped_column(Text)

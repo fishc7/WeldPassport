@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -9,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.engineering import joint_workflow as jw
+from app.engineering import weld_operation_corrections as wc
 from app.engineering import weld_operation_review as wor
 from app.engineering import weld_operation_validation as wov
 from app.engineering import weld_operation_workflow as wow
@@ -21,6 +23,7 @@ from app.engineering.models import (
     JointDocumentRevision,
     JointEvent,
     WeldOperation,
+    WeldOperationCorrection,
     WeldOperationOgsReview,
     WeldOperationWelderConfirmation,
 )
@@ -48,12 +51,23 @@ from app.engineering.schemas import (
     UnblockCommand,
     OgsReviewApproveCommand,
     OgsReviewRejectCommand,
+    CorrectionApplyCommand,
+    CorrectionCancelCommand,
+    CorrectionCommentCommand,
+    CorrectionOgsAcceptCommand,
+    CorrectionOptionalCommentCommand,
+    CorrectionRetryApplyCommand,
+    CorrectionVersionCommand,
     WeldOperationCancelRequest,
     WeldOperationCompleteRequest,
+    WeldOperationCorrectionCreate,
+    WeldOperationCorrectionUpdate,
     WeldOperationCreate,
     WeldOperationListFilters,
     WeldOperationListResponse,
     WeldOperationRead,
+    WeldOperationReweldCreate,
+    WeldOperationReweldDecisionCommand,
     WeldOperationUpdate,
     WeldOperationValidateRequest,
     WelderConfirmCommand,
@@ -2261,25 +2275,12 @@ class WeldOperationService:
                 + ", ".join(missing),
             )
 
-        # Окончательный автоматический расчёт проверки перед фиксацией факта (§10.4):
-        # результат — исторический снимок завершённой операции. FAIL/INDETERMINATE не
-        # блокируют COMPLETED (§4.1). Всё в одной транзакции с переходом lifecycle.
-        self._run_validation(op, joint)
+        # Полная переварка (Task 8D, §16.4): завершение reweld невозможно без
+        # решения ОГС APPROVE и атомарно переводит исходную операцию в SUPERSEDED.
+        if op.operation_kind == wow.OPERATION_KIND_REWELD:
+            return self._complete_reweld(op, joint, actor_worker_id=actor_worker_id)
 
-        # Первичная маршрутизация review ОГС по validation-результату Task 8B и
-        # статусу подтверждения сварщика (Task 8C, §5.2). При завершении черновик
-        # ещё PENDING (не DISPUTED): PASS/PASS → NOT_REQUIRED, иначе → PENDING.
-        op.ogs_review_status = wor.initial_ogs_review_status(
-            op.qualification_validation_status,
-            op.wps_validation_status,
-            op.welder_confirmation_status,
-        )
-
-        op.lifecycle_status = "COMPLETED"
-        op.completed_by = actor_worker_id
-        op.completed_at = _now()
-        op.updated_by = actor_worker_id
-        op.record_version += 1
+        self._finalize_completion(op, joint, actor_worker_id)
         try:
             return self._repo.save_operation(op)
         except IntegrityError as exc:
@@ -2287,6 +2288,209 @@ class WeldOperationService:
             raise ConflictError(
                 "Нарушение целостности при завершении сварочной операции"
             ) from exc
+
+    def _finalize_completion(
+        self, op: WeldOperation, joint: Joint, actor_worker_id: int
+    ) -> None:
+        """Расчёт проверки, маршрутизация review и перевод операции в COMPLETED.
+
+        Мутирует операцию без commit (§10.4, §5.2). Общий шаг для обычного
+        завершения, завершения переварки и применения замены Task 8D."""
+        # Окончательный автоматический расчёт проверки перед фиксацией факта (§10.4):
+        # результат — исторический снимок завершённой операции. FAIL/INDETERMINATE не
+        # блокируют COMPLETED (§4.1).
+        self._run_validation(op, joint)
+        # Первичная маршрутизация review ОГС по validation-результату Task 8B и
+        # статусу подтверждения сварщика (Task 8C, §5.2).
+        op.ogs_review_status = wor.initial_ogs_review_status(
+            op.qualification_validation_status,
+            op.wps_validation_status,
+            op.welder_confirmation_status,
+        )
+        op.lifecycle_status = "COMPLETED"
+        op.completed_by = actor_worker_id
+        op.completed_at = _now()
+        op.updated_by = actor_worker_id
+        op.record_version += 1
+
+    @staticmethod
+    def _link_supersede(
+        source: WeldOperation, replacement: WeldOperation, actor_worker_id: int
+    ) -> None:
+        """Атомарная двусторонняя связь predecessor/successor (§15.1, §16.4).
+
+        Исходная операция переводится в SUPERSEDED; связь устанавливается в обе
+        стороны. Мутирует объекты без commit."""
+        source.lifecycle_status = "SUPERSEDED"
+        source.superseded_by_operation_id = replacement.id
+        source.updated_by = actor_worker_id
+        source.record_version += 1
+        replacement.supersedes_operation_id = source.id
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Task 8D — полная переварка (reweld, §16)
+    # ══════════════════════════════════════════════════════════════════════════
+    # Полная переварка — новая WeldOperation (operation_kind=REWELD), а не
+    # редактирование старой и не локальный ремонт. Черновик нельзя завершить без
+    # решения ОГС APPROVE; успешное завершение атомарно переводит исходную операцию
+    # в SUPERSEDED.
+
+    def create_reweld(
+        self,
+        operation_id: UUID,
+        data: WeldOperationReweldCreate,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperation:
+        source = self.get_operation(operation_id)
+        joint = self._require_joint(source.joint_id)
+        self._require_actor(joint, actor_worker_id, "reweld")
+        if source.lifecycle_status != "COMPLETED":
+            raise DomainError(
+                409,
+                wc.SOURCE_NOT_CORRECTABLE,
+                "Полная переварка возможна только для завершённой действующей "
+                f"операции; текущий статус {source.lifecycle_status}",
+            )
+        self._check_version(source, data.expected_source_record_version)
+
+        patch = dict(data.patch or {})
+        self._validate_patch_fields(patch)
+
+        sequence_no = self._repo.next_weld_operation_sequence(joint.id)
+        reweld = WeldOperation(
+            joint_id=joint.id,
+            sequence_no=sequence_no,
+            lifecycle_status="DRAFT",
+            operation_kind=wow.OPERATION_KIND_REWELD,
+            supersedes_operation_id=source.id,
+            reweld_reason=data.reason,
+            created_by=actor_worker_id,
+            updated_by=actor_worker_id,
+            record_version=1,
+        )
+        # Копируем допустимые данные исходной операции, затем накладываем patch.
+        self._copy_fact_fields(source, reweld)
+        # Комментарий-обоснование переварки хранится в примечании черновика, если
+        # patch его не переопределяет (отдельной колонки под create-комментарий нет).
+        if "operation_note" not in patch:
+            reweld.operation_note = data.comment
+        for field, value in patch.items():
+            setattr(reweld, field, value)
+
+        if "actual_welder_id" in patch:
+            self._apply_welder_snapshot(
+                reweld, self._resolve_welder(patch["actual_welder_id"])
+            )
+        else:
+            self._apply_welder_snapshot(
+                reweld, self._resolve_welder(source.actual_welder_id)
+            )
+        if "responsible_worker_id" in patch:
+            self._require_responsible(joint, patch["responsible_worker_id"])
+        self._apply_executor_snapshot(reweld, reweld.responsible_worker_id)
+        self._reset_validation(reweld)
+        try:
+            self._repo.add_operation(reweld)
+            return self._repo.save_operation(reweld)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Нарушение целостности при создании переварки"
+            ) from exc
+
+    def reweld_decision(
+        self,
+        reweld_id: UUID,
+        data: WeldOperationReweldDecisionCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperation:
+        op = self._get_operation_locked(reweld_id)
+        joint = self._require_joint(op.joint_id)
+        self._require_ogs_reviewer(joint, actor_worker_id, "reweld-decision")
+        if op.operation_kind != wow.OPERATION_KIND_REWELD:
+            raise DomainError(
+                409, wc.REWELD_NOT_REWELD, "Операция не является переваркой"
+            )
+        if op.lifecycle_status != "DRAFT":
+            raise DomainError(
+                409,
+                wc.REWELD_NOT_DRAFT,
+                "Решение ОГС допустимо только для черновика переварки",
+            )
+        if op.reweld_decided_by is not None:
+            raise DomainError(
+                409,
+                wc.REWELD_ALREADY_DECIDED,
+                "Решение по переварке уже принято",
+            )
+
+        now = _now()
+        op.reweld_decision_comment = data.comment
+        op.updated_by = actor_worker_id
+        op.record_version += 1
+        if data.decision == wow.REWELD_DECISION_APPROVE:
+            op.reweld_decided_by = actor_worker_id
+            op.reweld_decided_at = now
+        else:
+            # REJECT: черновик отменяется, исходная операция не меняется (§16.3).
+            op.lifecycle_status = "CANCELLED"
+            op.cancelled_by = actor_worker_id
+            op.cancelled_at = now
+            op.cancellation_reason = data.comment
+        try:
+            return self._repo.save_operation(op)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Нарушение целостности при решении по переварке"
+            ) from exc
+
+    def _complete_reweld(
+        self, op: WeldOperation, joint: Joint, *, actor_worker_id: int
+    ) -> WeldOperation:
+        """Завершение переварки: требует решения ОГС и атомарно supersede source."""
+        if op.reweld_decided_by is None:
+            raise DomainError(
+                409,
+                wc.REWELD_DECISION_REQUIRED,
+                "Переварку нельзя завершить без решения ОГС (APPROVE)",
+            )
+        source = self._repo.get_operation_for_update(op.supersedes_operation_id)
+        if source is None:
+            raise NotFoundError("Исходная операция", op.supersedes_operation_id)
+        if source.lifecycle_status != "COMPLETED":
+            raise DomainError(
+                409,
+                wc.SOURCE_NOT_CORRECTABLE,
+                "Исходная операция уже не является действующей завершённой: "
+                f"{source.lifecycle_status}",
+            )
+        self._finalize_completion(op, joint, actor_worker_id)
+        self._link_supersede(source, op, actor_worker_id)
+        try:
+            return self._repo.save_operation(op)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Нарушение целостности при завершении переварки"
+            ) from exc
+
+    @staticmethod
+    def _validate_patch_fields(patch: dict) -> None:
+        """Патч переварки несёт только поля производственного факта (§16.2)."""
+        unknown = set(patch) - set(_WELD_OPERATION_FACT_FIELDS)
+        if unknown:
+            raise ValidationError(
+                "Недопустимые поля переварки: " + ", ".join(sorted(unknown))
+            )
+
+    @staticmethod
+    def _copy_fact_fields(source: WeldOperation, target: WeldOperation) -> None:
+        """Копирует поля производственного факта из исходной операции (§16.2)."""
+        for field in _WELD_OPERATION_FACT_FIELDS:
+            setattr(target, field, getattr(source, field))
 
     # --- отмена черновика (§13.5) ---
 
@@ -2704,3 +2908,880 @@ class WeldOperationService:
             "Недостаточно прав для просмотра истории review ОГС",
         )
         return self._repo.list_ogs_reviews(operation_id)
+
+
+# ── Контекст полей материала Joint для снимков (§8.1) ─────────────────────────
+_JOINT_SNAPSHOT_FIELDS = (
+    "status",
+    "dn_1",
+    "dn_2",
+    "thickness_1",
+    "thickness_2",
+    "material_id_1",
+    "material_id_2",
+    "material_text_1",
+    "material_text_2",
+)
+
+
+def _json_value(value):
+    """Приводит значение поля к JSON-совместимому виду для снимков и diff (§8)."""
+    if value is None:
+        return None
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    return value
+
+
+class WeldOperationCorrectionService:
+    """Контролируемое исправление завершённых операций сварки (Task 8D).
+
+    Единая state machine корректировки: создание со снимком before/after и diff,
+    матрица типов/согласований, submit/approve/return/reject/cancel, атомарное
+    применение с переводом исходной операции в SUPERSEDED/CANCELLED и ручной retry.
+    Переиспользует помощники WeldOperationService (проверка ролей/scope, снимки,
+    завершение и связь predecessor/successor)."""
+
+    def __init__(self, db: Session) -> None:
+        self._db = db
+        self._repo = EngineeringRepo(db)
+        self._ops = WeldOperationService(db)
+
+    # --- чтение ---
+
+    def _get_correction(self, correction_id: UUID) -> WeldOperationCorrection:
+        corr = self._repo.get_correction(correction_id)
+        if corr is None:
+            raise NotFoundError("Корректировка", correction_id)
+        return corr
+
+    def get_correction(self, correction_id: UUID) -> WeldOperationCorrection:
+        return self._get_correction(correction_id)
+
+    def list_corrections(
+        self, operation_id: UUID
+    ) -> list[WeldOperationCorrection]:
+        self._ops.get_operation(operation_id)
+        return self._repo.list_corrections(operation_id)
+
+    # --- версии и роли ---
+
+    @staticmethod
+    def _check_corr_version(corr: WeldOperationCorrection, expected: int) -> None:
+        if expected != corr.record_version:
+            raise VersionConflictError(
+                wc.CORRECTION_VERSION_CONFLICT,
+                expected_version=expected,
+                current_version=corr.record_version,
+            )
+
+    @staticmethod
+    def _check_source_version(source: WeldOperation, expected: int) -> None:
+        if expected != source.record_version:
+            raise VersionConflictError(
+                wc.SOURCE_VERSION_CONFLICT,
+                expected_version=expected,
+                current_version=source.record_version,
+            )
+
+    def _require_smr_actor(self, joint: Joint, worker_id: int, action: str) -> None:
+        self._ops._require_actor(joint, worker_id, action)
+
+    def _require_ogs_actor(self, joint: Joint, worker_id: int, action: str) -> None:
+        self._ops._require_ogs_reviewer(joint, worker_id, action)
+
+    @staticmethod
+    def _is_blank(value: str | None) -> bool:
+        return value is None or not value.strip()
+
+    # --- снимки и diff (§8) ---
+
+    def _build_snapshot(self, op: WeldOperation, joint: Joint) -> dict:
+        """Снимок значимых производственных полей операции + контекст Joint (§8.1).
+
+        Формируется сервером из persisted-состояния; клиент подменить не может."""
+        snap = {name: _json_value(getattr(op, name)) for name in wc.SNAPSHOT_FIELDS}
+        snap["joint_context"] = {
+            "joint_id": str(joint.id),
+            **{
+                name: _json_value(getattr(joint, name, None))
+                for name in _JOINT_SNAPSHOT_FIELDS
+            },
+        }
+        return snap
+
+    @staticmethod
+    def _coerce_patch(patch: dict) -> dict:
+        """Приводит значения patch (JSON-типы) к типам колонок WeldOperation.
+
+        Клиент передаёт UUID/дату/время строками — они должны стать нативными
+        объектами до присвоения ORM. Некорректное значение → 422."""
+        coerced: dict = {}
+        for field, value in patch.items():
+            if value is None:
+                coerced[field] = None
+                continue
+            try:
+                if field in {
+                    "actual_welder_id",
+                    "actual_wps_id",
+                    "production_area_id",
+                }:
+                    coerced[field] = value if isinstance(value, UUID) else UUID(str(value))
+                elif field == "performed_on":
+                    coerced[field] = (
+                        value if isinstance(value, date) else date.fromisoformat(value)
+                    )
+                elif field in {"started_at", "finished_at"}:
+                    coerced[field] = (
+                        value
+                        if isinstance(value, datetime)
+                        else datetime.fromisoformat(value)
+                    )
+                elif field == "responsible_worker_id":
+                    coerced[field] = int(value)
+                elif field == "back_purge":
+                    coerced[field] = bool(value)
+                else:
+                    coerced[field] = value
+            except (ValueError, TypeError) as exc:
+                raise ValidationError(
+                    f"Недопустимое значение поля '{field}' в patch"
+                ) from exc
+        return coerced
+
+    @staticmethod
+    def _validate_patch_for_type(correction_type: str, patch: dict) -> None:
+        """Проверка допустимости полей patch по типу корректировки (§10)."""
+        if correction_type == wc.CANCEL_FALSE_RECORD:
+            if patch:
+                raise DomainError(
+                    422,
+                    wc.CORRECTION_PATCH_NOT_ALLOWED,
+                    "CANCEL_FALSE_RECORD не принимает patch",
+                )
+            return
+        allowed = wc.allowed_patch_fields(correction_type)
+        for field in patch:
+            if field not in wc.PATCHABLE_FIELDS:
+                raise ValidationError(
+                    f"Поле '{field}' нельзя менять корректировкой"
+                )
+            if field not in allowed:
+                if field in wc.CRITICAL_FIELDS:
+                    raise DomainError(
+                        422,
+                        wc.CORRECTION_CRITICAL_FIELD_NOT_ALLOWED,
+                        f"Тип {correction_type} не может менять критическое "
+                        f"поле '{field}'",
+                    )
+                raise DomainError(
+                    422,
+                    wc.CORRECTION_FIELD_NOT_ALLOWED,
+                    f"Тип {correction_type} не допускает изменение поля '{field}'",
+                )
+
+    def _compute_changes(
+        self, source: WeldOperation, coerced_patch: dict
+    ) -> tuple[list[str], dict]:
+        """changed_fields и field_changes (before/after) по фактическим отличиям."""
+        changed: list[str] = []
+        field_changes: dict = {}
+        for field in _WELD_OPERATION_FACT_FIELDS:
+            if field not in coerced_patch:
+                continue
+            new_value = coerced_patch[field]
+            current = getattr(source, field)
+            if current != new_value:
+                changed.append(field)
+                field_changes[field] = {
+                    "before": _json_value(current),
+                    "after": _json_value(new_value),
+                }
+        return changed, field_changes
+
+    # --- создание (§11) ---
+
+    def create_correction(
+        self,
+        operation_id: UUID,
+        data: WeldOperationCorrectionCreate,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperationCorrection:
+        source = self._ops.get_operation(operation_id)
+        joint = self._ops._require_joint(source.joint_id)
+        self._require_smr_actor(joint, actor_worker_id, "create-correction")
+
+        # Исходная операция завершена и доступна для корректировки (§11.4-11.5).
+        if source.lifecycle_status in ("SUPERSEDED", "CANCELLED"):
+            raise DomainError(
+                409,
+                wc.SOURCE_NOT_CORRECTABLE,
+                f"Операция в статусе {source.lifecycle_status} не корректируется",
+            )
+        if source.lifecycle_status != "COMPLETED":
+            raise DomainError(
+                409,
+                wc.SOURCE_NOT_COMPLETED,
+                "Корректировать можно только завершённую операцию (COMPLETED)",
+            )
+        self._check_source_version(source, data.expected_source_record_version)
+
+        # Не более одной активной корректировки на операцию (§12).
+        if self._repo.find_active_correction(source.id) is not None:
+            raise DomainError(
+                409,
+                wc.ACTIVE_CORRECTION_EXISTS,
+                "Для операции уже существует активная корректировка",
+            )
+
+        correction_type = data.correction_type
+        raw_patch = dict(data.patch or {})
+        self._validate_patch_for_type(correction_type, raw_patch)
+        coerced_patch = self._coerce_patch(raw_patch)
+
+        if correction_type == wc.CANCEL_FALSE_RECORD:
+            changed_fields: list[str] = []
+            field_changes: dict = {}
+        else:
+            if "responsible_worker_id" in coerced_patch:
+                self._ops._require_responsible(
+                    joint, coerced_patch["responsible_worker_id"]
+                )
+            if "actual_welder_id" in coerced_patch:
+                self._ops._resolve_welder(coerced_patch["actual_welder_id"])
+            changed_fields, field_changes = self._compute_changes(
+                source, coerced_patch
+            )
+            if not changed_fields:
+                raise DomainError(
+                    422,
+                    wc.CORRECTION_NO_CHANGES,
+                    "Корректировка без фактических изменений недопустима",
+                )
+
+        changed_critical = any(f in wc.CRITICAL_FIELDS for f in changed_fields)
+        impact = wc.compute_impact_level(correction_type, changed_critical)
+        before_snapshot = self._build_snapshot(source, joint)
+
+        corr = WeldOperationCorrection(
+            source_operation_id=source.id,
+            correction_type=correction_type,
+            impact_level=impact,
+            reason=data.reason,
+            changed_fields=changed_fields,
+            before_snapshot=before_snapshot,
+            after_snapshot=None,
+            field_changes=field_changes,
+            source_type=wc.SOURCE_MANUAL,
+            lifecycle_status=wc.CORR_DRAFT,
+            application_status=wc.APP_NOT_READY,
+            record_version=1,
+            application_attempts=0,
+            created_by=actor_worker_id,
+            updated_by=actor_worker_id,
+        )
+        self._apply_approval_requirements(corr)
+
+        # Заменяющий черновик создаётся для всех типов, кроме отмены (§11.13).
+        if wc.creates_replacement(correction_type):
+            replacement = self._create_replacement_draft(
+                source, joint, coerced_patch, actor_worker_id
+            )
+            corr.replacement_operation_id = replacement.id
+            corr.after_snapshot = {**before_snapshot, **self._patch_snapshot(raw_patch)}
+        try:
+            self._repo.add_correction(corr)
+            return self._repo.save_correction(corr)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Нарушение целостности при создании корректировки"
+            ) from exc
+
+    @staticmethod
+    def _patch_snapshot(raw_patch: dict) -> dict:
+        """JSON-представление patch для наложения на before_snapshot (§8.2)."""
+        return {field: _json_value(value) for field, value in raw_patch.items()}
+
+    def _apply_approval_requirements(self, corr: WeldOperationCorrection) -> None:
+        """Первичные требования согласования по типу (§13.4, §14)."""
+        corr.smr_approval_status = wc.SMR_PENDING
+        corr.ogs_review_status = (
+            wc.OGS_PENDING
+            if wc.requires_ogs_review(corr.correction_type)
+            else wc.OGS_NOT_REQUIRED
+        )
+        corr.application_status = wc.APP_NOT_READY
+
+    def _create_replacement_draft(
+        self,
+        source: WeldOperation,
+        joint: Joint,
+        coerced_patch: dict,
+        actor_worker_id: int,
+    ) -> WeldOperation:
+        """Заменяющая операция в DRAFT (§11.13): копия исходной + patch, связанная
+        с корректировкой. До применения не считается производственным фактом."""
+        sequence_no = self._repo.next_weld_operation_sequence(joint.id)
+        replacement = WeldOperation(
+            joint_id=joint.id,
+            sequence_no=sequence_no,
+            lifecycle_status="DRAFT",
+            operation_kind=wow.OPERATION_KIND_STANDARD,
+            supersedes_operation_id=source.id,
+            created_by=actor_worker_id,
+            updated_by=actor_worker_id,
+            record_version=1,
+        )
+        self._ops._copy_fact_fields(source, replacement)
+        for field, value in coerced_patch.items():
+            setattr(replacement, field, value)
+        welder_id = coerced_patch.get("actual_welder_id", source.actual_welder_id)
+        self._ops._apply_welder_snapshot(
+            replacement, self._ops._resolve_welder(welder_id)
+        )
+        self._ops._apply_executor_snapshot(
+            replacement, replacement.responsible_worker_id
+        )
+        self._ops._reset_validation(replacement)
+        return self._repo.add_operation(replacement)
+
+    # --- редактирование черновика (§13.3) ---
+
+    def update_correction(
+        self,
+        correction_id: UUID,
+        data: WeldOperationCorrectionUpdate,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperationCorrection:
+        corr = self._get_correction(correction_id)
+        source = self._ops.get_operation(corr.source_operation_id)
+        joint = self._ops._require_joint(source.joint_id)
+        self._require_smr_actor(joint, actor_worker_id, "update-correction")
+        if corr.lifecycle_status != wc.CORR_DRAFT:
+            raise DomainError(
+                409,
+                wc.CORRECTION_NOT_DRAFT,
+                "Редактирование допустимо только для черновика корректировки",
+            )
+        self._check_corr_version(corr, data.expected_record_version)
+
+        if data.reason is not None:
+            corr.reason = data.reason
+
+        if data.patch is not None:
+            raw_patch = dict(data.patch)
+            self._validate_patch_for_type(corr.correction_type, raw_patch)
+            coerced_patch = self._coerce_patch(raw_patch)
+            if corr.correction_type == wc.CANCEL_FALSE_RECORD:
+                changed_fields, field_changes = [], {}
+            else:
+                if "responsible_worker_id" in coerced_patch:
+                    self._ops._require_responsible(
+                        joint, coerced_patch["responsible_worker_id"]
+                    )
+                if "actual_welder_id" in coerced_patch:
+                    self._ops._resolve_welder(coerced_patch["actual_welder_id"])
+                changed_fields, field_changes = self._compute_changes(
+                    source, coerced_patch
+                )
+                if not changed_fields:
+                    raise DomainError(
+                        422,
+                        wc.CORRECTION_NO_CHANGES,
+                        "Корректировка без фактических изменений недопустима",
+                    )
+            corr.changed_fields = changed_fields
+            corr.field_changes = field_changes
+            corr.impact_level = wc.compute_impact_level(
+                corr.correction_type,
+                any(f in wc.CRITICAL_FIELDS for f in changed_fields),
+            )
+            # Пересобираем replacement draft под новый patch (§13.3).
+            self._rebuild_replacement(corr, source, joint, coerced_patch, actor_worker_id)
+            if corr.replacement_operation_id is not None:
+                corr.after_snapshot = {
+                    **corr.before_snapshot,
+                    **self._patch_snapshot(raw_patch),
+                }
+
+        # Изменение черновика сбрасывает прежние согласования (§14).
+        self._apply_approval_requirements(corr)
+        corr.updated_by = actor_worker_id
+        corr.record_version += 1
+        try:
+            return self._repo.save_correction(corr)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Нарушение целостности при изменении корректировки"
+            ) from exc
+
+    def _rebuild_replacement(
+        self,
+        corr: WeldOperationCorrection,
+        source: WeldOperation,
+        joint: Joint,
+        coerced_patch: dict,
+        actor_worker_id: int,
+    ) -> None:
+        if corr.replacement_operation_id is None:
+            return
+        replacement = self._repo.get_operation(corr.replacement_operation_id)
+        if replacement is None or replacement.lifecycle_status != "DRAFT":
+            return
+        self._ops._copy_fact_fields(source, replacement)
+        for field, value in coerced_patch.items():
+            setattr(replacement, field, value)
+        welder_id = coerced_patch.get("actual_welder_id", source.actual_welder_id)
+        self._ops._apply_welder_snapshot(
+            replacement, self._ops._resolve_welder(welder_id)
+        )
+        self._ops._apply_executor_snapshot(
+            replacement, replacement.responsible_worker_id
+        )
+        self._ops._reset_validation(replacement)
+        replacement.updated_by = actor_worker_id
+        replacement.record_version += 1
+
+    # --- lifecycle команды (§13.4-13.11) ---
+
+    def _require_submitted(self, corr: WeldOperationCorrection) -> None:
+        if corr.lifecycle_status != wc.CORR_SUBMITTED:
+            raise DomainError(
+                409,
+                wc.CORRECTION_INVALID_TRANSITION,
+                "Команда согласования допустима только для SUBMITTED корректировки",
+            )
+
+    def _cancel_replacement(
+        self, corr: WeldOperationCorrection, actor_worker_id: int, reason: str
+    ) -> None:
+        """Перевод заменяющего черновика в CANCELLED (§13.7, §13.10, §13.11)."""
+        if corr.replacement_operation_id is None:
+            return
+        replacement = self._repo.get_operation(corr.replacement_operation_id)
+        if replacement is None or replacement.lifecycle_status != "DRAFT":
+            return
+        replacement.lifecycle_status = "CANCELLED"
+        replacement.cancelled_by = actor_worker_id
+        replacement.cancelled_at = _now()
+        replacement.cancellation_reason = reason
+        replacement.updated_by = actor_worker_id
+        replacement.record_version += 1
+
+    def _load_for_command(
+        self, correction_id: UUID
+    ) -> tuple[WeldOperationCorrection, Joint]:
+        corr = self._get_correction(correction_id)
+        source = self._ops.get_operation(corr.source_operation_id)
+        joint = self._ops._require_joint(source.joint_id)
+        return corr, joint
+
+    def _save(self, corr: WeldOperationCorrection) -> WeldOperationCorrection:
+        try:
+            return self._repo.save_correction(corr)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise ConflictError(
+                "Нарушение целостности при изменении корректировки"
+            ) from exc
+
+    def submit(
+        self,
+        correction_id: UUID,
+        data: CorrectionVersionCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperationCorrection:
+        corr, joint = self._load_for_command(correction_id)
+        self._require_smr_actor(joint, actor_worker_id, "submit-correction")
+        if corr.lifecycle_status != wc.CORR_DRAFT:
+            raise DomainError(
+                409,
+                wc.CORRECTION_INVALID_TRANSITION,
+                "Отправить на согласование можно только черновик",
+            )
+        self._check_corr_version(corr, data.expected_record_version)
+        corr.lifecycle_status = wc.CORR_SUBMITTED
+        self._apply_approval_requirements(corr)
+        corr.submitted_by = actor_worker_id
+        corr.submitted_at = _now()
+        corr.updated_by = actor_worker_id
+        corr.record_version += 1
+        return self._save(corr)
+
+    def smr_approve(
+        self,
+        correction_id: UUID,
+        data: CorrectionOptionalCommentCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperationCorrection:
+        corr, joint = self._load_for_command(correction_id)
+        self._require_smr_actor(joint, actor_worker_id, "smr-approve")
+        self._require_submitted(corr)
+        self._check_corr_version(corr, data.expected_record_version)
+        corr.smr_approval_status = wc.SMR_APPROVED
+        corr.smr_decided_by = actor_worker_id
+        corr.smr_decided_at = _now()
+        corr.smr_comment = None if self._is_blank(data.comment) else data.comment
+        corr.updated_by = actor_worker_id
+        corr.record_version += 1
+        self._recompute_readiness(corr)
+        return self._save(corr)
+
+    def smr_return(
+        self,
+        correction_id: UUID,
+        data: CorrectionCommentCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperationCorrection:
+        corr, joint = self._load_for_command(correction_id)
+        self._require_smr_actor(joint, actor_worker_id, "smr-return")
+        self._require_submitted(corr)
+        self._check_corr_version(corr, data.expected_record_version)
+        corr.smr_approval_status = wc.SMR_RETURNED
+        corr.smr_decided_by = actor_worker_id
+        corr.smr_decided_at = _now()
+        corr.smr_comment = data.comment
+        corr.lifecycle_status = wc.CORR_DRAFT
+        corr.application_status = wc.APP_NOT_READY
+        corr.updated_by = actor_worker_id
+        corr.record_version += 1
+        return self._save(corr)
+
+    def smr_reject(
+        self,
+        correction_id: UUID,
+        data: CorrectionCommentCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperationCorrection:
+        corr, joint = self._load_for_command(correction_id)
+        self._require_smr_actor(joint, actor_worker_id, "smr-reject")
+        self._require_submitted(corr)
+        self._check_corr_version(corr, data.expected_record_version)
+        corr.smr_approval_status = wc.SMR_REJECTED
+        corr.smr_decided_by = actor_worker_id
+        corr.smr_decided_at = _now()
+        corr.smr_comment = data.comment
+        corr.lifecycle_status = wc.CORR_REJECTED
+        corr.application_status = wc.APP_NOT_READY
+        self._cancel_replacement(corr, actor_worker_id, data.comment)
+        corr.updated_by = actor_worker_id
+        corr.record_version += 1
+        return self._save(corr)
+
+    def ogs_accept(
+        self,
+        correction_id: UUID,
+        data: CorrectionOgsAcceptCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperationCorrection:
+        corr, joint = self._load_for_command(correction_id)
+        self._require_ogs_actor(joint, actor_worker_id, "ogs-accept")
+        self._require_submitted(corr)
+        self._require_ogs_needed(corr)
+        self._check_corr_version(corr, data.expected_record_version)
+        if data.decision == wc.OGS_ACCEPTED_WITH_REMARK and self._is_blank(
+            data.comment
+        ):
+            raise DomainError(
+                422,
+                wc.CORRECTION_COMMENT_REQUIRED,
+                "ACCEPTED_WITH_REMARK требует непустого комментария",
+            )
+        corr.ogs_review_status = data.decision
+        corr.ogs_decided_by = actor_worker_id
+        corr.ogs_decided_at = _now()
+        corr.ogs_comment = None if self._is_blank(data.comment) else data.comment
+        corr.updated_by = actor_worker_id
+        corr.record_version += 1
+        self._recompute_readiness(corr)
+        return self._save(corr)
+
+    def ogs_return(
+        self,
+        correction_id: UUID,
+        data: CorrectionCommentCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperationCorrection:
+        corr, joint = self._load_for_command(correction_id)
+        self._require_ogs_actor(joint, actor_worker_id, "ogs-return")
+        self._require_submitted(corr)
+        self._require_ogs_needed(corr)
+        self._check_corr_version(corr, data.expected_record_version)
+        corr.ogs_review_status = wc.OGS_RETURNED
+        corr.ogs_decided_by = actor_worker_id
+        corr.ogs_decided_at = _now()
+        corr.ogs_comment = data.comment
+        corr.lifecycle_status = wc.CORR_DRAFT
+        corr.application_status = wc.APP_NOT_READY
+        corr.updated_by = actor_worker_id
+        corr.record_version += 1
+        return self._save(corr)
+
+    def ogs_reject(
+        self,
+        correction_id: UUID,
+        data: CorrectionCommentCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperationCorrection:
+        corr, joint = self._load_for_command(correction_id)
+        self._require_ogs_actor(joint, actor_worker_id, "ogs-reject")
+        self._require_submitted(corr)
+        self._require_ogs_needed(corr)
+        self._check_corr_version(corr, data.expected_record_version)
+        corr.ogs_review_status = wc.OGS_REJECTED
+        corr.ogs_decided_by = actor_worker_id
+        corr.ogs_decided_at = _now()
+        corr.ogs_comment = data.comment
+        corr.lifecycle_status = wc.CORR_REJECTED
+        corr.application_status = wc.APP_NOT_READY
+        self._cancel_replacement(corr, actor_worker_id, data.comment)
+        corr.updated_by = actor_worker_id
+        corr.record_version += 1
+        return self._save(corr)
+
+    def _require_ogs_needed(self, corr: WeldOperationCorrection) -> None:
+        if not wc.requires_ogs_review(corr.correction_type):
+            raise DomainError(
+                409,
+                wc.CORRECTION_INVALID_TRANSITION,
+                "Для этого типа корректировки review ОГС не требуется",
+            )
+
+    def _recompute_readiness(self, corr: WeldOperationCorrection) -> None:
+        """Автоматический перевод в APPROVED/READY_TO_APPLY при обоих согласованиях
+        (§14). Одного согласования недостаточно."""
+        if corr.lifecycle_status != wc.CORR_SUBMITTED:
+            return
+        if wc.readiness_after_decisions(
+            corr.smr_approval_status, corr.ogs_review_status
+        ):
+            corr.lifecycle_status = wc.CORR_APPROVED
+            corr.application_status = wc.APP_READY
+
+    def cancel(
+        self,
+        correction_id: UUID,
+        data: CorrectionCancelCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperationCorrection:
+        corr, joint = self._load_for_command(correction_id)
+        self._require_smr_actor(joint, actor_worker_id, "cancel-correction")
+        if corr.lifecycle_status == wc.CORR_APPLIED:
+            raise DomainError(
+                409,
+                wc.CORRECTION_ALREADY_APPLIED,
+                "Применённую корректировку нельзя отменить",
+            )
+        if corr.lifecycle_status in (wc.CORR_REJECTED, wc.CORR_CANCELLED):
+            raise DomainError(
+                409,
+                wc.CORRECTION_INVALID_TRANSITION,
+                f"Корректировка уже в терминальном статусе {corr.lifecycle_status}",
+            )
+        self._check_corr_version(corr, data.expected_record_version)
+        corr.lifecycle_status = wc.CORR_CANCELLED
+        corr.cancelled_by = actor_worker_id
+        corr.cancelled_at = _now()
+        corr.cancelled_reason = data.reason
+        corr.application_status = wc.APP_NOT_READY
+        self._cancel_replacement(corr, actor_worker_id, data.reason)
+        corr.updated_by = actor_worker_id
+        corr.record_version += 1
+        return self._save(corr)
+
+    # --- атомарное применение (§15) ---
+
+    def apply(
+        self,
+        correction_id: UUID,
+        data: CorrectionApplyCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperationCorrection:
+        corr = self._repo.get_correction_for_update(correction_id)
+        if corr is None:
+            raise NotFoundError("Корректировка", correction_id)
+        # Идемпотентность: повторный apply уже применённой корректировки возвращает
+        # текущее состояние без изменения данных (§15.4).
+        if corr.lifecycle_status == wc.CORR_APPLIED:
+            return corr
+        source = self._repo.get_operation_for_update(corr.source_operation_id)
+        if source is None:
+            raise NotFoundError("Исходная операция", corr.source_operation_id)
+        joint = self._ops._require_joint(source.joint_id)
+        self._require_smr_actor(joint, actor_worker_id, "apply-correction")
+
+        if corr.lifecycle_status in (wc.CORR_REJECTED, wc.CORR_CANCELLED):
+            raise DomainError(
+                409,
+                wc.CORRECTION_INVALID_TRANSITION,
+                f"Корректировка в статусе {corr.lifecycle_status} не применяется",
+            )
+        self._check_corr_version(corr, data.expected_record_version)
+        self._check_source_version(source, data.expected_source_record_version)
+        if not (
+            corr.lifecycle_status == wc.CORR_APPROVED
+            and corr.application_status == wc.APP_READY
+        ):
+            raise DomainError(
+                409,
+                wc.CORRECTION_NOT_READY,
+                "Корректировка не готова к применению",
+            )
+        self._assert_source_active(source)
+        return self._perform_apply(corr, source, joint, actor_worker_id)
+
+    @staticmethod
+    def _assert_source_active(source: WeldOperation) -> None:
+        if source.lifecycle_status != "COMPLETED" or (
+            source.superseded_by_operation_id is not None
+        ):
+            raise DomainError(
+                409,
+                wc.SOURCE_NOT_CORRECTABLE,
+                "Исходная операция более не является действующей завершённой",
+            )
+
+    def _perform_apply(
+        self,
+        corr: WeldOperationCorrection,
+        source: WeldOperation,
+        joint: Joint,
+        actor_worker_id: int,
+    ) -> WeldOperationCorrection:
+        """До трёх идемпотентных технических попыток атомарной операции (§15.4).
+
+        Успех: применённая замена/отмена в одной транзакции. При технической
+        ошибке — полный откат производственной части, FAILED и счётчик попыток
+        (§15.3). Доменные конфликты (409) пробрасываются без повтора."""
+        corr_id, source_id = corr.id, source.id
+        attempts_made = 0
+        last_error: str | None = None
+        while attempts_made < wc.MAX_APPLICATION_ATTEMPTS:
+            attempts_made += 1
+            try:
+                self._apply_once(corr, source, joint, actor_worker_id)
+                corr.lifecycle_status = wc.CORR_APPLIED
+                corr.application_status = wc.APP_APPLIED
+                corr.applied_by = actor_worker_id
+                corr.applied_at = _now()
+                corr.application_attempts += 1
+                corr.last_application_error = None
+                corr.updated_by = actor_worker_id
+                corr.record_version += 1
+                self._db.commit()
+                self._db.refresh(corr)
+                return corr
+            except HTTPException:
+                # Доменный конфликт (например, гонка состояния source) — без retry.
+                self._db.rollback()
+                raise
+            except Exception as exc:  # noqa: BLE001 — техническая ошибка применения
+                self._db.rollback()
+                last_error = self._safe_error(exc)
+                corr = self._repo.get_correction_for_update(corr_id)
+                source = self._repo.get_operation_for_update(source_id)
+
+        # Все попытки неуспешны: FAILED, источник не тронут (§15.3).
+        corr.application_status = wc.APP_FAILED
+        corr.application_attempts += attempts_made
+        corr.last_application_error = last_error
+        corr.updated_by = actor_worker_id
+        corr.record_version += 1
+        self._db.commit()
+        self._db.refresh(corr)
+        return corr
+
+    def _apply_once(
+        self,
+        corr: WeldOperationCorrection,
+        source: WeldOperation,
+        joint: Joint,
+        actor_worker_id: int,
+    ) -> None:
+        """Мутация одной атомарной попытки без commit (§15.1-15.2)."""
+        # Повторная проверка внутри транзакции (§15.1 #7-9).
+        if source.lifecycle_status != "COMPLETED":
+            raise DomainError(
+                409, wc.SOURCE_NOT_CORRECTABLE, "Исходная операция более не действующая"
+            )
+        if source.superseded_by_operation_id is not None:
+            raise DomainError(
+                409, wc.REPLACEMENT_ALREADY_APPLIED, "Замена уже применена"
+            )
+
+        if corr.correction_type == wc.CANCEL_FALSE_RECORD:
+            source.lifecycle_status = "CANCELLED"
+            source.cancelled_by = actor_worker_id
+            source.cancelled_at = _now()
+            source.cancellation_reason = corr.reason
+            source.updated_by = actor_worker_id
+            source.record_version += 1
+            return
+
+        replacement = self._repo.get_operation_for_update(
+            corr.replacement_operation_id
+        )
+        if replacement is None:
+            raise DomainError(
+                409, wc.CORRECTION_NOT_READY, "Отсутствует заменяющая операция"
+            )
+        if replacement.lifecycle_status != "DRAFT":
+            raise DomainError(
+                409, wc.REPLACEMENT_ALREADY_APPLIED, "Заменяющая операция уже применена"
+            )
+        # Повторный расчёт применимых проверок Task 8B-8C и перевод в COMPLETED.
+        self._ops._finalize_completion(replacement, joint, actor_worker_id)
+        self._ops._link_supersede(source, replacement, actor_worker_id)
+
+    @staticmethod
+    def _safe_error(exc: Exception) -> str:
+        """Безопасное техническое описание без stack trace и секретов (§15.3)."""
+        return f"{type(exc).__name__}: техническая ошибка применения"
+
+    def retry_apply(
+        self,
+        correction_id: UUID,
+        data: CorrectionRetryApplyCommand,
+        *,
+        actor_worker_id: int,
+    ) -> WeldOperationCorrection:
+        corr = self._repo.get_correction_for_update(correction_id)
+        if corr is None:
+            raise NotFoundError("Корректировка", correction_id)
+        source = self._repo.get_operation_for_update(corr.source_operation_id)
+        if source is None:
+            raise NotFoundError("Исходная операция", corr.source_operation_id)
+        joint = self._ops._require_joint(source.joint_id)
+        self._require_ogs_actor(joint, actor_worker_id, "retry-apply")
+        if not (
+            corr.lifecycle_status == wc.CORR_APPROVED
+            and corr.application_status == wc.APP_FAILED
+            and corr.application_attempts >= wc.MAX_APPLICATION_ATTEMPTS
+        ):
+            raise DomainError(
+                409,
+                wc.RETRY_NOT_ALLOWED,
+                "Ручной повтор допустим только после трёх неуспешных попыток",
+            )
+        self._check_corr_version(corr, data.expected_record_version)
+        self._check_source_version(source, data.expected_source_record_version)
+        self._assert_source_active(source)
+        return self._perform_apply(corr, source, joint, actor_worker_id)

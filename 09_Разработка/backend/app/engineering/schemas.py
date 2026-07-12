@@ -23,6 +23,15 @@ from app.engineering.joint_workflow import (
     PendingReason,
     RevisionRole,
 )
+from app.engineering.weld_operation_corrections import (
+    ApplicationStatus,
+    CorrectionLifecycleStatus,
+    CorrectionType,
+    ImpactLevel,
+    OgsReviewStatus as CorrectionOgsReviewStatus,
+    SmrApprovalStatus,
+    SourceType,
+)
 from app.engineering.weld_operation_review import (
     OgsReviewStatus,
     ReasonCode,
@@ -32,7 +41,13 @@ from app.engineering.weld_operation_validation import (
     QualificationValidationStatus,
     WpsValidationStatus,
 )
-from app.engineering.weld_operation_workflow import WeldOperationStatus, WeldStage
+from app.engineering.weld_operation_workflow import (
+    OperationKind,
+    ReweldDecision,
+    ReweldReason,
+    WeldOperationStatus,
+    WeldStage,
+)
 
 DocumentType = Literal["ISOMETRIC", "DRAWING", "WELD_MAP", "OTHER"]
 EngineeringStatus = Literal["DRAFT", "APPROVED", "CANCELLED", "SUPERSEDED"]
@@ -896,6 +911,16 @@ class WeldOperationRead(BaseModel):
     ogs_review_comment: str | None
     ogs_review_reason_codes: list[str]
 
+    # ── Замена и переварка (Task 8D, §6). Клиент эти поля не задаёт — их выставляют
+    # команды корректировки/переварки; трассировка predecessor/successor. ─────────
+    supersedes_operation_id: UUID | None
+    superseded_by_operation_id: UUID | None
+    operation_kind: OperationKind
+    reweld_reason: ReweldReason | None
+    reweld_decision_comment: str | None
+    reweld_decided_by: int | None
+    reweld_decided_at: datetime | None
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def requires_ogs_review(self) -> bool:
@@ -1036,3 +1061,196 @@ class WeldOperationOgsReviewRead(BaseModel):
     decided_by: int
     decided_at: datetime
     created_at: datetime
+
+
+# ── Task 8D: корректировки WeldOperation ──────────────────────────────────────
+# Actor берётся только из X-User-Id (§18): actor-поля в теле запрещены. Снимки,
+# changed_fields, field_changes и impact_level рассчитываются сервером — клиент их
+# не передаёт (§8). patch несёт только разрешённые поля производственного факта.
+
+
+class WeldOperationCorrectionCreate(BaseModel):
+    """Создание корректировки завершённой операции (§11). Для CANCEL_FALSE_RECORD
+    patch должен отсутствовать или быть пустым; для остальных типов — набор
+    разрешённых полей. before/after снимки и diff формирует сервер."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    correction_type: CorrectionType
+    reason: str = Field(min_length=1)
+    patch: dict | None = None
+    expected_source_record_version: int = Field(gt=0)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, v: str) -> str:
+        return _require_reason(v)
+
+
+class WeldOperationCorrectionUpdate(BaseModel):
+    """PATCH черновика корректировки (§13.3): только для DRAFT. Меняются причина и
+    разрешённый patch; сервер заново рассчитывает снимки, diff, impact и
+    требования согласования, а прежние решения сбрасываются."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int = Field(gt=0)
+    reason: str | None = Field(default=None, min_length=1)
+    patch: dict | None = None
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return _require_reason(v)
+
+
+class CorrectionVersionCommand(BaseModel):
+    """Тело команды lifecycle без комментария: только ожидаемая версия (§13.4)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int = Field(gt=0)
+
+
+class CorrectionCommentCommand(BaseModel):
+    """Команда lifecycle с обязательным непустым комментарием (return/reject)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int = Field(gt=0)
+    comment: str = Field(min_length=1)
+
+    @field_validator("comment")
+    @classmethod
+    def _comment_not_blank(cls, v: str) -> str:
+        return _require_non_blank(v)
+
+
+class CorrectionOptionalCommentCommand(BaseModel):
+    """Команда lifecycle с необязательным комментарием (SMR approve)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int = Field(gt=0)
+    comment: str | None = None
+
+
+class CorrectionOgsAcceptCommand(BaseModel):
+    """Принятие корректировки ОГС (§13.8). Для ACCEPTED_WITH_REMARK комментарий
+    обязателен (проверяет сервис)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int = Field(gt=0)
+    decision: Literal["ACCEPTED", "ACCEPTED_WITH_REMARK"] = "ACCEPTED"
+    comment: str | None = None
+
+
+class CorrectionCancelCommand(BaseModel):
+    """Отмена корректировки до применения (§13.11). Причина обязательна."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int = Field(gt=0)
+    reason: str = Field(min_length=1)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, v: str) -> str:
+        return _require_reason(v)
+
+
+class CorrectionApplyCommand(BaseModel):
+    """Атомарное применение корректировки (§15). Проверяет обе версии."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int = Field(gt=0)
+    expected_source_record_version: int = Field(gt=0)
+
+
+class CorrectionRetryApplyCommand(BaseModel):
+    """Ручной повтор применения после трёх неуспешных попыток (§15.5)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_record_version: int = Field(gt=0)
+    expected_source_record_version: int = Field(gt=0)
+
+
+class WeldOperationCorrectionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    source_operation_id: UUID
+    replacement_operation_id: UUID | None
+    correction_type: CorrectionType
+    impact_level: ImpactLevel
+    reason: str
+    changed_fields: list[str]
+    before_snapshot: dict
+    after_snapshot: dict | None
+    field_changes: dict
+    source_type: SourceType
+    lifecycle_status: CorrectionLifecycleStatus
+    smr_approval_status: SmrApprovalStatus
+    ogs_review_status: CorrectionOgsReviewStatus
+    application_status: ApplicationStatus
+    record_version: int
+
+    created_by: int
+    created_at: datetime
+    updated_by: int
+    updated_at: datetime
+    submitted_by: int | None
+    submitted_at: datetime | None
+    smr_decided_by: int | None
+    smr_decided_at: datetime | None
+    smr_comment: str | None
+    ogs_decided_by: int | None
+    ogs_decided_at: datetime | None
+    ogs_comment: str | None
+    applied_by: int | None
+    applied_at: datetime | None
+    application_attempts: int
+    last_application_error: str | None
+    cancelled_by: int | None
+    cancelled_at: datetime | None
+    cancelled_reason: str | None
+
+
+# ── Task 8D: полная переварка (reweld) ────────────────────────────────────────
+
+
+class WeldOperationReweldCreate(BaseModel):
+    """Создание черновика полной переварки (§16.2). Причина и комментарий
+    обязательны; patch несёт данные новой операции поверх копии исходной."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: ReweldReason
+    comment: str = Field(min_length=1)
+    patch: dict | None = None
+    expected_source_record_version: int = Field(gt=0)
+
+    @field_validator("comment")
+    @classmethod
+    def _comment_not_blank(cls, v: str) -> str:
+        return _require_non_blank(v)
+
+
+class WeldOperationReweldDecisionCommand(BaseModel):
+    """Решение ОГС по переварке (§16.3): APPROVE или REJECT. Комментарий
+    обязателен и непуст."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision: ReweldDecision
+    comment: str = Field(min_length=1)
+
+    @field_validator("comment")
+    @classmethod
+    def _comment_not_blank(cls, v: str) -> str:
+        return _require_non_blank(v)

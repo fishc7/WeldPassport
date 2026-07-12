@@ -15,9 +15,11 @@ from app.engineering.models import (
     JointDocumentRevision,
     JointEvent,
     WeldOperation,
+    WeldOperationCorrection,
     WeldOperationOgsReview,
     WeldOperationWelderConfirmation,
 )
+from app.engineering.weld_operation_corrections import ACTIVE_LIFECYCLE_STATUSES
 from app.engineering.schemas import (
     EngineeringDocumentListFilters,
     JointListFilters,
@@ -562,5 +564,78 @@ class EngineeringRepo:
             self.db.query(WeldOperationOgsReview)
             .filter(WeldOperationOgsReview.weld_operation_id == operation_id)
             .order_by(asc(WeldOperationOgsReview.review_version))
+            .all()
+        )
+
+    # --- weld operation corrections (Task 8D) ---
+
+    def get_correction(
+        self, correction_id: UUID
+    ) -> WeldOperationCorrection | None:
+        return (
+            self.db.query(WeldOperationCorrection)
+            .filter(WeldOperationCorrection.id == correction_id)
+            .first()
+        )
+
+    def get_correction_for_update(
+        self, correction_id: UUID
+    ) -> WeldOperationCorrection | None:
+        """Корректировка с блокировкой строки (`FOR UPDATE`) для атомарного
+        применения (§15.1): сериализует конкурентные apply одной корректировки."""
+        return (
+            self.db.query(WeldOperationCorrection)
+            .filter(WeldOperationCorrection.id == correction_id)
+            .with_for_update()
+            .first()
+        )
+
+    def add_correction(
+        self, correction: WeldOperationCorrection
+    ) -> WeldOperationCorrection:
+        """Добавляет корректировку в текущую транзакцию (add + flush, без commit)."""
+        self.db.add(correction)
+        self.db.flush()
+        return correction
+
+    def save_correction(
+        self, correction: WeldOperationCorrection
+    ) -> WeldOperationCorrection:
+        self.db.commit()
+        self.db.refresh(correction)
+        return correction
+
+    def find_active_correction(
+        self, source_operation_id: UUID
+    ) -> WeldOperationCorrection | None:
+        """Активная (DRAFT/SUBMITTED/APPROVED) корректировка исходной операции.
+
+        Не более одной по partial unique index (§12); здесь предварительная
+        проверка перед вставкой, финальная защита — сам индекс."""
+        return (
+            self.db.query(WeldOperationCorrection)
+            .filter(
+                WeldOperationCorrection.source_operation_id == source_operation_id,
+                WeldOperationCorrection.lifecycle_status.in_(
+                    tuple(ACTIVE_LIFECYCLE_STATUSES)
+                ),
+            )
+            .first()
+        )
+
+    def list_corrections(
+        self, source_operation_id: UUID
+    ) -> list[WeldOperationCorrection]:
+        """Полная история корректировок операции (§13.2): включая завершённые и
+        отклонённые. Стабильный порядок — по времени создания."""
+        return (
+            self.db.query(WeldOperationCorrection)
+            .filter(
+                WeldOperationCorrection.source_operation_id == source_operation_id
+            )
+            .order_by(
+                asc(WeldOperationCorrection.created_at),
+                asc(WeldOperationCorrection.id),
+            )
             .all()
         )
