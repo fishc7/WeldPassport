@@ -12,6 +12,11 @@ from sqlalchemy.orm import Session
 from app.engineering.models import (
     DocumentRevision,
     EngineeringDocument,
+    HeatTreatmentBatch,
+    HeatTreatmentDeviation,
+    HeatTreatmentOperation,
+    HeatTreatmentProcedureRevision,
+    HeatTreatmentRecord,
     Joint,
     JointBlock,
     JointBulkRequest,
@@ -183,6 +188,45 @@ def _purge_test_data(db: Session) -> None:
     ]
     if not worker_ids:
         return
+
+    # Термообработка (Task 8F) удаляем раньше стыков/сварочных операций/проектов:
+    # FK heat_treatment_operations → joints/weld_operations и heat_treatment_*
+    # → heat_treatment_batches/procedure_revisions c RESTRICT. Циклы помечены
+    # created_by тестовых workers.
+    ht_batch_ids = [
+        row[0]
+        for row in db.query(HeatTreatmentBatch.id)
+        .filter(HeatTreatmentBatch.created_by.in_(worker_ids))
+        .all()
+    ]
+    if ht_batch_ids:
+        db.query(HeatTreatmentDeviation).filter(
+            HeatTreatmentDeviation.batch_id.in_(ht_batch_ids)
+        ).delete(synchronize_session=False)
+        db.query(HeatTreatmentRecord).filter(
+            HeatTreatmentRecord.batch_id.in_(ht_batch_ids)
+        ).delete(synchronize_session=False)
+        # Самоссылку previous обнуляем (RESTRICT), reason сбрасываем на
+        # AFTER_INITIAL_WELD: обнуление previous у REPEAT_AFTER_REJECTION иначе
+        # нарушило бы CHECK repeat_previous (данные удаляются).
+        db.query(HeatTreatmentOperation).filter(
+            HeatTreatmentOperation.batch_id.in_(ht_batch_ids)
+        ).update(
+            {
+                HeatTreatmentOperation.previous_heat_treatment_operation_id: None,
+                HeatTreatmentOperation.reason: "AFTER_INITIAL_WELD",
+            },
+            synchronize_session=False,
+        )
+        db.query(HeatTreatmentOperation).filter(
+            HeatTreatmentOperation.batch_id.in_(ht_batch_ids)
+        ).delete(synchronize_session=False)
+        db.query(HeatTreatmentBatch).filter(
+            HeatTreatmentBatch.id.in_(ht_batch_ids)
+        ).delete(synchronize_session=False)
+    db.query(HeatTreatmentProcedureRevision).filter(
+        HeatTreatmentProcedureRevision.created_by.in_(worker_ids)
+    ).delete(synchronize_session=False)
 
     # Импорт (Task 8E) удаляем первым: import_provenance/rows/groups/resolutions
     # ссылаются на joints/weld_operations c RESTRICT, но каскадятся от

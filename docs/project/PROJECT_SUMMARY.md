@@ -64,7 +64,7 @@ WeldPassport — внутренняя система для отдела гла�
 [[docs/project/ADR-011-joint-lifecycle-approvals-blocking-scope|ADR-011: жизненный цикл Joint, согласования, блокировки, scope]] ·
 [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012: WeldOperation — неизменяемый производственный факт]].
 
-## Текущий статус архитектуры (2026-07-12)
+## Текущий статус архитектуры (2026-07-13)
 
 - **Architecture Session 003 завершена** — доменная модель Production/Joints MVP
   (ADR-008, решения 003-A — 003-AM).
@@ -72,11 +72,14 @@ WeldPassport — внутренняя система для отдела гла�
   решения 004-01 — 004-27); раздел WeldOperation **частично замещён** ADR-012.
 - **Architecture Session 005 завершена** — канон производственного факта
   `WeldOperation` (решения 005-A — 005-CE, ADR-012).
+- **Architecture Session 006 завершена** — термическая обработка (ADR-014, Task 8F).
 - **Инженерный контур реализован** (Tasks 1–7):
   `Project → Line → EngineeringDocument → DocumentRevision → Joint` (ADR-010/011).
-- **WeldOperation спроектирован, не реализован** — Tasks **8A — 8F**; к Task 8A
-  переходят только после принятия Session 005 и ADR-012.
-- **Импорт Excel** — отложенное отдельное решение (не входит в начальный MVP).
+- **WeldOperation реализован** — Tasks **8A — 8E** (ADR-012, импорт — ADR-013).
+- **Термическая обработка реализована** — Task **8F** (ADR-014):
+  `HeatTreatmentBatch → HeatTreatmentOperation`, карта, документы, отклонения,
+  вычисляемое состояние `Joint`, журнал.
+- **Импорт Excel** — реализован в Task 8E (ADR-013).
 
 План реализации: [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP|Engineering Joints MVP — Implementation Plan]].
 
@@ -170,8 +173,12 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 | Вне Task 8 | Локальный ремонт, `RepairOperation`, полный lifecycle Inspection/НК |
 
 Реализация: Tasks **8A** (Core) · **8B** (допуск и WPS) · **8C** (review ОГС) ·
-**8D** (корректировки) · **8E** (импорт) · **8F** (границы МТО/ОТК/НК) — см.
+**8D** (корректировки) · **8E** (импорт) · **8F** (термическая обработка, ADR-014) — см.
 [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP#Следующий этап — WeldOperation (Session 005)|план]].
+Термическая обработка (Task 8F): один цикл `HeatTreatmentBatch` охватывает
+несколько `Joint` через `HeatTreatmentOperation`; общий и индивидуальный результаты
+ОГС раздельны; принятая термообработка влияет на готовность `Joint`; контроль
+качества — отдельный контур.
 
 > Устаревшие формулировки ADR-009 по WeldOperation (`DRAFT`/`CONFIRMED`/`VOIDED`,
 > этапы `ROOT`/`FILL`/`COVER`, блокировка при отсутствии допуска,

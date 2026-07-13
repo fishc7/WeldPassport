@@ -788,10 +788,32 @@ system_code при неуспехе; финальная регрессия Tasks
 | **8C — OGS Review & Confirmation** | Review ОГС, подтверждение сварщика, раздельные статусы |
 | **8D — Corrections & Supersede** | `WeldOperationCorrection`, атомарное применение, `reweld` |
 | **8E — Import & Conflict Resolution** | Импорт, идемпотентность, конфликты |
-| **8F — Integration Boundaries** | Границы МТО, ОТК, НК; `InspectionApplicabilityDecision` |
+| **8F — Heat Treatment Integration** | Термическая обработка: `HeatTreatmentBatch`/`HeatTreatmentOperation`, карта, документы, отклонения, вычисляемое состояние `Joint`, журнал |
+
+> **Переопределение Task 8F:** ранний план описывал «Integration Boundaries»
+> (границы МТО/ОТК/НК, `InspectionApplicabilityDecision`). Фактически Task 8F
+> реализован как **Heat Treatment Integration** (ADR-014); прежнее наполнение
+> «Integration Boundaries» вынесено в отдельный будущий этап.
+
+**Статус реализации (2026-07-13):** Tasks 8A–8F **реализованы**. Фактические
+компоненты Task 8F:
+
+- **модели** — `HeatTreatmentProcedureRevision`, `HeatTreatmentBatch`,
+  `HeatTreatmentOperation`, `HeatTreatmentRecord`, `HeatTreatmentDeviation`
+  (схема `engineering`, миграция `20260713_14_heat_treatment`);
+- **workflow** — цикл `DRAFT → PLANNED → IN_PROGRESS → COMPLETED → REVIEWED → CLOSED`
+  (+ `CANCELLED`/`REJECTED`), снимок карты, автоматическая проверка;
+- **API** — `heat_treatment_api.py` (циклы, операции, документы, отклонения,
+  журнал, состояние `Joint`);
+- **документы** — `HeatTreatmentRecord` (температурная диаграмма и др.);
+- **отклонения** — `HeatTreatmentDeviation`;
+- **вычисляемое состояние `Joint`** — требование ТО и готовность к зависимым этапам;
+- **read-only журнал** — представление, одна строка = одна `HeatTreatmentOperation`;
+- **тесты** — `tests/test_heat_treatment.py` (40 тестов; регрессия `679 passed`).
 
 **Не входит в Task 8:** локальный ремонт, `RepairOperation`, `Defect`, полный lifecycle
-Inspection / NDTInspection, полноценный МТО, учёт бригад (`Crew`).
+Inspection / NDTInspection, полноценный МТО, учёт бригад (`Crew`). Роль
+`HEAT_TREATMENT_OPERATOR` в Task 8F **не добавлена** (MVP-ограничение, ADR-014).
 
 ---
 
@@ -834,6 +856,7 @@ Inspection / NDTInspection, полноценный МТО, учёт бригад
 - [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009]]
 - [[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010]] (принят — замещает Joint-часть ADR-009)
 - [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012]] (принят — канон WeldOperation, Tasks 8A — 8F)
+- [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014]] (принят — термическая обработка, Task 8F)
 - [[docs/ARCHITECTURE#5.3. Физическая модель БД и API Production/Joints MVP (Session 004)|ARCHITECTURE §5.3]]
 
-*Версия плана: 2026-07-12 (Task 7 закрыт; добавлены Tasks 8A — 8F по Session 005 / ADR-012). Задач: 8 завершённых (1–4, 5A, 5B, 6, 7) + 6 запланированных (8A — 8F). Ветка: feature/engineering-joints-mvp.*
+*Версия плана: 2026-07-13 (Tasks 8A–8F реализованы; Task 8F — Heat Treatment Integration по ADR-014). Задач: 14 реализованных (1–4, 5A, 5B, 6, 7, 8A–8F). Ветка: feature/engineering-joints-mvp.*

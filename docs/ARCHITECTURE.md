@@ -360,8 +360,9 @@ ADR-010, ADR-011. Канон `WeldOperation` — §5.4.
 **WPS:** план на `Joint`, факт на `WeldOperation`; после первой завершённой операции
 смена WPS — только через технологическую ревизию.
 
-**Границы интеграции:** МТО (материалы — временная ручная фиксация), ОТК/НК
-(`InspectionApplicabilityDecision` при замене операции) — Task 8F.
+**Границы интеграции:** МТО (материалы — временная ручная фиксация); термическая
+обработка реализована в Task 8F (§5.6, ADR-014); ОТК/НК
+(`InspectionApplicabilityDecision` при замене операции) — отдельный будущий этап.
 
 > Устаревшие формулировки ADR-009 (Session 004) по WeldOperation — единый статус
 > `DRAFT`/`CONFIRMED`/`VOIDED`, этапы `ROOT`/`FILL`/`COVER`, блокировка создания при
@@ -416,6 +417,54 @@ ImportProvenance
 (SHA-256) через абстракцию `FileStorage`. Провенанс хранится отдельно
 (`ImportProvenance`), import-поля в `Joint`/`WeldOperation` не добавляются. Физическая
 модель — 11 таблиц схемы `engineering` (миграция `20260712_13_import_pipeline`).
+
+### 5.6. Термическая обработка: HeatTreatmentBatch / HeatTreatmentOperation (Task 8F, ADR-014)
+
+Канон: [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014]].
+
+Термическая обработка — фактическое тепловое воздействие, привязанное к цепочке
+производства и последующему контролю:
+
+```text
+WeldOperation
+      ↓ (актуальность)
+HeatTreatmentBatch  ── procedure_snapshot ← HeatTreatmentProcedureRevision
+      ↓
+HeatTreatmentOperation  → Joint
+      ↓
+последующий контроль (отдельный контур, не входит в Task 8F)
+```
+
+Ключевые правила:
+
+| Правило | Суть |
+| --- | --- |
+| Две сущности | `HeatTreatmentBatch` — общий фактический цикл; `HeatTreatmentOperation` — участие одного `Joint` в цикле |
+| Обязательность Joint | `HeatTreatmentOperation` **обязательно** относится к одному `Joint`; `UNIQUE(batch_id, joint_id)` |
+| Несколько стыков | один цикл может охватывать несколько `Joint` |
+| Технологическая карта | цикл до запуска связан с утверждённой `HeatTreatmentProcedureRevision`; при старте берётся неизменяемый снимок требований; после старта состав и карта блокируются |
+| Ссылка на WeldOperation | опциональна; используется для определения **актуальности** результата относительно актуальной завершённой `WeldOperation` |
+| История | повторная термообработка — новый цикл и новая операция со ссылкой на предыдущую; прежние записи не переписываются |
+| Актуальность | новая сварка/ремонт не удаляет прежний результат, но делает его неактуальным (вычисляемо) |
+| Раздельные результаты | общий результат цикла (`review_result`) и индивидуальный результат по `Joint` учитываются раздельно |
+| Готовность Joint | зависимый контроль/закрытие доступны только при принятой актуальной термообработке (для стыков, где ТО требуется) |
+| Журнал | отчётное представление; одна строка = одна `HeatTreatmentOperation` |
+| Контроль качества | **не входит** в Task 8F (отдельный контур) |
+
+Роли (существующий канон): результат принимает `OGS_ENGINEER`/`CHIEF_WELDER`;
+исполнители цикла — `MASTER`/`FOREMAN`/`CHIEF_WELDER`; ОТК (`OTK_INSPECTOR`) —
+просмотр и регистрация отклонений без принятия результата. Отдельная роль
+`HEAT_TREATMENT_OPERATOR` **отложена** (MVP-ограничение, ADR-014).
+
+Физическая модель — 5 таблиц схемы `engineering` (миграция
+`20260713_14_heat_treatment`): `heat_treatment_procedure_revisions`,
+`heat_treatment_batches`, `heat_treatment_operations`, `heat_treatment_records`,
+`heat_treatment_deviations`.
+
+> Расхождение с ранним планом: ADR-008/009 размещали термообработку в схеме
+> `production` единой сущностью `HeatTreatmentOperation`; фактически реализовано в
+> схеме `engineering` и разделено на `HeatTreatmentBatch` +
+> `HeatTreatmentOperation` (ADR-014).
 
 ## 6. Ключевые правила модели данных
 
