@@ -62,7 +62,9 @@ WeldPassport — внутренняя система для отдела гла�
 [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009: физическая модель БД и API Production/Joints MVP]] ·
 [[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010: расширенная модель Joint, двойное согласование]] ·
 [[docs/project/ADR-011-joint-lifecycle-approvals-blocking-scope|ADR-011: жизненный цикл Joint, согласования, блокировки, scope]] ·
-[[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012: WeldOperation — неизменяемый производственный факт]].
+[[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012: WeldOperation — неизменяемый производственный факт]] ·
+[[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014: термическая обработка]] ·
+[[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015: контроль качества и НК]].
 
 ## Текущий статус архитектуры (2026-07-13)
 
@@ -73,6 +75,10 @@ WeldPassport — внутренняя система для отдела гла�
 - **Architecture Session 005 завершена** — канон производственного факта
   `WeldOperation` (решения 005-A — 005-CE, ADR-012).
 - **Architecture Session 006 завершена** — термическая обработка (ADR-014, Task 8F).
+- **Architecture Session 007 завершена** — канон контроля качества и НК (ADR-015,
+  решения 007-01 — 007-27); **канон принят, реализация запланирована** (Tasks 9A — 9G
+  — следующий этап; код/миграции не создавались). Отложена только детальная реализация
+  импорта результатов НК — до Architecture Session 008.
 - **Инженерный контур реализован** (Tasks 1–7):
   `Project → Line → EngineeringDocument → DocumentRevision → Joint` (ADR-010/011).
 - **WeldOperation реализован** — Tasks **8A — 8E** (ADR-012, импорт — ADR-013).
@@ -80,6 +86,8 @@ WeldPassport — внутренняя система для отдела гла�
   `HeatTreatmentBatch → HeatTreatmentOperation`, карта, документы, отклонения,
   вычисляемое состояние `Joint`, журнал.
 - **Импорт Excel** — реализован в Task 8E (ADR-013).
+- **Контроль качества и НК** — канон зафиксирован (ADR-015), реализация — Tasks
+  **9A — 9G** (ещё не начата).
 
 План реализации: [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP|Engineering Joints MVP — Implementation Plan]].
 
@@ -183,6 +191,27 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 > Устаревшие формулировки ADR-009 по WeldOperation (`DRAFT`/`CONFIRMED`/`VOIDED`,
 > этапы `ROOT`/`FILL`/`COVER`, блокировка при отсутствии допуска,
 > `replaces_operation_id`, ремонт как часть `WeldOperation`) **замещены ADR-012**.
+
+## Контроль качества и НК (ADR-015, канон принят — реализация запланирована)
+
+Канон зафиксирован в
+[[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Architecture Session 007]].
+Основной инициатор заявки на контроль — **ОГС**.
+
+| Принцип | Суть |
+|---------|------|
+| Контур | `Joint → Inspection → назначение методов → выполнение → технические результаты → ОТК → решение ОГС → состояние Joint → журнал` |
+| Inspection | Заявка/мероприятие для одного `Joint` либо утверждённой групповой выборки (`InspectionSample`) |
+| Разделение | Технический результат лаборатории (`InspectionMethodResult`) и решение ОГС (`InspectionDecision`) — **раздельно** |
+| Методы | `VT`/`RT`/`UT`/`PT`/`MT`; `NdtLaboratoryProfile` через `project_companies` role `ndt_lab` |
+| Состояние Joint | Вычисляемое `inspection_state`; основной lifecycle `Joint` не переписывается |
+| Связь с ТО | Обязательный контроль после термообработки — связь `Inspection ↔ HeatTreatmentOperation` (ADR-014) |
+| Реализация | Tasks **9A — 9G** (ещё не начата); код/миграции не создавались |
+
+> **Граница с Architecture Session 008.** Импорт результатов контроля (XLSX, CSV,
+> PDF, API лаборатории) в Session 007 зафиксирован **только как интеграционное
+> требование верхнего уровня** (импорт не принимает результат автоматически).
+> Детальная архитектура импорта — будущая **Architecture Session 008**.
 
 ## Ключевые проектные файлы
 

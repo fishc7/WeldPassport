@@ -817,6 +817,66 @@ Inspection / NDTInspection, полноценный МТО, учёт бригад
 
 ---
 
+## Следующий этап — Контроль качества и НК (Session 007)
+
+> **Предусловие:** к Task 9A переходят **только после** принятия
+> [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Architecture Session 007]]
+> и [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]].
+> На Session 007 **код, миграции и тесты не создавались**; детальное ТЗ Task 9A в
+> этом документе **не раскрывается**.
+
+Канон: Session 007 (решения 007-01 — 007-27) · ADR-015. Основной инициатор заявки на
+контроль — **ОГС**. Контур:
+`Joint → Inspection → назначение методов → выполнение → технические результаты →
+проверка ОТК → решение ОГС → состояние Joint → журнал контроля`.
+
+| Task | Содержание |
+|------|-----------|
+| **9A — Inspection Core** | `Inspection`, нумерация (`<PROJECT_CODE>-INS-<SEQUENCE>`), связь с `Joint`, lifecycle, готовность `Joint`, permissions/scope, базовый `Joint.inspection_state` |
+| **9B — Method Assignment and Laboratory** | методы (`VT`/`RT`/`UT`/`PT`/`MT`), `NdtLaboratoryProfile`, `InspectionMethodAssignment`, сроки, приоритет, основания, проверки лаборатории |
+| **9C — Method Execution and Results** | `InspectionMethodExecution`, `InspectionMethodResult`, фактические даты, повторные выполнения, проверка ОТК, версионирование результатов |
+| **9D — OGS Decisions and Joint State** | `InspectionDecision`, системная рекомендация, решения ОГС, исключения `CHIEF_WELDER`, автоматическое закрытие, состояния `Joint` |
+| **9E — Coverage, Samples and Defect Integration** | `InspectionCoverage`, `InspectionSample`, групповые выборки, `Defect`, только точки интеграции с ремонтом |
+| **9F — Reports and Evidence** | `InspectionReport`, `InspectionEvidence`, файлы, object storage, подписанные ссылки, RBAC, rate limit |
+| **9G — Journals and Document Packages** | журнал, XLSX/PDF/CSV/JSON, снимки, пакеты, версии, публикация |
+
+**Согласованность:** готовность и актуальность результатов опираются на актуальную
+завершённую `WeldOperation` (ADR-012); `reweld` → новый `Inspection`; обязательный
+контроль после термообработки — связь `Inspection ↔ HeatTreatmentOperation`
+(ADR-014). `Joint.inspection_state` **вычисляется** и не переписывает основной
+lifecycle `Joint`.
+
+**Историческая совместимость (ADR-015):**
+
+- результаты `PASS`/`FAIL`/`CONDITIONAL` из ADR-009 — исторический проектный вариант;
+  канонические технические результаты `InspectionMethodResult` —
+  `CONFORMING`/`NONCONFORMING`/`INCONCLUSIVE`/`NOT_PERFORMED`. Отдельная миграция
+  старых значений сейчас не требуется (контур не реализован); при **Task 9C** сначала
+  проверить наличие реальных таблиц и данных и только при их наличии проектировать
+  миграцию;
+- прежняя схема `quality.defects` (ADR-009) — предварительный черновик; канон:
+  `индикация лаборатории → подтверждение и классификация ОТК → Defect → решение ОГС`;
+  полный ремонтный lifecycle — вне **Task 9E**;
+- роль: бизнес-наименование `WELDING_ENGINEER`, технический `role_code` —
+  `OGS_ENGINEER`; новый `role_code` не вводится.
+
+**Не входит в Session 007 (вне Tasks 9A — 9G):** полный ремонтный lifecycle,
+`RepairOperation`, `Reweld`, полная аттестация дефектоскопистов, полный реестр
+оборудования НК, полная модель аккредитации лабораторий.
+
+> **Граница с Architecture Session 008.** Импорт результатов контроля (XLSX, CSV, PDF,
+> API лаборатории) в Session 007 зафиксирован **только как интеграционное требование
+> верхнего уровня**: импорт **не может автоматически принимать результат**. Детальная
+> архитектура импорта результатов НК (форматы, разбор протоколов, PDF-извлечение, API
+> лабораторий, staging/сопоставление/конфликты/провенанс, ручное подтверждение)
+> проектируется в будущей **Architecture Session 008** и в Tasks 9A — 9G **не входит**.
+
+**Статус реализации (2026-07-13):** Tasks 9A — 9G **запланированы** как следующий этап,
+ещё не начаты (канон ADR-015 принят, код/миграции/тесты не создавались). Отложена
+только детальная реализация импорта результатов НК — до Architecture Session 008.
+
+---
+
 ## Самопроверка плана
 
 | # | Критерий | Статус |
@@ -857,6 +917,8 @@ Inspection / NDTInspection, полноценный МТО, учёт бригад
 - [[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010]] (принят — замещает Joint-часть ADR-009)
 - [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012]] (принят — канон WeldOperation, Tasks 8A — 8F)
 - [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014]] (принят — термическая обработка, Task 8F)
+- [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Session 007]] (контроль качества и НК)
+- [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] (принят — канон контроля/НК, Tasks 9A — 9G — реализация запланирована)
 - [[docs/ARCHITECTURE#5.3. Физическая модель БД и API Production/Joints MVP (Session 004)|ARCHITECTURE §5.3]]
 
-*Версия плана: 2026-07-13 (Tasks 8A–8F реализованы; Task 8F — Heat Treatment Integration по ADR-014). Задач: 14 реализованных (1–4, 5A, 5B, 6, 7, 8A–8F). Ветка: feature/engineering-joints-mvp.*
+*Версия плана: 2026-07-13 (Tasks 8A–8F реализованы; Task 8F — Heat Treatment Integration по ADR-014; Tasks 9A–9G — канон контроля/НК по ADR-015, реализация запланирована). Задач: 14 реализованных (1–4, 5A, 5B, 6, 7, 8A–8F) + 7 запланированных (9A–9G). Ветка: feature/engineering-joints-mvp.*

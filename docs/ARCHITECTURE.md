@@ -466,6 +466,71 @@ HeatTreatmentOperation  → Joint
 > схеме `engineering` и разделено на `HeatTreatmentBatch` +
 > `HeatTreatmentOperation` (ADR-014).
 
+### 5.7. Контроль качества и НК: Inspection и рабочий процесс контроля (Session 007, ADR-015)
+
+Канон: [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]].
+**Статус:** канон принят, **реализация запланирована** (Tasks 9A — 9G — следующий
+этап; код/миграции не создавались). Отложена только детальная реализация импорта
+результатов НК — до Architecture Session 008.
+
+Контроль качества и НК моделируется как заявка/контрольное мероприятие `Inspection`
+с раздельными техническим результатом лаборатории и технологическим решением ОГС.
+Основной инициатор заявки — **ОГС**. Поток:
+
+```text
+Joint  (требуемый контроль: обязательные методы, объём, основание)
+  ↓  готовность: расчёт системы → фиксация СМР → подтверждение ОГС
+Inspection  (DRAFT → REQUESTED → ASSIGNED → IN_PROGRESS → COMPLETED → REVIEWED → CLOSED)
+  ├── InspectionMethodAssignment      (метод, объём, срок, приоритет, лаборатория, основание)
+  │     └── InspectionMethodExecution (первичное / повтор / доп. зона)
+  │           ├── InspectionMethodResult  (CONFORMING/NONCONFORMING/INCONCLUSIVE/NOT_PERFORMED)
+  │           ├── InspectionCoverage       (зона частичного контроля)
+  │           └── InspectionEvidence       (снимки, УЗК, фото ВИК, схемы)
+  ├── InspectionReport   (протокол/заключение; DRAFT → ISSUED → VERIFIED)
+  ├── InspectionDecision (решение ОГС: RESULT / INSPECTION)
+  └── Defect             (индикация → подтверждение ОТК → решение ОГС)
+  ↓
+Joint.inspection_state (вычисляемо)
+  ↓
+Журнал контроля (представление; снимки закрытых периодов)
+```
+
+Ключевые правила:
+
+| Правило | Суть |
+| --- | --- |
+| Inspection | Заявка/мероприятие для одного `Joint` либо утверждённой `InspectionSample`; инициатор — ОГС |
+| Разделение результата и решения | Технический результат лаборатории (`InspectionMethodResult`) и технологическое решение ОГС (`InspectionDecision`) — **раздельны**; лаборатория фиксирует, ОТК → `VERIFIED`, ОГС принимает решение |
+| Назначение и выполнение | `InspectionMethodAssignment` → несколько `InspectionMethodExecution` (первичное, повтор, доп. зона, повторная попытка) |
+| Методы | `VT`/`RT`/`UT`/`PT`/`MT`; ВИК — в общем контуре `Inspection`; коды методов неизменяемы |
+| Требуемый ↔ назначенный | Требуемый контроль на `Joint` и назначенный в `InspectionMethodAssignment` разделены; отклонение — только с обоснованием ОГС; задним числом не пересчитывается |
+| Отчёты и материалы | `InspectionReport` (может включать несколько `Joint`/методов); `InspectionEvidence` — первичные материалы; предварительный отчёт не закрывает контроль |
+| Дефект | Лаборатория фиксирует индикацию; ОТК подтверждает/классифицирует; ОГС решает; полный ремонтный lifecycle — отдельный контур |
+| Лаборатория НК | `NdtLaboratoryProfile` через `project_companies` role `ndt_lab`; `Company` остаётся юрлицом |
+| Состояние Joint | Вычисляемое `inspection_state` (`NOT_REQUIRED`/`PENDING`/`IN_PROGRESS`/`PASSED`/`FAILED`/`REPAIR_REQUIRED`/`REINSPECTION_REQUIRED`); `PASSED` — только после принятых результатов по всем обязательным методам |
+| Связь с ТО | Обязательный контроль после термообработки — явная связь `Inspection ↔ HeatTreatmentOperation` (ADR-014) |
+| Повторный контроль | Без ремонта — внутри того же `Inspection`; после ремонта/переварки — новый `Inspection` |
+| Нумерация | `<PROJECT_CODE>-INS-<SEQUENCE>` + внешние номера ОГС и лаборатории |
+| Файлы | Метаданные + checksum в PostgreSQL, файлы — в объектном хранилище; подписанные ссылки; rate limit → `429` + `Retry-After` |
+| Журнал | Представление из канонических сущностей (XLSX/PDF/CSV/JSON); снимки закрытых периодов неизменяемы |
+
+Роли (существующий канон, новых role_code нет): ОГС/`WELDING_ENGINEER`
+(`OGS_ENGINEER`) — создание, методы, лаборатория, решения; ОТК (`OTK_INSPECTOR`) —
+проверка результатов, подтверждение дефектов, контрольная часть; лаборатория НК —
+выполнение, результаты, отчёты, материалы; `CHIEF_WELDER` — критические исключения;
+СМР — готовность; ПТО — требования и получение отчётов/журналов.
+
+**Согласованность:** готовность и актуальность результатов опираются на актуальную
+завершённую `WeldOperation` (ADR-012); `reweld` порождает новый `Inspection`;
+локальный ремонт и `RepairOperation` остаются отдельным контуром. Обязательный
+контроль после ТО связывает `Inspection` с `HeatTreatmentOperation` (ADR-014).
+
+**Граница с Architecture Session 008.** Импорт результатов контроля (XLSX, CSV, PDF,
+API лаборатории) зафиксирован **только как интеграционное требование верхнего
+уровня**: импорт **не может автоматически принимать результат**. Детальная
+архитектура импорта результатов НК проектируется в будущей **Architecture Session
+008** и в Session 007/ADR-015 не раскрывается.
+
 ## 6. Ключевые правила модели данных
 
 ### Разделять человека и системного пользователя
@@ -998,7 +1063,7 @@ backend или оставить отдельным слоём до миграц�
 ## Связанные документы
 
 - [[docs/00_PROJECT_CONTEXT|Контекст проекта]] — назначение, жизненный цикл, 7 модулей
-- [[docs/project/DECISIONS|Журнал решений (ADR)]] — [[docs/project/DECISIONS#ADR-001. Модель организаций и проектов|ADR-001]] · [[docs/project/ADR-002-double-welder-accounting|ADR-002: двойной учёт сварщика]] · [[docs/project/DECISIONS#ADR-003. Исключение модуля нормирования из активного MVP|ADR-003: нормирование в backlog]] · [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007: жизненный цикл стыка]] · [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008: каноническая модель предметной области]] · [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009: физическая модель БД и API]] · [[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010: Joint MVP]] · [[docs/project/DECISIONS#ADR-011. Жизненный цикл Joint, согласования, блокировки и контроль областей|ADR-011: lifecycle Joint]] · [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012: WeldOperation]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 004|Session 004]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 005|Session 005]]
+- [[docs/project/DECISIONS|Журнал решений (ADR)]] — [[docs/project/DECISIONS#ADR-001. Модель организаций и проектов|ADR-001]] · [[docs/project/ADR-002-double-welder-accounting|ADR-002: двойной учёт сварщика]] · [[docs/project/DECISIONS#ADR-003. Исключение модуля нормирования из активного MVP|ADR-003: нормирование в backlog]] · [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007: жизненный цикл стыка]] · [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008: каноническая модель предметной области]] · [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009: физическая модель БД и API]] · [[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010: Joint MVP]] · [[docs/project/DECISIONS#ADR-011. Жизненный цикл Joint, согласования, блокировки и контроль областей|ADR-011: lifecycle Joint]] · [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012: WeldOperation]] · [[docs/project/DECISIONS#ADR-013. Импорт XLSX и разрешение конфликтов (Task 8E)|ADR-013: импорт XLSX]] · [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014: термическая обработка]] · [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015: контроль и НК]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 004|Session 004]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 005|Session 005]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 006|Session 006]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Session 007]]
 - [[03_База_данных/Модель_организаций_и_проектов|Модель организаций и проектов]] · [[03_База_данных/WeldPassport_Реестр_сущностей_БД_v0.1|Реестр сущностей БД]]
 - [[05_Роли_и_права/00_Ролевая_цепочка_ответственности|Ролевая цепочка ответственности]] · [[02_Процессы/WeldPassport_Процессы_v0.1|Процессы v0.1]]
 - [[10_Проектирование_WeldPassport/03_Работники_и_сварщики/01_Модель_данных_Работники_и_сварщики_v0.1|Модель данных: работники и сварщики]] · [[10_Проектирование_WeldPassport/03_Работники_и_сварщики/02_План_реализации_Работники_и_сварщики_v0.1|План реализации]]
