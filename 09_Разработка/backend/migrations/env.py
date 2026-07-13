@@ -12,6 +12,7 @@ import app.engineering.models  # noqa: F401
 import app.engineering.import_models  # noqa: F401
 import app.hr.models  # noqa: F401
 import app.projects.models  # noqa: F401
+import app.quality.models  # noqa: F401
 import app.welding.models  # noqa: F401
 import app.workforce.models  # noqa: F401
 
@@ -65,6 +66,12 @@ ENGINEERING_MANAGED_TABLES = {
     "weld_operation_ogs_reviews",
 }
 
+QUALITY_MANAGED_TABLES = {
+    "inspections",
+    "inspection_sequences",
+    "inspection_events",
+}
+
 
 def include_object(obj, name, type_, reflected, compare_to):
     if type_ == "table":
@@ -77,6 +84,8 @@ def include_object(obj, name, type_, reflected, compare_to):
             return name in PROJECT_MANAGED_TABLES
         if schema == "engineering":
             return name in ENGINEERING_MANAGED_TABLES
+        if schema == "quality":
+            return name in QUALITY_MANAGED_TABLES
         return name in WORKFORCE_MANAGED_TABLES
     return True
 
@@ -108,7 +117,7 @@ def run_migrations_online() -> None:
         cursor = dbapi_connection.cursor()
         cursor.execute(
             f'SET search_path TO "{settings.postgres_schema}", '
-            "project, engineering, hr, welding, public"
+            "project, engineering, hr, welding, quality, public"
         )
         cursor.close()
 

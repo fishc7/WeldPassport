@@ -86,8 +86,14 @@ WeldPassport — внутренняя система для отдела гла�
   `HeatTreatmentBatch → HeatTreatmentOperation`, карта, документы, отклонения,
   вычисляемое состояние `Joint`, журнал.
 - **Импорт Excel** — реализован в Task 8E (ADR-013).
-- **Контроль качества и НК** — канон зафиксирован (ADR-015), реализация — Tasks
-  **9A — 9G** (ещё не начата).
+- **Контроль качества и НК** — канон зафиксирован (ADR-015). **Task 9A —
+  Inspection Core реализована и принята** (миграция `20260713_15_inspection_core`):
+  модуль `app/quality`, сущности `Inspection`, `InspectionSequence`,
+  `InspectionEvent`; lifecycle `DRAFT → REQUESTED → CANCELLED`, подтверждение
+  готовности СМР, готовность ОГС, override главного сварщика, optimistic locking,
+  идемпотентное создание, readiness `Joint` и вычисляемое `Joint.inspection_state`;
+  регрессия **791 passed**. Tasks **9B — 9G** — не начаты; логика импорта
+  результатов НК (Architecture Session 008) отсутствует.
 
 План реализации: [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP|Engineering Joints MVP — Implementation Plan]].
 
@@ -192,7 +198,7 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 > этапы `ROOT`/`FILL`/`COVER`, блокировка при отсутствии допуска,
 > `replaces_operation_id`, ремонт как часть `WeldOperation`) **замещены ADR-012**.
 
-## Контроль качества и НК (ADR-015, канон принят — реализация запланирована)
+## Контроль качества и НК (ADR-015; Task 9A реализован, 9B–9G запланированы)
 
 Канон зафиксирован в
 [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Architecture Session 007]].

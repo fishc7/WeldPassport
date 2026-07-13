@@ -185,10 +185,13 @@ def joint_to_read(
     *,
     available_actions: list[str] | None = None,
     is_blocked: bool = False,
+    inspection_state: str = "NOT_REQUIRED",
 ) -> JointRead:
     """Собирает ответ с вычисляемыми полями (не колонки БД).
 
     `version` сохранён как зеркало record_version (обратная совместимость Task 5A).
+    `inspection_state` (Task 9A, §17) вычисляется вызывающим кодом (батч для
+    списков — без N+1) и передаётся сюда; по умолчанию NOT_REQUIRED.
     """
     missing = missing_welding_requirements(joint)
     columns = {c.name: getattr(joint, c.name) for c in Joint.__table__.columns}
@@ -201,6 +204,7 @@ def joint_to_read(
         requires_review=_requires_review(joint),
         is_blocked=is_blocked,
         available_actions=available_actions or [],
+        inspection_state=inspection_state,
     )
 
 
@@ -637,12 +641,22 @@ class EngineeringService:
             filters.joint_no_normalized = normalize_joint_no(filters.joint_no)
         total = self._repo.count_joints(filters)
         items = self._repo.list_joints(filters)
-        # is_blocked — одним агрегатным запросом (без N+1). available_actions в
-        # массовых списках не считается (§23 ADR-011).
-        blocked = self._repo.blocked_joint_ids([joint.id for joint in items])
+        # is_blocked и inspection_state — агрегатными запросами по всему набору
+        # (без N+1). available_actions в массовых списках не считается (§23 ADR-011).
+        joint_ids = [joint.id for joint in items]
+        blocked = self._repo.blocked_joint_ids(joint_ids)
+        # Ленивый импорт: quality → engineering (модели), обратная зависимость
+        # только на уровне вызова, чтобы не создавать цикл импорта модулей.
+        from app.quality.services import inspection_states_for_joints
+
+        inspection_states = inspection_states_for_joints(self._db, joint_ids)
         return JointListResponse(
             items=[
-                joint_to_read(joint, is_blocked=joint.id in blocked)
+                joint_to_read(
+                    joint,
+                    is_blocked=joint.id in blocked,
+                    inspection_state=inspection_states.get(joint.id, "NOT_REQUIRED"),
+                )
                 for joint in items
             ],
             total=total,
@@ -1020,7 +1034,16 @@ class EngineeringService:
             has_active_block=is_blocked,
             actor_roles=roles,
         )
-        return joint_to_read(joint, available_actions=actions, is_blocked=is_blocked)
+        # Ленивый импорт (quality → engineering): вычисляемое inspection_state (§17).
+        from app.quality.services import inspection_state_for_joint
+
+        inspection_state = inspection_state_for_joint(self._db, joint.id)
+        return joint_to_read(
+            joint,
+            available_actions=actions,
+            is_blocked=is_blocked,
+            inspection_state=inspection_state,
+        )
 
     def list_blocks(self, joint_id: UUID) -> list[JointBlock]:
         self.get_joint(joint_id)

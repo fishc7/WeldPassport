@@ -871,9 +871,32 @@ lifecycle `Joint`.
 > лабораторий, staging/сопоставление/конфликты/провенанс, ручное подтверждение)
 > проектируется в будущей **Architecture Session 008** и в Tasks 9A — 9G **не входит**.
 
-**Статус реализации (2026-07-13):** Tasks 9A — 9G **запланированы** как следующий этап,
-ещё не начаты (канон ADR-015 принят, код/миграции/тесты не создавались). Отложена
-только детальная реализация импорта результатов НК — до Architecture Session 008.
+**Статус реализации (2026-07-13):**
+
+- **Task 9A — Inspection Core — реализована и принята.** Миграция
+  `20260713_15_inspection_core` (down_revision `20260713_14_heat_treatment`; один
+  Alembic head). Отдельный модуль `app/quality`, схема `quality`, сущности
+  `Inspection` (`quality.inspections`), `InspectionSequence`
+  (`quality.inspection_sequences`), `InspectionEvent` (`quality.inspection_events`).
+  Реализованы: lifecycle `DRAFT → REQUESTED`, `DRAFT → CANCELLED`,
+  `REQUESTED → CANCELLED`; подтверждение производственной готовности СМР
+  (`FOREMAN`/`MASTER`); фиксация готовности ОГС при переходе в `REQUESTED`; override
+  главного сварщика (обходит **только** отсутствие подтверждения СМР, не системные
+  блокеры); optimistic locking (`version`); идемпотентное создание
+  (`Idempotency-Key`); append-only журнал событий; RBAC/scope
+  (GLOBAL/PROJECT/LINE/ENGINEERING_DOCUMENT; COMPANY-scope — только чтение, не
+  изменяющие действия); проектная нумерация `<PROJECT_CODE>-INS-<SEQUENCE>`;
+  readiness `Joint` на реальных статусах моделей (`Joint.status = ACTIVE`,
+  актуальная завершённая `WeldOperation`, обязательная принятая
+  `HeatTreatmentOperation` по канону Task 8F) и вычисляемое `Joint.inspection_state`
+  (без хранимой колонки, батч-расчёт без N+1). Полная регрессия — **791 passed**.
+  Согласованное уточнение: actor-поля (`*_by_worker_id`, `actor_worker_id`) —
+  `hr.workers.id` типа `Integer` **без FK** на `hr.workers` (переходный период, как
+  в Joint/WeldOperation; `X-User-Id` — Integer); FK добавлены на `project.projects` и
+  `engineering.joints`.
+- **Tasks 9B — 9G — не начаты** (канон ADR-015 принят, код/миграции/тесты не
+  создавались). Логика импорта результатов НК (Architecture Session 008)
+  **отсутствует**.
 
 ---
 
@@ -918,7 +941,7 @@ lifecycle `Joint`.
 - [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012]] (принят — канон WeldOperation, Tasks 8A — 8F)
 - [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014]] (принят — термическая обработка, Task 8F)
 - [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Session 007]] (контроль качества и НК)
-- [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] (принят — канон контроля/НК, Tasks 9A — 9G — реализация запланирована)
+- [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] (принят — канон контроля/НК; Task 9A реализован, Tasks 9B — 9G запланированы)
 - [[docs/ARCHITECTURE#5.3. Физическая модель БД и API Production/Joints MVP (Session 004)|ARCHITECTURE §5.3]]
 
-*Версия плана: 2026-07-13 (Tasks 8A–8F реализованы; Task 8F — Heat Treatment Integration по ADR-014; Tasks 9A–9G — канон контроля/НК по ADR-015, реализация запланирована). Задач: 14 реализованных (1–4, 5A, 5B, 6, 7, 8A–8F) + 7 запланированных (9A–9G). Ветка: feature/engineering-joints-mvp.*
+*Версия плана: 2026-07-13 (Tasks 8A–8F реализованы; Task 9A — Inspection Core реализована и принята, миграция `20260713_15_inspection_core`; Tasks 9B–9G — канон контроля/НК по ADR-015, реализация запланирована). Задач: 15 реализованных (1–4, 5A, 5B, 6, 7, 8A–8F, 9A) + 6 запланированных (9B–9G). Ветка: feature/engineering-joints-mvp.*

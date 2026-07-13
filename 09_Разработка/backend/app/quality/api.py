@@ -1,0 +1,172 @@
+from __future__ import annotations
+
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Header, Query
+from sqlalchemy.orm import Session
+
+from app.quality.schemas import (
+    CancelInspectionCommand,
+    ConfirmProductionReadinessCommand,
+    InspectionCreate,
+    InspectionEventRead,
+    InspectionListFilters,
+    InspectionListResponse,
+    InspectionRead,
+    InspectionReadinessRead,
+    InspectionUpdate,
+    RequestInspectionCommand,
+)
+from app.quality.inspection_workflow import InspectionStatus
+from app.quality.services import InspectionService
+from app.shared.auth import get_current_user_id
+from app.shared.db import get_db
+
+# Пустой prefix: маршруты монтируются под /api/v1 (POST /api/v1/inspections,
+# GET /api/v1/joints/{joint_id}/inspection-readiness) — вне /engineering (§16).
+router = APIRouter(tags=["quality"])
+
+
+def _svc(db: Session = Depends(get_db)) -> InspectionService:
+    return InspectionService(db)
+
+
+# ── Создание ───────────────────────────────────────────────────────────────────
+
+
+@router.post("/inspections", response_model=InspectionRead, status_code=201)
+def create_inspection(
+    data: InspectionCreate,
+    svc: InspectionService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
+    return svc.create_inspection(
+        data, actor_worker_id=uid, idempotency_key=idempotency_key
+    )
+
+
+# ── Список ──────────────────────────────────────────────────────────────────────
+
+
+@router.get("/inspections", response_model=InspectionListResponse)
+def list_inspections(
+    project_id: UUID | None = Query(default=None),
+    joint_id: UUID | None = Query(default=None),
+    status: InspectionStatus | None = Query(default=None),
+    system_code: str | None = Query(default=None),
+    external_request_no: str | None = Query(default=None),
+    created_by_worker_id: int | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    svc: InspectionService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    filters = InspectionListFilters(
+        project_id=project_id,
+        joint_id=joint_id,
+        status=status,
+        system_code=system_code,
+        external_request_no=external_request_no,
+        created_by_worker_id=created_by_worker_id,
+        limit=limit,
+        offset=offset,
+    )
+    return svc.list_inspections(filters, actor_worker_id=uid)
+
+
+# ── Получение одной заявки ──────────────────────────────────────────────────────
+
+
+@router.get("/inspections/{inspection_id}", response_model=InspectionRead)
+def get_inspection(
+    inspection_id: UUID,
+    svc: InspectionService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.get_inspection(inspection_id, actor_worker_id=uid)
+
+
+# ── Редактирование DRAFT ────────────────────────────────────────────────────────
+
+
+@router.patch("/inspections/{inspection_id}", response_model=InspectionRead)
+def update_inspection(
+    inspection_id: UUID,
+    data: InspectionUpdate,
+    svc: InspectionService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.update_inspection(inspection_id, data, actor_worker_id=uid)
+
+
+# ── Готовность стыка к контролю (ничего не изменяет) ────────────────────────────
+
+
+@router.get(
+    "/joints/{joint_id}/inspection-readiness",
+    response_model=InspectionReadinessRead,
+)
+def joint_inspection_readiness(
+    joint_id: UUID,
+    svc: InspectionService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.readiness(joint_id, actor_worker_id=uid)
+
+
+# ── Подтверждение производственной готовности СМР ───────────────────────────────
+
+
+@router.post(
+    "/inspections/{inspection_id}/confirm-production-readiness",
+    response_model=InspectionRead,
+)
+def confirm_production_readiness(
+    inspection_id: UUID,
+    data: ConfirmProductionReadinessCommand,
+    svc: InspectionService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.confirm_production_readiness(inspection_id, data, actor_worker_id=uid)
+
+
+# ── Отправка заявки ─────────────────────────────────────────────────────────────
+
+
+@router.post("/inspections/{inspection_id}/request", response_model=InspectionRead)
+def request_inspection(
+    inspection_id: UUID,
+    data: RequestInspectionCommand,
+    svc: InspectionService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.request_inspection(inspection_id, data, actor_worker_id=uid)
+
+
+# ── Отмена ──────────────────────────────────────────────────────────────────────
+
+
+@router.post("/inspections/{inspection_id}/cancel", response_model=InspectionRead)
+def cancel_inspection(
+    inspection_id: UUID,
+    data: CancelInspectionCommand,
+    svc: InspectionService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.cancel_inspection(inspection_id, data, actor_worker_id=uid)
+
+
+# ── События ─────────────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/inspections/{inspection_id}/events",
+    response_model=list[InspectionEventRead],
+)
+def list_inspection_events(
+    inspection_id: UUID,
+    svc: InspectionService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.list_events(inspection_id, actor_worker_id=uid)

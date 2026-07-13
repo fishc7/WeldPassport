@@ -32,6 +32,7 @@ from app.engineering.import_models import ImportSession
 from app.hr.models import Worker, WorkerRole
 from app.main import app
 from app.projects.models import Company, Line, Project, ProjectCompany
+from app.quality.models import Inspection, InspectionEvent, InspectionSequence
 from app.shared.db import SessionLocal, get_db
 from app.welding.models import Welder, WelderAdmission
 
@@ -189,6 +190,24 @@ def _purge_test_data(db: Session) -> None:
     if not worker_ids:
         return
 
+    # Заявки на контроль (Task 9A) удаляем первыми: FK quality.inspections →
+    # engineering.joints и project.projects c RESTRICT, quality.inspection_events
+    # → quality.inspections c RESTRICT. Заявки помечены created_by_worker_id
+    # тестовых workers; счётчики inspection_sequences чистятся по project_id ниже.
+    inspection_ids = [
+        row[0]
+        for row in db.query(Inspection.id)
+        .filter(Inspection.created_by_worker_id.in_(worker_ids))
+        .all()
+    ]
+    if inspection_ids:
+        db.query(InspectionEvent).filter(
+            InspectionEvent.inspection_id.in_(inspection_ids)
+        ).delete(synchronize_session=False)
+        db.query(Inspection).filter(Inspection.id.in_(inspection_ids)).delete(
+            synchronize_session=False
+        )
+
     # Термообработка (Task 8F) удаляем раньше стыков/сварочных операций/проектов:
     # FK heat_treatment_operations → joints/weld_operations и heat_treatment_*
     # → heat_treatment_batches/procedure_revisions c RESTRICT. Циклы помечены
@@ -324,6 +343,9 @@ def _purge_test_data(db: Session) -> None:
         ).delete(synchronize_session=False)
         db.query(JointSequence).filter(
             JointSequence.project_id.in_(project_ids)
+        ).delete(synchronize_session=False)
+        db.query(InspectionSequence).filter(
+            InspectionSequence.project_id.in_(project_ids)
         ).delete(synchronize_session=False)
 
     # Инженерные документы/ревизии удаляем раньше линий и проектов:

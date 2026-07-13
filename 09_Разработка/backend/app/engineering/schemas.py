@@ -12,6 +12,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.quality.inspection_workflow import InspectionState
 from app.engineering.joint_workflow import (
     ApprovalState,
     BlockScope,
@@ -369,6 +370,12 @@ class JointRead(BaseModel):
     # Доступные действия актора (§22-23 ADR-011). Пусто в массовых списках и для
     # аудитора; заполняется на карточке Joint и в ответах команд.
     available_actions: list[str] = Field(default_factory=list)
+    # Вычисляемое состояние контроля качества/НК (Task 9A, ADR-015 §17). Не
+    # хранится колонкой в engineering.joints — считается по действующим заявкам
+    # модуля quality. Базовое NOT_REQUIRED — временное состояние (§17.2), которое
+    # Task 9B уточнит по требуемым методам контроля. Полный канонический enum
+    # (в Task 9A достоверны только NOT_REQUIRED/PENDING/IN_PROGRESS).
+    inspection_state: InspectionState = "NOT_REQUIRED"
 
 
 class JointListFilters(BaseModel):
