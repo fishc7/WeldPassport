@@ -23,6 +23,7 @@ from app.engineering.models import (
     WeldOperationOgsReview,
     WeldOperationWelderConfirmation,
 )
+from app.engineering.import_models import ImportSession
 from app.hr.models import Worker, WorkerRole
 from app.main import app
 from app.projects.models import Company, Line, Project, ProjectCompany
@@ -182,6 +183,13 @@ def _purge_test_data(db: Session) -> None:
     ]
     if not worker_ids:
         return
+
+    # Импорт (Task 8E) удаляем первым: import_provenance/rows/groups/resolutions
+    # ссылаются на joints/weld_operations c RESTRICT, но каскадятся от
+    # import_sessions. Сессии помечены uploaded_by тестовых workers.
+    db.query(ImportSession).filter(
+        ImportSession.uploaded_by.in_(worker_ids)
+    ).delete(synchronize_session=False)
 
     # Сварочные операции (Task 8A) удаляем раньше стыков и профилей сварщиков:
     # FK engineering.weld_operations → engineering.joints и welding.welders c

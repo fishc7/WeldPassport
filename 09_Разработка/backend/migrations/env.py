@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, event, pool
 from app.shared.config import settings
 from app.shared.db import Base
 import app.engineering.models  # noqa: F401
+import app.engineering.import_models  # noqa: F401
 import app.hr.models  # noqa: F401
 import app.projects.models  # noqa: F401
 import app.welding.models  # noqa: F401

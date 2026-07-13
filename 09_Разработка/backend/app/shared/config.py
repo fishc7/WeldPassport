@@ -11,6 +11,21 @@ class Settings(BaseSettings):
     postgres_password: str = ""
     postgres_schema: str = "test"
 
+    # ── Импорт XLSX (Task 8E) ────────────────────────────────────────────────
+    # Бэкенд файлового хранилища исходных XLSX: "local" (dev/тесты) или "s3".
+    import_storage_backend: str = "local"
+    import_storage_local_dir: str = ".import_storage"
+    import_s3_bucket: str = ""
+    import_s3_endpoint_url: str = ""
+    import_s3_region: str = ""
+    import_s3_prefix: str = "imports"
+    # Серверное шифрование S3 (SSE): "AES256" | "aws:kms" | "" (по умолчанию AES256).
+    import_s3_sse: str = "AES256"
+    # Структурные лимиты (§4 задания): проверяются до создания staging-строк.
+    import_max_file_size_bytes: int = 10 * 1024 * 1024
+    import_max_rows: int = 5000
+    import_max_groups: int = 2000
+
     @property
     def database_url(self) -> str:
         return (

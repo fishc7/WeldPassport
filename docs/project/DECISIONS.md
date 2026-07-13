@@ -1526,6 +1526,142 @@ docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Tasks 8A — 8F)
 
 ---
 
+## ADR-013. Импорт XLSX и разрешение конфликтов (Task 8E)
+
+Дата: 2026-07-13
+
+Статус: **принято**
+
+Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 005|Session 005]] (импорт: типы источников, идемпотентный ключ, конфликт → корректировка)
+
+Уточняет: [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012]] ·
+[[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010]]
+
+### Контекст
+
+Task 8A–8D сформировали канонический контур `WeldOperation`, включая lifecycle,
+подтверждение сварщика, результат ОГС и корректировки (Task 8D). Для загрузки данных
+из внешнего XLSX потребовался отдельный импортный контур, который:
+
+- не изменяет существующие `Joint` и `WeldOperation`;
+- не использует correction/supersede-механизмы Task 8D;
+- предварительно проверяет и сопоставляет данные;
+- разрешает конфликты до записи в производственные таблицы;
+- обеспечивает полный аудит и происхождение данных.
+
+### Решение
+
+Принять отдельный импортный контур:
+
+```text
+XLSX → ImportSession → ImportRow → ImportGroup → matching/resolution → apply → Joint/WeldOperation
+```
+
+Основные решения:
+
+1. Источник MVP — только канонический XLSX-шаблон WeldPassport с обязательным
+   `template_version`.
+2. Одна строка источника может содержать данные `Joint` и одной `WeldOperation`.
+3. Прямая запись из XLSX в производственные таблицы запрещена — только через staging.
+4. Подготовка импорта выполняется через staging-контур.
+5. Техническая роль `OGS_ENGINEER` реализует архитектурную роль `WELDING_ENGINEER`
+   (новых role_code в `hr.worker_roles` не вводится).
+6. Только `CHIEF_WELDER` может выполнить окончательный apply.
+7. Сопоставление `Joint` выполняется сначала по `project_id` и нормализованному
+   номеру стыка, затем уточняется по линии, изометрии и ревизии.
+8. Расхождения инженерных данных создают конфликт и не изменяют существующий `Joint`.
+9. Изменение существующей `WeldOperation` через импорт запрещено; для этого
+   используется механизм Task 8D.
+10. Полный дубликат операции пропускается идемпотентно (`SKIPPED_DUPLICATE`).
+11. Атомарная единица применения — `ImportGroup`: один `Joint` и все связанные
+    импортируемые операции.
+12. Ошибка одной бизнес-независимой группы не откатывает ранее успешно применённые
+    независимые группы.
+13. Частичное применение разрешено.
+14. `ImportResolution` хранит неизменяемую историю ручных решений (supersede-цепочка,
+    не путать с supersede-механизмом Task 8D).
+15. `ImportProvenance` хранится отдельно и не добавляет import-поля в `Joint` или
+    `WeldOperation`.
+16. Исходный файл — неизменяемый артефакт с SHA-256 (сверка при каждом чтении).
+17. Хранение файлов абстрагировано через `FileStorage`; локальный адаптер — для
+    разработки/тестов, S3-совместимый адаптер включается конфигурацией.
+18. Команды импорта поддерживают идемпотентность (ключ — заголовок `Idempotency-Key`).
+19. Применение в MVP выполняется синхронно (без фоновых очередей).
+20. Физическое удаление import-сессий, provenance и истории запрещено.
+
+### Физическая модель
+
+Миграция `20260712_13_import_pipeline` (следует единственному Alembic head, второго
+head не вводит) создаёт 11 таблиц схемы `engineering` (по ORM-моделям
+`import_models.py`):
+
+```text
+engineering.import_sessions
+engineering.import_parse_attempts
+engineering.import_groups
+engineering.import_rows
+engineering.import_row_changes
+engineering.import_resolutions
+engineering.import_apply_attempts
+engineering.import_apply_group_results
+engineering.import_provenance
+engineering.import_status_events
+engineering.import_idempotency_keys
+```
+
+FK на `joints`/`weld_operations` — `RESTRICT`; дочерние таблицы импорта — `CASCADE`
+на `import_sessions` (каскад только техническая целостность; доменное удаление
+сессии запрещено).
+
+### Реализация
+
+Новые модули `app/engineering/`:
+
+- `import_workflow.py` — словари статусов/кодов, роли, чистые функции пересчёта;
+- `import_models.py` — 11 ORM-таблиц;
+- `import_storage.py` — `FileStorage` + локальный и S3 адаптеры;
+- `import_parse.py` — разбор XLSX и нормализация;
+- `import_matching.py` — сопоставление Joint и классификация дублей;
+- `import_repository.py` — доступ к данным;
+- `import_schemas.py` — Pydantic-схемы;
+- `import_services.py` — оркестрация;
+- `import_api.py` — HTTP-слой.
+
+Итоги:
+
+- 24 API endpoint;
+- 31 интеграционный тест (`tests/test_import_pipeline.py`);
+- регрессия: `639 passed`;
+- один Alembic head: `20260712_13_import_pipeline`.
+
+### Последствия
+
+Положительные:
+
+- импорт отделён от производственного lifecycle;
+- существующие производственные данные не изменяются молча;
+- обеспечены аудит, идемпотентность и provenance;
+- допускается безопасное частичное применение;
+- Task 8D остаётся единственным механизмом корректировки операций.
+
+Ограничения MVP:
+
+- только канонический XLSX;
+- нет произвольного сопоставления legacy-колонок;
+- apply синхронный;
+- UI не входит;
+- локальный storage допустим только как адаптер разработки;
+- расширенная аналитика и фоновые очереди отложены.
+
+### Где зафиксировано
+
+```text
+docs/project/DECISIONS.md (ADR-013)
+docs/ARCHITECTURE.md (раздел Task 8E)
+```
+
+---
+
 ## ADR-003. Исключение модуля нормирования из активного MVP
 
 Дата: 2026-07-03
