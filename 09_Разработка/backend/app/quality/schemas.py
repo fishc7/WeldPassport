@@ -6,6 +6,10 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.quality.inspection_workflow import InspectionState, InspectionStatus
+from app.quality.method_assignment_workflow import (
+    AssignmentStatus,
+    InspectionMethodCode,
+)
 
 
 # ── Вход: создание / редактирование (extra=forbid; system-поля запрещены) ──────
@@ -193,3 +197,116 @@ class InspectionListFilters(BaseModel):
 
 # Вспомогательный тип для интеграции в Joint (§17).
 JointInspectionState = InspectionState
+
+
+# ── Task 9B: назначение метода контроля и лаборатории ──────────────────────────
+
+
+class MethodAssignmentCreate(BaseModel):
+    """Тело создания назначения (§16). Клиент задаёт метод, лабораторию и
+    необязательные примечания. Служебные поля (status, actor, version) в схеме
+    отсутствуют — `extra="forbid"` даёт 422 при попытке их передать."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    method_code: InspectionMethodCode
+    laboratory_company_id: int
+    laboratory_note: str | None = None
+    assignment_note: str | None = None
+
+
+class MethodAssignmentUpdate(BaseModel):
+    """PATCH назначения (§11): меняются только нейтральные примечания. Метод,
+    лаборатория, статус, actor-поля и дата назначения через PATCH недоступны —
+    любые неизвестные ключи отклоняются (`extra="forbid"`). `expected_version`
+    обязателен (optimistic locking)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    laboratory_note: str | None = None
+    assignment_note: str | None = None
+    expected_version: int
+
+
+class CancelMethodAssignmentCommand(BaseModel):
+    """Отмена назначения (§12). Причина обязательна и не может быть пустой."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Причина отмены обязательна и не может быть пустой")
+        return value
+
+
+class ReplaceMethodAssignmentCommand(BaseModel):
+    """Замена назначения (§13). `method_code` можно опустить — тогда метод
+    сохраняется; лаборатория и метод проходят повторную проверку. Причина
+    обязательна. Замена без фактических изменений отклоняется сервисом."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int
+    method_code: InspectionMethodCode | None = None
+    laboratory_company_id: int | None = None
+    laboratory_note: str | None = None
+    assignment_note: str | None = None
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Причина замены обязательна и не может быть пустой")
+        return value
+
+
+class MethodAssignmentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    inspection_id: UUID
+    method_code: InspectionMethodCode
+    laboratory_company_id: int
+    status: AssignmentStatus
+    laboratory_note: str | None
+    assignment_note: str | None
+    assigned_by_worker_id: int
+    assigned_at: datetime
+    cancelled_at: datetime | None
+    cancelled_by_worker_id: int | None
+    cancellation_reason: str | None
+    replaced_by_assignment_id: UUID | None
+    created_by_worker_id: int
+    created_at: datetime
+    updated_by_worker_id: int
+    updated_at: datetime
+    version: int
+
+    # Безопасные вычисляемые данные (§17): имя лаборатории и признак активности.
+    laboratory_company_name: str | None = None
+    is_active: bool | None = None
+
+
+class MethodAssignmentListResponse(BaseModel):
+    """Список назначений Inspection с вычисляемой сводкой готовности (§14, §16).
+
+    `items` учитывает фильтр запроса (status / active_only). Сводные признаки
+    (`has_method_assignments` и далее) всегда считаются по активным назначениям
+    независимо от фильтра списка. `ready_for_execution` — ограниченный признак
+    (§14): у Inspection есть хотя бы одно активное назначение и у каждого активного
+    назначения указана допустимая лаборатория; фактической готовности производства
+    или лаборатории он не означает."""
+
+    inspection_id: UUID
+    items: list[MethodAssignmentRead]
+    has_method_assignments: bool
+    active_method_assignment_count: int
+    assigned_method_codes: list[str]
+    all_assignments_have_laboratory: bool
+    ready_for_execution: bool

@@ -25,6 +25,11 @@ from app.quality.inspection_workflow import (
     INSPECTION_REQUESTED_OR_LATER,
     INSPECTION_STATUSES,
 )
+from app.quality.method_assignment_workflow import (
+    ASSIGNMENT_ASSIGNED,
+    ASSIGNMENT_STATUSES,
+    INSPECTION_METHOD_CODES,
+)
 from app.shared.db import Base
 
 QUALITY_SCHEMA = "quality"
@@ -36,6 +41,17 @@ def _in_check(column: str, values: tuple[str, ...]) -> str:
 
 _STATUS_CHECK = _in_check("status", INSPECTION_STATUSES)
 _EVENT_TYPE_CHECK = _in_check("event_type", INSPECTION_EVENT_TYPES)
+
+# ── CHECK-выражения назначения метода контроля (Task 9B) ───────────────────────
+_ASSIGNMENT_STATUS_CHECK = _in_check("status", ASSIGNMENT_STATUSES)
+_ASSIGNMENT_METHOD_CHECK = _in_check("method_code", INSPECTION_METHOD_CODES)
+# CANCELLED непротиворечив: заполнены автор/время/непустая причина отмены (§8.2).
+_ASSIGNMENT_CANCELLED_FIELDS_CHECK = (
+    "status <> 'CANCELLED' OR ("
+    "cancelled_at IS NOT NULL "
+    "AND cancelled_by_worker_id IS NOT NULL "
+    "AND length(trim(cancellation_reason)) > 0)"
+)
 # Отправленная в работу заявка сохраняет requested-/ogs-readiness-поля и после
 # дальнейших переходов (§7.4). DRAFT и CANCELLED — исключение: DRAFT ещё не
 # отправлена, CANCELLED мог быть отменён прямо из DRAFT (поля пусты).
@@ -256,4 +272,118 @@ class InspectionEvent(Base):
     inspection_version: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class InspectionMethodAssignment(Base):
+    """Назначение метода контроля и лаборатории для Inspection (Task 9B, ADR-015).
+
+    Отдельная доменная сущность: связывает `Inspection` с назначенным методом
+    контроля (`method_code` из закрытого набора §6.1) и ответственной лабораторией
+    НК (`laboratory_company_id` → project.companies.id). Лаборатория проверяется
+    сервисом через project_companies с ролью NDT_LAB (§7).
+
+    Жизненный цикл назначения (ASSIGNED → CANCELLED / REPLACED) не зависит от
+    статуса Inspection и не меняет его. История отмен и замен сохраняется: записи
+    физически не удаляются, замена создаёт новую запись и проставляет
+    `replaced_by_assignment_id` у старой. Для одной Inspection допускается не более
+    одного ASSIGNED-назначения каждого метода (partial unique index).
+
+    Actor-поля — hr.workers.id типа Integer БЕЗ FK, как в Inspection (переходный
+    период). `version` — optimistic locking. Выполнение метода и результаты
+    контроля (Tasks 9C–9G) в модель НЕ входят; заготовочных полей под них нет.
+    """
+
+    __tablename__ = "inspection_method_assignments"
+    __table_args__ = (
+        CheckConstraint(
+            "version >= 1", name="ck_quality_ima_version"
+        ),
+        CheckConstraint(
+            _ASSIGNMENT_STATUS_CHECK, name="ck_quality_ima_status"
+        ),
+        CheckConstraint(
+            _ASSIGNMENT_METHOD_CHECK, name="ck_quality_ima_method_code"
+        ),
+        CheckConstraint(
+            _ASSIGNMENT_CANCELLED_FIELDS_CHECK,
+            name="ck_quality_ima_cancelled_fields",
+        ),
+        # Не более одного активного назначения метода на Inspection (§9).
+        # Исторические CANCELLED/REPLACED того же метода не ограничиваются.
+        Index(
+            "uq_quality_ima_active_method",
+            "inspection_id",
+            "method_code",
+            unique=True,
+            postgresql_where="status = 'ASSIGNED'",
+        ),
+        Index("ix_quality_ima_inspection_id", "inspection_id"),
+        Index(
+            "ix_quality_ima_inspection_status", "inspection_id", "status"
+        ),
+        Index("ix_quality_ima_laboratory_company_id", "laboratory_company_id"),
+        Index("ix_quality_ima_created_at", "created_at"),
+        {"schema": QUALITY_SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    inspection_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(f"{QUALITY_SCHEMA}.inspections.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    method_code: Mapped[str] = mapped_column(String(10), nullable=False)
+    # Лаборатория — существующая организация проекта (project.companies.id —
+    # Integer, не UUID; ТЗ говорит UUID, но канон проекта — Integer, §4.5/§7.1).
+    laboratory_company_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(f"{PROJECT_SCHEMA}.companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=ASSIGNMENT_ASSIGNED
+    )
+
+    laboratory_note: Mapped[str | None] = mapped_column(Text)
+    assignment_note: Mapped[str | None] = mapped_column(Text)
+
+    # ── Назначение (§5.1) ─────────────────────────────────────────────────────
+    assigned_by_worker_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    # ── Отмена (§8.2) ─────────────────────────────────────────────────────────
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_by_worker_id: Mapped[int | None] = mapped_column(Integer)
+    cancellation_reason: Mapped[str | None] = mapped_column(Text)
+
+    # ── Замена (§8.3): ссылка на новое назначение; ON DELETE SET NULL, т.к.
+    # физического удаления нет, а строгий CHECK на непустую ссылку конфликтовал бы
+    # с SET NULL. Ссылку проставляет сервис в одной транзакции с заменой. ─────────
+    replaced_by_assignment_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            f"{QUALITY_SCHEMA}.inspection_method_assignments.id",
+            ondelete="SET NULL",
+        ),
+    )
+
+    # ── Аудит и optimistic locking (канон Task 9A) ────────────────────────────
+    created_by_worker_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_by_worker_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1"
     )

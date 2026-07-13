@@ -32,7 +32,12 @@ from app.engineering.import_models import ImportSession
 from app.hr.models import Worker, WorkerRole
 from app.main import app
 from app.projects.models import Company, Line, Project, ProjectCompany
-from app.quality.models import Inspection, InspectionEvent, InspectionSequence
+from app.quality.models import (
+    Inspection,
+    InspectionEvent,
+    InspectionMethodAssignment,
+    InspectionSequence,
+)
 from app.shared.db import SessionLocal, get_db
 from app.welding.models import Welder, WelderAdmission
 
@@ -201,6 +206,12 @@ def _purge_test_data(db: Session) -> None:
         .all()
     ]
     if inspection_ids:
+        # Назначения методов (Task 9B): FK inspection_method_assignments →
+        # inspections c RESTRICT — удаляем раньше заявок. Self-FK
+        # replaced_by_assignment_id — SET NULL, поэтому спец-обнуление не нужно.
+        db.query(InspectionMethodAssignment).filter(
+            InspectionMethodAssignment.inspection_id.in_(inspection_ids)
+        ).delete(synchronize_session=False)
         db.query(InspectionEvent).filter(
             InspectionEvent.inspection_id.in_(inspection_ids)
         ).delete(synchronize_session=False)

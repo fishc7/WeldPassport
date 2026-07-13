@@ -833,7 +833,7 @@ Inspection / NDTInspection, полноценный МТО, учёт бригад
 | Task | Содержание |
 |------|-----------|
 | **9A — Inspection Core** | `Inspection`, нумерация (`<PROJECT_CODE>-INS-<SEQUENCE>`), связь с `Joint`, lifecycle, готовность `Joint`, permissions/scope, базовый `Joint.inspection_state` |
-| **9B — Method Assignment and Laboratory** | методы (`VT`/`RT`/`UT`/`PT`/`MT`), `NdtLaboratoryProfile`, `InspectionMethodAssignment`, сроки, приоритет, основания, проверки лаборатории |
+| **9B — Method Assignment and Laboratory** | методы (`VT`/`RT`/`UT`/`PT`/`MT`/`LT`), `InspectionMethodAssignment`, лаборатория через `project_companies` (роль `NDT_LAB`), lifecycle назначения `ASSIGNED`/`CANCELLED`/`REPLACED`, проверки лаборатории (реализовано; ТЗ Task 9B сузило исходную формулировку — отдельный `NdtLaboratoryProfile`, сроки, приоритет и стоимость **не входят**) |
 | **9C — Method Execution and Results** | `InspectionMethodExecution`, `InspectionMethodResult`, фактические даты, повторные выполнения, проверка ОТК, версионирование результатов |
 | **9D — OGS Decisions and Joint State** | `InspectionDecision`, системная рекомендация, решения ОГС, исключения `CHIEF_WELDER`, автоматическое закрытие, состояния `Joint` |
 | **9E — Coverage, Samples and Defect Integration** | `InspectionCoverage`, `InspectionSample`, групповые выборки, `Defect`, только точки интеграции с ремонтом |
@@ -894,7 +894,31 @@ lifecycle `Joint`.
   `hr.workers.id` типа `Integer` **без FK** на `hr.workers` (переходный период, как
   в Joint/WeldOperation; `X-User-Id` — Integer); FK добавлены на `project.projects` и
   `engineering.joints`.
-- **Tasks 9B — 9G — не начаты** (канон ADR-015 принят, код/миграции/тесты не
+- **Task 9B — Method Assignment and Laboratory — реализована и принята.** Миграция
+  `20260713_16_method_assignments` (down_revision `20260713_15_inspection_core`; один
+  Alembic head; идентификатор revision укорочён из-за `alembic_version.version_num
+  VARCHAR(32)`, имя файла — полное). В схеме `quality` добавлена одна таблица
+  `quality.inspection_method_assignments` (сущность `InspectionMethodAssignment`).
+  Реализованы: назначение метода из закрытого набора `VT`/`RT`/`UT`/`PT`/`MT`/`LT`
+  (enum `InspectionMethodCode`, отдельный от `projects.InspectionType`); назначение
+  лаборатории через существующую `project.companies` (`laboratory_company_id` —
+  Integer FK) с проверкой действующей связи `project_companies` роли `NDT_LAB` того
+  же проекта, что и `Inspection`; lifecycle назначения `ASSIGNED → CANCELLED` и
+  `ASSIGNED → REPLACED` (атомарная замена в одной транзакции, старая запись
+  сохраняется и ссылается на новую через `replaced_by_assignment_id`); запрет более
+  одного активного назначения метода на `Inspection` (partial unique index
+  `WHERE status = 'ASSIGNED'` + сервисная проверка + маппинг `IntegrityError` в
+  доменный конфликт); ограниченный `PATCH` только примечаний; optimistic locking
+  (`version`); actor-поля канона Task 9A (`assigned_by_worker_id`,
+  `cancelled_by_worker_id`, `created_by`/`updated_by_worker_id` — Integer без FK);
+  RBAC/scope (write — `OTK_INSPECTOR`/`NDT_SPECIALIST`/`CHIEF_WELDER`, `OGS_ENGINEER`
+  общесистемного права не получает; COMPANY-scope — только чтение); вычисляемая
+  сводка готовности заявки (`has_method_assignments`, `active_method_assignment_count`,
+  `assigned_method_codes`, `all_assignments_have_laboratory`, ограниченный
+  `ready_for_execution`) без изменения статуса `Inspection`. Выполнение метода,
+  результаты, решения ОГС/ОТК, дефекты, файлы и журналы (Tasks 9C — 9G) **не
+  реализованы**. Полная регрессия — **854 passed**.
+- **Tasks 9C — 9G — не начаты** (канон ADR-015 принят, код/миграции/тесты не
   создавались). Логика импорта результатов НК (Architecture Session 008)
   **отсутствует**.
 
@@ -941,7 +965,7 @@ lifecycle `Joint`.
 - [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012]] (принят — канон WeldOperation, Tasks 8A — 8F)
 - [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014]] (принят — термическая обработка, Task 8F)
 - [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Session 007]] (контроль качества и НК)
-- [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] (принят — канон контроля/НК; Task 9A реализован, Tasks 9B — 9G запланированы)
+- [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] (принят — канон контроля/НК; Tasks 9A–9B реализованы, Tasks 9C — 9G запланированы)
 - [[docs/ARCHITECTURE#5.3. Физическая модель БД и API Production/Joints MVP (Session 004)|ARCHITECTURE §5.3]]
 
-*Версия плана: 2026-07-13 (Tasks 8A–8F реализованы; Task 9A — Inspection Core реализована и принята, миграция `20260713_15_inspection_core`; Tasks 9B–9G — канон контроля/НК по ADR-015, реализация запланирована). Задач: 15 реализованных (1–4, 5A, 5B, 6, 7, 8A–8F, 9A) + 6 запланированных (9B–9G). Ветка: feature/engineering-joints-mvp.*
+*Версия плана: 2026-07-14 (Tasks 8A–8F реализованы; Task 9A — Inspection Core и Task 9B — Method Assignment and Laboratory реализованы и приняты, миграции `20260713_15_inspection_core` и `20260713_16_method_assignments`; Tasks 9C–9G — канон контроля/НК по ADR-015, реализация запланирована). Задач: 16 реализованных (1–4, 5A, 5B, 6, 7, 8A–8F, 9A, 9B) + 5 запланированных (9C–9G). Ветка: feature/engineering-joints-mvp.*

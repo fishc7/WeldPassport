@@ -469,9 +469,26 @@ HeatTreatmentOperation  → Joint
 ### 5.7. Контроль качества и НК: Inspection и рабочий процесс контроля (Session 007, ADR-015)
 
 Канон: [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]].
-**Статус:** канон принят, **реализация запланирована** (Tasks 9A — 9G — следующий
-этап; код/миграции не создавались). Отложена только детальная реализация импорта
+**Статус:** канон принят; **реализованы Tasks 9A — 9B**, Tasks 9C — 9G — следующий
+этап (код/миграции не создавались). Отложена только детальная реализация импорта
 результатов НК — до Architecture Session 008.
+
+> **Реализованная физическая модель (Tasks 9A — 9B).** Схема `quality`: `Inspection`
+> (`quality.inspections`), `InspectionSequence`, `InspectionEvent` (Task 9A, миграция
+> `20260713_15_inspection_core`) и `InspectionMethodAssignment`
+> (`quality.inspection_method_assignments`, Task 9B, миграция
+> `20260713_16_method_assignments`). Назначение метода: закрытый набор
+> `VT`/`RT`/`UT`/`PT`/`MT`/`LT` (enum `InspectionMethodCode`; `LT` добавлен каноном
+> Task 9B, отдельно от `projects.InspectionType`); лаборатория — существующая
+> `project.companies` (`laboratory_company_id` — Integer FK) с проверкой действующей
+> связи `project_companies` роли `NDT_LAB` того же проекта; отдельная сущность
+> `NdtLaboratoryProfile` **не вводилась**. Lifecycle назначения — только
+> `ASSIGNED → CANCELLED` / `ASSIGNED → REPLACED` (замена атомарна, старая запись
+> сохраняется и ссылается на новую); не более одного активного назначения метода на
+> `Inspection` (partial unique index `WHERE status = 'ASSIGNED'`). Выполнение метода,
+> результаты, решения ОГС/ОТК, дефекты, отчёты и журналы (Tasks 9C — 9G) — по канону
+> ниже, но **ещё не реализованы**. Права записи назначения: `OTK_INSPECTOR`,
+> `NDT_SPECIALIST`, `CHIEF_WELDER` (ОГС общесистемного права не получает).
 
 Контроль качества и НК моделируется как заявка/контрольное мероприятие `Inspection`
 с раздельными техническим результатом лаборатории и технологическим решением ОГС.

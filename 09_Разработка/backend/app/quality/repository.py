@@ -8,12 +8,14 @@ from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
 
 from app.engineering.models import DocumentRevision, Joint, WeldOperation
-from app.projects.models import ProjectCompany
+from app.projects.models import Company, ProjectCompany
 from app.quality.models import (
     QUALITY_SCHEMA,
     Inspection,
     InspectionEvent,
+    InspectionMethodAssignment,
 )
+from app.quality.method_assignment_workflow import ASSIGNMENT_ASSIGNED
 from app.quality.schemas import InspectionListFilters
 
 
@@ -264,6 +266,84 @@ class QualityRepo:
             .order_by(WeldOperation.sequence_no.desc())
             .first()
         )
+
+    # ── Task 9B: назначения методов контроля ──────────────────────────────────
+
+    def get_assignment(
+        self, assignment_id: UUID
+    ) -> InspectionMethodAssignment | None:
+        return (
+            self.db.query(InspectionMethodAssignment)
+            .filter(InspectionMethodAssignment.id == assignment_id)
+            .first()
+        )
+
+    def add_assignment(
+        self, assignment: InspectionMethodAssignment
+    ) -> InspectionMethodAssignment:
+        """Добавляет назначение в текущую транзакцию (add + flush, без commit)."""
+        self.db.add(assignment)
+        self.db.flush()
+        return assignment
+
+    def save_assignment(
+        self, assignment: InspectionMethodAssignment
+    ) -> InspectionMethodAssignment:
+        self.db.commit()
+        self.db.refresh(assignment)
+        return assignment
+
+    def find_active_assignment_by_method(
+        self, inspection_id: UUID, method_code: str
+    ) -> InspectionMethodAssignment | None:
+        """Действующее (ASSIGNED) назначение метода для Inspection, если есть (§9)."""
+        return (
+            self.db.query(InspectionMethodAssignment)
+            .filter(
+                InspectionMethodAssignment.inspection_id == inspection_id,
+                InspectionMethodAssignment.method_code == method_code,
+                InspectionMethodAssignment.status == ASSIGNMENT_ASSIGNED,
+            )
+            .first()
+        )
+
+    def list_assignments(
+        self,
+        inspection_id: UUID,
+        *,
+        status: str | None = None,
+        active_only: bool = False,
+    ) -> list[InspectionMethodAssignment]:
+        query = self.db.query(InspectionMethodAssignment).filter(
+            InspectionMethodAssignment.inspection_id == inspection_id
+        )
+        if active_only:
+            query = query.filter(
+                InspectionMethodAssignment.status == ASSIGNMENT_ASSIGNED
+            )
+        elif status is not None:
+            query = query.filter(InspectionMethodAssignment.status == status)
+        return query.order_by(
+            InspectionMethodAssignment.assigned_at,
+            InspectionMethodAssignment.id,
+        ).all()
+
+    def active_assignments(
+        self, inspection_id: UUID
+    ) -> list[InspectionMethodAssignment]:
+        return self.list_assignments(inspection_id, active_only=True)
+
+    def company_names(self, company_ids: Iterable[int]) -> dict[int, str]:
+        """Имена организаций по id одним запросом (для laboratory_company_name)."""
+        ids = {cid for cid in company_ids if cid is not None}
+        if not ids:
+            return {}
+        rows = (
+            self.db.query(Company.id, Company.name)
+            .filter(Company.id.in_(ids))
+            .all()
+        )
+        return {row[0]: row[1] for row in rows}
 
     def has_completed_weld_operation_history(self, joint_id: UUID) -> bool:
         """Существовала ли вообще завершённая операция (COMPLETED/SUPERSEDED, §12.1).
