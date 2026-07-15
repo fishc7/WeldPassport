@@ -66,7 +66,7 @@ WeldPassport — внутренняя система для отдела гла�
 [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014: термическая обработка]] ·
 [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015: контроль качества и НК]].
 
-## Текущий статус архитектуры (2026-07-13)
+## Текущий статус архитектуры (2026-07-15)
 
 - **Architecture Session 003 завершена** — доменная модель Production/Joints MVP
   (ADR-008, решения 003-A — 003-AM).
@@ -76,9 +76,9 @@ WeldPassport — внутренняя система для отдела гла�
   `WeldOperation` (решения 005-A — 005-CE, ADR-012).
 - **Architecture Session 006 завершена** — термическая обработка (ADR-014, Task 8F).
 - **Architecture Session 007 завершена** — канон контроля качества и НК (ADR-015,
-  решения 007-01 — 007-27); **канон принят, реализация запланирована** (Tasks 9A — 9G
-  — следующий этап; код/миграции не создавались). Отложена только детальная реализация
-  импорта результатов НК — до Architecture Session 008.
+  решения 007-01 — 007-27); Tasks **9A — 9C реализованы**; Tasks **9D — 9G** —
+  planned / not implemented. Отложена только детальная реализация импорта
+  результатов НК — до Architecture Session 008.
 - **Инженерный контур реализован** (Tasks 1–7):
   `Project → Line → EngineeringDocument → DocumentRevision → Joint` (ADR-010/011).
 - **WeldOperation реализован** — Tasks **8A — 8E** (ADR-012, импорт — ADR-013).
@@ -86,14 +86,15 @@ WeldPassport — внутренняя система для отдела гла�
   `HeatTreatmentBatch → HeatTreatmentOperation`, карта, документы, отклонения,
   вычисляемое состояние `Joint`, журнал.
 - **Импорт Excel** — реализован в Task 8E (ADR-013).
-- **Контроль качества и НК** — канон зафиксирован (ADR-015). **Task 9A —
-  Inspection Core реализована и принята** (миграция `20260713_15_inspection_core`):
-  модуль `app/quality`, сущности `Inspection`, `InspectionSequence`,
-  `InspectionEvent`; lifecycle `DRAFT → REQUESTED → CANCELLED`, подтверждение
-  готовности СМР, готовность ОГС, override главного сварщика, optimistic locking,
-  идемпотентное создание, readiness `Joint` и вычисляемое `Joint.inspection_state`;
-  регрессия **791 passed**. Tasks **9B — 9G** — не начаты; логика импорта
-  результатов НК (Architecture Session 008) отсутствует.
+- **Quality Execution Core (Tasks 9A — 9C).** Task 9C завершает ядро выполнения
+  назначенных методов контроля и регистрации лабораторных заключений: Inspection
+  lifecycle; Method Assignment; Method Execution; Result Items; редакции выполнений
+  и результатов; отдельный агрегат `LaboratoryConclusion` и его редакции; модель
+  внешней лаборатории, `QualityExternalPerson` и `LaboratoryAccreditation`; Quality
+  Audit и API. `LAB_CONFIRMED` подтверждает лабораторный результат/регистрацию
+  внешнего документа и не является решением ОТК; `VERIFIED` оставлен будущему этапу
+  проверки ОТК. Tasks **9D — 9G** — planned / not implemented; импорт результатов НК
+  отложен до Session 008.
 
 План реализации: [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP|Engineering Joints MVP — Implementation Plan]].
 
@@ -198,7 +199,7 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 > этапы `ROOT`/`FILL`/`COVER`, блокировка при отсутствии допуска,
 > `replaces_operation_id`, ремонт как часть `WeldOperation`) **замещены ADR-012**.
 
-## Контроль качества и НК (ADR-015; Task 9A реализован, 9B–9G запланированы)
+## Контроль качества и НК (ADR-015; Tasks 9A–9C: Execution Core; 9D–9G planned)
 
 Канон зафиксирован в
 [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Architecture Session 007]].
@@ -208,11 +209,11 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 |---------|------|
 | Контур | `Joint → Inspection → назначение методов → выполнение → технические результаты → ОТК → решение ОГС → состояние Joint → журнал` |
 | Inspection | Заявка/мероприятие для одного `Joint` либо утверждённой групповой выборки (`InspectionSample`) |
-| Разделение | Технический результат лаборатории (`InspectionMethodResult`) и решение ОГС (`InspectionDecision`) — **раздельно** |
-| Методы | `VT`/`RT`/`UT`/`PT`/`MT`; `NdtLaboratoryProfile` через `project_companies` role `ndt_lab` |
+| Разделение | Локальный технический результат лаборатории (`MethodExecutionResultItem`), официальное `LaboratoryConclusion` и решение ОГС (`InspectionDecision`) — **раздельно** |
+| Методы | `VT`/`RT`/`UT`/`PT`/`MT`/`LT`; выполнение — `MethodExecution`; лаборатория — `project.companies` через `project_companies` с ролью `NDT_LAB` |
 | Состояние Joint | Вычисляемое `inspection_state`; основной lifecycle `Joint` не переписывается |
 | Связь с ТО | Обязательный контроль после термообработки — связь `Inspection ↔ HeatTreatmentOperation` (ADR-014) |
-| Реализация | Tasks **9A — 9G** (ещё не начата); код/миграции не создавались |
+| Реализация | Tasks **9A — 9C — DONE**: Task 9C завершает ядро выполнения назначенных методов контроля и регистрации лабораторных заключений; Tasks **9D — 9G** — planned / not implemented |
 
 > **Граница с Architecture Session 008.** Импорт результатов контроля (XLSX, CSV,
 > PDF, API лаборатории) в Session 007 зафиксирован **только как интеграционное

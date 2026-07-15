@@ -469,9 +469,13 @@ HeatTreatmentOperation  → Joint
 ### 5.7. Контроль качества и НК: Inspection и рабочий процесс контроля (Session 007, ADR-015)
 
 Канон: [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]].
-**Статус:** канон принят; **реализованы Tasks 9A — 9B**, Tasks 9C — 9G — следующий
-этап (код/миграции не создавались). Отложена только детальная реализация импорта
-результатов НК — до Architecture Session 008.
+**Статус:** канон принят; **реализованы Tasks 9A — 9C**. Task 9C завершает ядро
+выполнения назначенных методов контроля и регистрации лабораторных заключений
+(Inspection, Method Assignment, Method Execution, результаты, редакции,
+Laboratory Conclusion, внешняя лаборатория, аудит, API). Tasks **9D — 9G** —
+planned / not implemented (решения ОГС/ОТК, дефекты, evidence/файлы, журналы).
+Отложена только детальная реализация импорта результатов НК — до Architecture
+Session 008.
 
 > **Реализованная физическая модель (Tasks 9A — 9B).** Схема `quality`: `Inspection`
 > (`quality.inspections`), `InspectionSequence`, `InspectionEvent` (Task 9A, миграция
@@ -485,10 +489,60 @@ HeatTreatmentOperation  → Joint
 > `NdtLaboratoryProfile` **не вводилась**. Lifecycle назначения — только
 > `ASSIGNED → CANCELLED` / `ASSIGNED → REPLACED` (замена атомарна, старая запись
 > сохраняется и ссылается на новую); не более одного активного назначения метода на
-> `Inspection` (partial unique index `WHERE status = 'ASSIGNED'`). Выполнение метода,
-> результаты, решения ОГС/ОТК, дефекты, отчёты и журналы (Tasks 9C — 9G) — по канону
-> ниже, но **ещё не реализованы**. Права записи назначения: `OTK_INSPECTOR`,
+> `Inspection` (partial unique index `WHERE status = 'ASSIGNED'`). Дальнейшие слои
+> контроля — по Tasks 9C — 9G: Task 9C (ядро выполнения и лабораторных заключений)
+> реализован; Tasks **9D — 9G** planned / not implemented. Права записи назначения:
+> `OTK_INSPECTOR`,
 > `NDT_SPECIALIST`, `CHIEF_WELDER` (ОГС общесистемного права не получает).
+
+> **Реализованная физическая модель (Task 9C).** Схема `quality` расширена
+> (миграции `20260714_17_method_executions`, `20260714_18_labconc_extras`):
+> `MethodExecution` (`quality.method_executions`) + дочерние `method_execution_
+> participants` / `method_execution_result_items` / `method_execution_standards`;
+> `LaboratoryConclusion` (`quality.laboratory_conclusions`) +
+> `laboratory_conclusion_executions`; `LaboratoryAccreditation`,
+> `QualityExternalPerson`; доменный журнал `quality_audit_events`.
+> **Именование — гибрид (решение планирования 9C):** реализованы имена
+> `MethodExecution`, `MethodExecutionResultItem`, `LaboratoryConclusion`; прежние
+> имена канона `InspectionMethodExecution` / `InspectionMethodResult` /
+> `InspectionReport` считаются **заменёнными**, а не параллельными.
+>
+> Реализованная модель контура Task 9C:
+>
+> ```text
+> InspectionMethodAssignment
+>         |
+>         v
+>  MethodExecution
+>         |
+>         +----------------+
+>         |                |
+>         v                v
+>  ResultItem      LaboratoryConclusion
+>         |                |
+>         v                v
+>  ResultRevision  ConclusionRevision
+> ```
+>
+> Lifecycle `MethodExecution`:
+> `DRAFT → IN_PROGRESS → PERFORMED → RESULT_RECORDED → LAB_CONFIRMED`
+> (+ `CANCELLED`, исторический `SUPERSEDED`). `LAB_CONFIRMED` — подтверждение
+> лабораторного результата либо внутренняя регистрация внешнего документа; это **не**
+> решение ОТК. `VERIFIED` зарезервирован за будущей проверкой ОТК и в Task 9C **не
+> вводится**.
+>
+> Lifecycle `LaboratoryConclusion`:
+> `DRAFT → PREPARED → LAB_APPROVED → ISSUED` (+ `CANCELLED`, `SUPERSEDED`).
+> Заключение ссылается на **конкретную редакцию** `MethodExecution`; при замещении
+> связанного выполнения выставляется `revision_review_required`
+> (`LINKED_EXECUTION_SUPERSEDED`), заключение не меняется автоматически.
+>
+> Оценка результата: `CONFORMING`/`NONCONFORMING`/`INCONCLUSIVE`/`NOT_EVALUATED`.
+> `NOT_EVALUATED` (оценка не сформирована) и `CONTROL_NOT_PERFORMED` (тип отмены —
+> контроль не выполнен) — **разные** понятия. Внешние контролёры/утверждающие лица —
+> `QualityExternalPerson` (не `hr.Worker`); внутренний actor — `*_by_worker_id`.
+> API — `/api/v1/method-executions/*`, `/api/v1/method-assignments/{id}/executions`,
+> `/api/v1/laboratory-conclusions/*`.
 
 Контроль качества и НК моделируется как заявка/контрольное мероприятие `Inspection`
 с раздельными техническим результатом лаборатории и технологическим решением ОГС.
@@ -499,11 +553,11 @@ Joint  (требуемый контроль: обязательные метод
   ↓  готовность: расчёт системы → фиксация СМР → подтверждение ОГС
 Inspection  (DRAFT → REQUESTED → ASSIGNED → IN_PROGRESS → COMPLETED → REVIEWED → CLOSED)
   ├── InspectionMethodAssignment      (метод, объём, срок, приоритет, лаборатория, основание)
-  │     └── InspectionMethodExecution (первичное / повтор / доп. зона)
-  │           ├── InspectionMethodResult  (CONFORMING/NONCONFORMING/INCONCLUSIVE/NOT_PERFORMED)
+  │     └── MethodExecution           (первичное / повтор / доп. зона; версионируется)
+  │           ├── MethodExecutionResultItem (CONFORMING/NONCONFORMING/INCONCLUSIVE/NOT_EVALUATED)
   │           ├── InspectionCoverage       (зона частичного контроля)
   │           └── InspectionEvidence       (снимки, УЗК, фото ВИК, схемы)
-  ├── InspectionReport   (протокол/заключение; DRAFT → ISSUED → VERIFIED)
+  ├── LaboratoryConclusion (официальное заключение; DRAFT → PREPARED → LAB_APPROVED → ISSUED)
   ├── InspectionDecision (решение ОГС: RESULT / INSPECTION)
   └── Defect             (индикация → подтверждение ОТК → решение ОГС)
   ↓
@@ -517,11 +571,11 @@ Joint.inspection_state (вычисляемо)
 | Правило | Суть |
 | --- | --- |
 | Inspection | Заявка/мероприятие для одного `Joint` либо утверждённой `InspectionSample`; инициатор — ОГС |
-| Разделение результата и решения | Технический результат лаборатории (`InspectionMethodResult`) и технологическое решение ОГС (`InspectionDecision`) — **раздельны**; лаборатория фиксирует, ОТК → `VERIFIED`, ОГС принимает решение |
-| Назначение и выполнение | `InspectionMethodAssignment` → несколько `InspectionMethodExecution` (первичное, повтор, доп. зона, повторная попытка) |
+| Разделение результата и решения | Технический результат лаборатории (`MethodExecutionResultItem`) и технологическое решение ОГС (`InspectionDecision`) — **раздельны**; `LAB_CONFIRMED` подтверждает лабораторный результат и **не** является решением ОТК; будущая проверка ОТК зарезервирована как `VERIFIED` |
+| Назначение и выполнение | `InspectionMethodAssignment` → несколько `MethodExecution` (первичное, повтор, доп. зона, повторная попытка); назначение и выполнение — разные сущности |
 | Методы | `VT`/`RT`/`UT`/`PT`/`MT`; ВИК — в общем контуре `Inspection`; коды методов неизменяемы |
 | Требуемый ↔ назначенный | Требуемый контроль на `Joint` и назначенный в `InspectionMethodAssignment` разделены; отклонение — только с обоснованием ОГС; задним числом не пересчитывается |
-| Отчёты и материалы | `InspectionReport` (может включать несколько `Joint`/методов); `InspectionEvidence` — первичные материалы; предварительный отчёт не закрывает контроль |
+| Заключения и материалы | `LaboratoryConclusion` ссылается на конкретные редакции одного или нескольких подтверждённых `MethodExecution`; `InspectionEvidence` — первичные материалы |
 | Дефект | Лаборатория фиксирует индикацию; ОТК подтверждает/классифицирует; ОГС решает; полный ремонтный lifecycle — отдельный контур |
 | Лаборатория НК | `NdtLaboratoryProfile` через `project_companies` role `ndt_lab`; `Company` остаётся юрлицом |
 | Состояние Joint | Вычисляемое `inspection_state` (`NOT_REQUIRED`/`PENDING`/`IN_PROGRESS`/`PASSED`/`FAILED`/`REPAIR_REQUIRED`/`REINSPECTION_REQUIRED`); `PASSED` — только после принятых результатов по всем обязательным методам |

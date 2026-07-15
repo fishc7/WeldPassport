@@ -1865,9 +1865,10 @@ docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Task 8F)
 Дата: 2026-07-13
 
 Статус: **принято** — закрывает Architecture Session 007 (решения 007-01 — 007-27).
-Канон утверждён; **реализация запланирована** (Tasks 9A — 9G — следующий этап,
-код/миграции/тесты **не создавались** на сессии). Отложена только **детальная
-реализация импорта** результатов НК — до Architecture Session 008.
+Канон утверждён; **Tasks 9A — 9C реализованы**. Task 9C завершает ядро выполнения
+назначенных методов контроля и регистрации лабораторных заключений. Tasks
+**9D — 9G** — planned / not implemented. Отложена только **детальная реализация
+импорта** результатов НК — до Architecture Session 008.
 
 Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Session 007]]
 
@@ -1910,8 +1911,10 @@ Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 
 - методы контроля моделируются цепочкой **InspectionMethodAssignment** (назначение) →
   **InspectionMethodExecution** (фактическое выполнение; несколько на назначение) →
   **InspectionMethodResult** (технический результат:
-  `CONFORMING`/`NONCONFORMING`/`INCONCLUSIVE`/`NOT_PERFORMED`,
+  `CONFORMING`/`NONCONFORMING`/`INCONCLUSIVE`/`NOT_EVALUATED`,
   lifecycle `DRAFT → SUBMITTED → VERIFIED` + `SUPERSEDED`/`CANCELLED`);
+  реализовано как `MethodExecutionResultItem` внутри `MethodExecution`, терминал
+  выполнения — `LAB_CONFIRMED` (см. «Реализация Task 9C» ниже);
 - **технический результат лаборатории (`InspectionMethodResult`) и технологическое
   решение ОГС (`InspectionDecision`) хранятся раздельно**; лаборатория фиксирует
   результат, ОТК переводит его в `VERIFIED`, ОГС принимает решение уровня
@@ -1977,15 +1980,15 @@ Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 
 - значения результата контроля `PASS`/`FAIL`/`CONDITIONAL` из ADR-009 (004-14)
   остаются **историческим проектным вариантом**;
 - ADR-015 **заменяет** их для будущей реализации;
-- канонические технические результаты `InspectionMethodResult`:
+- исторически предложенные в Session 007 технические результаты `InspectionMethodResult`:
   - `CONFORMING`;
   - `NONCONFORMING`;
   - `INCONCLUSIVE`;
-  - `NOT_PERFORMED`;
-- отдельная миграция старых значений **сейчас не требуется**, поскольку контур
-  контроля ещё не реализован;
-- при **Task 9C** сначала проверить наличие реальных таблиц и данных контроля и
-  только при их наличии проектировать миграцию.
+  - `NOT_PERFORMED` — историческое имя, заменённое в реализации Task 9C на
+    `NOT_EVALUATED`;
+- реализованный `MethodExecutionResultItem` использует `NOT_EVALUATED`: оценка ещё
+  не сформирована. `CONTROL_NOT_PERFORMED` означает, что контроль не выполнен; это
+  отдельный тип отмены, а не оценка результата.
 
 ### Эволюция Defect (историческая совместимость)
 
@@ -2034,8 +2037,10 @@ ADR-015 не проектируется.
 
 **Ограничения:**
 
-- реализация **запланирована** как следующий этап (Tasks 9A — 9G) и пока не
-  выполнена;
+- Tasks 9A — 9C реализованы: Task 9C завершает ядро выполнения назначенных методов
+  контроля и регистрации лабораторных заключений; решения ОГС/ОТК, дефекты,
+  evidence/файлы и журналы остаются в Tasks **9D — 9G** (planned / not
+  implemented);
 - полный ремонтный lifecycle, `RepairOperation`, `Reweld`, полная аттестация
   дефектоскопистов, реестр оборудования НК и модель аккредитации лабораторий — **вне**
   Session 007;
@@ -2060,6 +2065,73 @@ docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Tasks 9A — 9G)
 - [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014]] — обязательный контроль после термообработки, связь `Inspection ↔ HeatTreatmentOperation`;
 - [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009]] — прежняя единая `Inspection` (раздел частично замещён);
 - [[docs/project/ADR-006-domain-ownership-matrix|ADR-006]] — владельцы доменов (ОТК — контроль, НК — методы, ОГС — решение).
+
+---
+
+## ADR-016. Quality Execution Model (Task 9C)
+
+Дата: 2026-07-15
+
+Статус: принято, реализовано
+
+### Контекст
+
+ADR-015 зафиксировал проектный канон контроля, но реализация Task 9C уточнила
+границы агрегатов, правила редакций, модель лабораторного заключения и внешних
+участников. Эти уточнения должны быть каноном текущей физической архитектуры, не
+переписывая историческую запись Architecture Session 007.
+
+### Решение
+
+- `MethodExecution` отделён от `InspectionMethodAssignment`: назначение отвечает на
+  вопрос «что и кому назначено», выполнение — «что фактически выполнено в конкретном
+  эпизоде контроля».
+- Результаты контроля (`MethodExecutionResultItem`) версионируются. История не
+  переписывается; исправления создаются через revision с lineage-полями
+  `root_result_item_id`, `revision_no`, `supersedes_result_item_id`.
+- Сам `MethodExecution` также исправляется новой редакцией, а подтверждённая редакция
+  остаётся неизменяемой.
+- `LaboratoryConclusion` — отдельный агрегат, а не поле выполнения. Заключение
+  ссылается на конкретную редакцию одного или нескольких подтверждённых
+  `MethodExecution`; исправление выпущенного заключения создаёт новую редакцию.
+- Внешние лаборатории моделируются существующими `project.companies` и участием в
+  проекте через `project_companies` с ролью `NDT_LAB`; отдельный профиль юрлица не
+  вводится.
+- Внешние контролёры и утверждающие лица моделируются как `QualityExternalPerson` и
+  не являются `hr.Worker`.
+- `LaboratoryAccreditation` связывается с лабораторией, имеет срок действия, а при
+  выпуске заключения её реквизиты фиксируются неизменяемым snapshot.
+- `LAB_CONFIRMED` означает подтверждение лабораторного результата или регистрацию
+  внешнего лабораторного документа и не является решением ОТК. `VERIFIED`
+  зарезервирован для будущего этапа проверки ОТК и в Task 9C не реализован.
+- `NOT_EVALUATED` означает, что оценка результата ещё не сформирована;
+  `CONTROL_NOT_PERFORMED` означает, что контроль не выполнен. Эти состояния не
+  взаимозаменяемы.
+
+### Последствия
+
+- Task 9C завершает ядро выполнения назначенных методов контроля и регистрации
+  лабораторных заключений. Цепочка исполнения трассируется как назначение →
+  выполнение → локальные результаты → лабораторное заключение, с отдельной историей
+  редакций каждого изменяемого факта.
+- `quality_audit_events` фиксирует доменные действия Quality; API Task 9C работает с
+  актуальными агрегатами `MethodExecution` и `LaboratoryConclusion`.
+- Tasks **9D — 9G** (решения ОГС/ОТК, дефекты, evidence/файлы, журналы) остаются
+  planned / not implemented.
+- Исторические имена `InspectionMethodExecution`, `InspectionMethodResult` и
+  `InspectionReport` сохраняются только в записях прежнего канона и ссылках на их
+  замену.
+
+### Где зафиксировано
+
+```text
+docs/ARCHITECTURE.md (§5.7)
+docs/project/ARCHITECTURE_SESSIONS.md (консолидация Task 9C)
+docs/project/DECISIONS.md (ADR-016)
+docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md
+docs/project/PROJECT_SUMMARY.md
+docs/project/UBIQUITOUS_LANGUAGE.md
+```
 
 ---
 

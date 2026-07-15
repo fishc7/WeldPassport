@@ -832,9 +832,9 @@ Inspection / NDTInspection, полноценный МТО, учёт бригад
 
 | Task | Содержание |
 |------|-----------|
-| **9A — Inspection Core** | `Inspection`, нумерация (`<PROJECT_CODE>-INS-<SEQUENCE>`), связь с `Joint`, lifecycle, готовность `Joint`, permissions/scope, базовый `Joint.inspection_state` |
-| **9B — Method Assignment and Laboratory** | методы (`VT`/`RT`/`UT`/`PT`/`MT`/`LT`), `InspectionMethodAssignment`, лаборатория через `project_companies` (роль `NDT_LAB`), lifecycle назначения `ASSIGNED`/`CANCELLED`/`REPLACED`, проверки лаборатории (реализовано; ТЗ Task 9B сузило исходную формулировку — отдельный `NdtLaboratoryProfile`, сроки, приоритет и стоимость **не входят**) |
-| **9C — Method Execution and Results** | `InspectionMethodExecution`, `InspectionMethodResult`, фактические даты, повторные выполнения, проверка ОТК, версионирование результатов |
+| **9A — Inspection Core — DONE** | `Inspection`, нумерация (`<PROJECT_CODE>-INS-<SEQUENCE>`), связь с `Joint`, lifecycle, готовность `Joint`, permissions/scope, базовый `Joint.inspection_state` |
+| **9B — Method Assignment and Laboratory — DONE** | методы (`VT`/`RT`/`UT`/`PT`/`MT`/`LT`), `InspectionMethodAssignment`, лаборатория через `project_companies` (роль `NDT_LAB`), lifecycle назначения `ASSIGNED`/`CANCELLED`/`REPLACED`, проверки лаборатории (реализовано; ТЗ Task 9B сузило исходную формулировку — отдельный `NdtLaboratoryProfile`, сроки, приоритет и стоимость **не входят**) |
+| **9C — Method Execution and Results — DONE** | `MethodExecution`, локальные `MethodExecutionResultItem`, редакции выполнения и результатов, `LaboratoryConclusion` и его редакции, внешняя лаборатория/лица, Quality Audit и API; `LAB_CONFIRMED` не является решением ОТК, `VERIFIED` отложен |
 | **9D — OGS Decisions and Joint State** | `InspectionDecision`, системная рекомендация, решения ОГС, исключения `CHIEF_WELDER`, автоматическое закрытие, состояния `Joint` |
 | **9E — Coverage, Samples and Defect Integration** | `InspectionCoverage`, `InspectionSample`, групповые выборки, `Defect`, только точки интеграции с ремонтом |
 | **9F — Reports and Evidence** | `InspectionReport`, `InspectionEvidence`, файлы, object storage, подписанные ссылки, RBAC, rate limit |
@@ -849,11 +849,10 @@ lifecycle `Joint`.
 **Историческая совместимость (ADR-015):**
 
 - результаты `PASS`/`FAIL`/`CONDITIONAL` из ADR-009 — исторический проектный вариант;
-  канонические технические результаты `InspectionMethodResult` —
-  `CONFORMING`/`NONCONFORMING`/`INCONCLUSIVE`/`NOT_PERFORMED`. Отдельная миграция
-  старых значений сейчас не требуется (контур не реализован); при **Task 9C** сначала
-  проверить наличие реальных таблиц и данных и только при их наличии проектировать
-  миграцию;
+  реализованные оценки `MethodExecutionResultItem` —
+  `CONFORMING`/`NONCONFORMING`/`INCONCLUSIVE`/`NOT_EVALUATED`;
+  `NOT_EVALUATED` означает, что оценка ещё не сформирована, а
+  `CONTROL_NOT_PERFORMED` — что контроль не выполнен; это разные понятия;
 - прежняя схема `quality.defects` (ADR-009) — предварительный черновик; канон:
   `индикация лаборатории → подтверждение и классификация ОТК → Defect → решение ОГС`;
   полный ремонтный lifecycle — вне **Task 9E**;
@@ -915,12 +914,20 @@ lifecycle `Joint`.
   общесистемного права не получает; COMPANY-scope — только чтение); вычисляемая
   сводка готовности заявки (`has_method_assignments`, `active_method_assignment_count`,
   `assigned_method_codes`, `all_assignments_have_laboratory`, ограниченный
-  `ready_for_execution`) без изменения статуса `Inspection`. Выполнение метода,
-  результаты, решения ОГС/ОТК, дефекты, файлы и журналы (Tasks 9C — 9G) **не
-  реализованы**. Полная регрессия — **854 passed**.
-- **Tasks 9C — 9G — не начаты** (канон ADR-015 принят, код/миграции/тесты не
-  создавались). Логика импорта результатов НК (Architecture Session 008)
-  **отсутствует**.
+  `ready_for_execution`) без изменения статуса `Inspection`. Решения ОГС/ОТК,
+  дефекты, файлы и журналы (Tasks 9D — 9G) пока не реализованы. Полная регрессия
+  блока 9B — **854 passed**.
+- **Task 9C — Method Execution and Results — реализована и принята.** Task 9C
+  завершает ядро выполнения назначенных методов контроля и регистрации
+  лабораторных заключений: lifecycle `MethodExecution`, локальные
+  `MethodExecutionResultItem`, редакции выполнений и результатов без перезаписи
+  истории, отдельный агрегат `LaboratoryConclusion` и его редакции, модель внешней
+  лаборатории и `QualityExternalPerson`, снимок `LaboratoryAccreditation`,
+  `quality_audit_events` и API. `LAB_CONFIRMED` подтверждает лабораторный результат
+  или регистрацию внешнего документа и не является решением ОТК; `VERIFIED`
+  зарезервирован для будущей проверки ОТК.
+- **Tasks 9D — 9G — planned / not implemented.** Логика импорта результатов НК
+  (Architecture Session 008) **отсутствует**.
 
 ---
 
@@ -965,7 +972,11 @@ lifecycle `Joint`.
 - [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012]] (принят — канон WeldOperation, Tasks 8A — 8F)
 - [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014]] (принят — термическая обработка, Task 8F)
 - [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Session 007]] (контроль качества и НК)
-- [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] (принят — канон контроля/НК; Tasks 9A–9B реализованы, Tasks 9C — 9G запланированы)
+- [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] (принят — канон контроля/НК; Task 9C завершает ядро выполнения методов и лабораторных заключений; Tasks 9D — 9G planned / not implemented)
 - [[docs/ARCHITECTURE#5.3. Физическая модель БД и API Production/Joints MVP (Session 004)|ARCHITECTURE §5.3]]
 
-*Версия плана: 2026-07-14 (Tasks 8A–8F реализованы; Task 9A — Inspection Core и Task 9B — Method Assignment and Laboratory реализованы и приняты, миграции `20260713_15_inspection_core` и `20260713_16_method_assignments`; Tasks 9C–9G — канон контроля/НК по ADR-015, реализация запланирована). Задач: 16 реализованных (1–4, 5A, 5B, 6, 7, 8A–8F, 9A, 9B) + 5 запланированных (9C–9G). Ветка: feature/engineering-joints-mvp.*
+*Версия плана: 2026-07-15 (Tasks 8A–8F и 9A–9C реализованы и приняты; Task 9C
+завершает ядро выполнения назначенных методов контроля и регистрации лабораторных
+заключений; Tasks 9D–9G planned / not implemented по ADR-015). Задач: 17
+реализованных (1–4, 5A, 5B, 6, 7, 8A–8F, 9A, 9B, 9C) + 4 запланированных (9D–9G).
+Ветка: feature/engineering-joints-mvp.*

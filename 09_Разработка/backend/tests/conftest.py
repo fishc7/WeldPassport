@@ -37,6 +37,15 @@ from app.quality.models import (
     InspectionEvent,
     InspectionMethodAssignment,
     InspectionSequence,
+    LaboratoryAccreditation,
+    LaboratoryConclusion,
+    LaboratoryConclusionExecution,
+    MethodExecution,
+    MethodExecutionParticipant,
+    MethodExecutionResultItem,
+    MethodExecutionStandard,
+    QualityAuditEvent,
+    QualityExternalPerson,
 )
 from app.shared.db import SessionLocal, get_db
 from app.welding.models import Welder, WelderAdmission
@@ -194,6 +203,39 @@ def _purge_test_data(db: Session) -> None:
     ]
     if not worker_ids:
         return
+
+    # Выполнение метода и заключения (Task 9C) удаляем раньше всего: их таблицы
+    # ссылаются на назначения (RESTRICT), стыки/проекты/компании (RESTRICT) и
+    # method_executions (RESTRICT). Порядок — дети → родители; фильтр по
+    # created_by_worker_id (audit — по actor_worker_id) тестовых workers. Self-FK
+    # supersedes_* — SET NULL, спец-обнуление не нужно.
+    db.query(QualityAuditEvent).filter(
+        QualityAuditEvent.actor_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(LaboratoryConclusionExecution).filter(
+        LaboratoryConclusionExecution.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(MethodExecutionParticipant).filter(
+        MethodExecutionParticipant.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(MethodExecutionResultItem).filter(
+        MethodExecutionResultItem.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(MethodExecutionStandard).filter(
+        MethodExecutionStandard.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(LaboratoryConclusion).filter(
+        LaboratoryConclusion.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(MethodExecution).filter(
+        MethodExecution.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(LaboratoryAccreditation).filter(
+        LaboratoryAccreditation.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(QualityExternalPerson).filter(
+        QualityExternalPerson.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
 
     # Заявки на контроль (Task 9A) удаляем первыми: FK quality.inspections →
     # engineering.joints и project.projects c RESTRICT, quality.inspection_events

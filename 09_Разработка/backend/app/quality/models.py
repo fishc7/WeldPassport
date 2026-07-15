@@ -387,3 +387,37 @@ class InspectionMethodAssignment(Base):
     version: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="1"
     )
+
+
+# ── Task 9C: реэкспорт моделей выполнения метода и заключения ───────────────────
+# Модели Task 9C вынесены в отдельный модуль (execution_models) из-за объёма, но
+# доступны через привычный неймспейс app.quality.models (conftest, Alembic, тесты).
+# Импорт в конце файла: QUALITY_SCHEMA к этому моменту уже определён, цикла нет.
+from app.quality.execution_models import (  # noqa: E402
+    LaboratoryAccreditation,
+    LaboratoryConclusion,
+    LaboratoryConclusionExecution,
+    MethodExecution,
+    MethodExecutionParticipant,
+    MethodExecutionResultItem,
+    MethodExecutionStandard,
+    QualityAuditEvent,
+    QualityExternalPerson,
+)
+
+__all__ = [
+    "QUALITY_SCHEMA",
+    "Inspection",
+    "InspectionSequence",
+    "InspectionEvent",
+    "InspectionMethodAssignment",
+    "MethodExecution",
+    "MethodExecutionParticipant",
+    "MethodExecutionResultItem",
+    "MethodExecutionStandard",
+    "LaboratoryConclusion",
+    "LaboratoryConclusionExecution",
+    "LaboratoryAccreditation",
+    "QualityExternalPerson",
+    "QualityAuditEvent",
+]

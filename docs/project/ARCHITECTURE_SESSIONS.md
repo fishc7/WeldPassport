@@ -1961,6 +1961,57 @@ Inspection ↔ HeatTreatmentOperation (обязательный контроль
 
 ---
 
+## Консолидация реализации Task 9C (2026-07-15)
+
+Architecture Session 007 остаётся исторической записью исходного канона. По итогам
+реализации Tasks 9A — 9C активная модель Quality уточнена ADR-016:
+
+- **Task 9A — DONE:** Inspection lifecycle;
+- **Task 9B — DONE:** Method Assignment и лаборатория через `project_companies` с
+  ролью `NDT_LAB`;
+- **Task 9C — DONE:** Task 9C завершает ядро выполнения назначенных методов
+  контроля и регистрации лабораторных заключений (`MethodExecution`,
+  `MethodExecutionResultItem`, редакции выполнений и результатов,
+  `LaboratoryConclusion` и его редакции, `QualityExternalPerson`,
+  `LaboratoryAccreditation`, Quality Audit и API).
+- **Tasks 9D — 9G — planned / not implemented:** решения ОГС/ОТК, дефекты,
+  evidence/файлы и журналы.
+
+Актуальная цепочка:
+
+```text
+InspectionMethodAssignment
+        |
+        v
+ MethodExecution
+        |
+        +----------------+
+        |                |
+        v                v
+ ResultItem      LaboratoryConclusion
+        |                |
+        v                v
+ ResultRevision  ConclusionRevision
+```
+
+Lifecycle `MethodExecution`:
+`DRAFT → IN_PROGRESS → PERFORMED → RESULT_RECORDED → LAB_CONFIRMED`.
+
+Lifecycle `LaboratoryConclusion`:
+`DRAFT → PREPARED → LAB_APPROVED → ISSUED`.
+
+`LAB_CONFIRMED` подтверждает лабораторный результат или регистрацию внешнего
+лабораторного документа и не является решением ОТК. `VERIFIED` зарезервирован для
+будущей проверки ОТК и в Task 9C не реализован. `NOT_EVALUATED` (оценка ещё не
+сформирована) отличается от `CONTROL_NOT_PERFORMED` (контроль не выполнен).
+
+Имена `InspectionMethodExecution`, `InspectionMethodResult`, `InspectionReport` и
+значение оценки `NOT_PERFORMED` в тексте Session 007 ниже/выше являются только
+историческими формулировками исходного канона; актуальные имена и правила определены
+ADR-016 и Ubiquitous Language.
+
+---
+
 ## Шаблон новой сессии
 
 ```markdown
@@ -1992,4 +2043,6 @@ Inspection ↔ HeatTreatmentOperation (обязательный контроль
 
 ---
 
-*Версия журнала: 2026-07-13. Записей: 7 (Session 007 — завершена; канон принят, реализация Tasks 9A — 9G отложена).*
+*Версия журнала: 2026-07-15. Записей: 7 (Session 007 завершена; Task 9C завершает
+ядро выполнения назначенных методов контроля и регистрации лабораторных
+заключений — ADR-016; Tasks 9D — 9G planned / not implemented).*
