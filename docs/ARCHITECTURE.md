@@ -596,11 +596,65 @@ Joint.inspection_state (вычисляемо)
 локальный ремонт и `RepairOperation` остаются отдельным контуром. Обязательный
 контроль после ТО связывает `Inspection` с `HeatTreatmentOperation` (ADR-014).
 
-**Граница с Architecture Session 008.** Импорт результатов контроля (XLSX, CSV, PDF,
+**Граница с импортом результатов НК.** Импорт результатов контроля (XLSX, CSV, PDF,
 API лаборатории) зафиксирован **только как интеграционное требование верхнего
 уровня**: импорт **не может автоматически принимать результат**. Детальная
-архитектура импорта результатов НК проектируется в будущей **Architecture Session
-008** и в Session 007/ADR-015 не раскрывается.
+архитектура импорта в Session 007/ADR-015 не раскрывается; она **не вошла** и в
+фактически проведённую [Architecture Session 008](#58-решения-по-качеству-дефекты-ремонт-и-документы-качества-session-008-adr-017)
+(которая посвящена канону решений по качеству) и остаётся открытой для отдельной
+будущей архитектурной сессии.
+
+### 5.8. Решения по качеству, дефекты, ремонт и документы качества (Session 008, ADR-017)
+
+Канон: [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]] ·
+[[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Architecture Session 008]].
+**Статус:** канон принят (блоки 008-01 — 008-05); **код, миграции и тесты не
+создавались**; реализация — Tasks **9D — 9K** (planned / not implemented). Блок
+**008-06 «Печатные формы»** не завершён и **не входит** в принятый канон.
+
+Session 008 определяет **процесс после получения результата контроля** — надстройку
+над техническим слоем ADR-015/016:
+
+```text
+Inspection Result → Quality Finding → Engineering Evaluation → Defect →
+Quality Decision → Repair → Reinspection → Defect Closure
+```
+
+Ключевые правила:
+
+| Правило | Суть |
+| --- | --- |
+| Result ≠ Finding ≠ Defect | `Inspection Result` — технический факт; `Quality Finding` — обнаруженный признак (не автоматический дефект); `Defect` — недопустимое несоответствие **только после инженерной оценки**; отрицательный результат может существовать без Defect |
+| Quality Decision | Совместная оценка ОГС (техника/технология) и ОТК (нормативы/качество), решения раздельны; итог `ACCEPT`/`REPAIR_REQUIRED`/`REINSPECTION_REQUIRED`/`REJECT`; при разногласии — `Chief Welder Review → Final Decision` |
+| Неизменяемость решений | Решения после фиксации не редактируются — только новая версия с причиной; обоснование обязательно (в т.ч. для `ACCEPT`): норматив, пункт/критерий, текст, автор, дата |
+| Итог Inspection | Считается автоматически по самому строгому активному решению по каждому Finding (`REJECT > REPAIR_REQUIRED > REINSPECTION_REQUIRED > ACCEPT`); override/отмена — только главный сварщик, исходный расчёт сохраняется |
+| Defect | Создаётся после подтверждения ОГС и ОТК (владелец — ОГС); `Finding ↔ Defect` многие-ко-многим; тип из расширяемого справочника; критичность `MINOR`/`MAJOR`/`CRITICAL`; локализация к `Joint` и зоне шва; причина до закрытия; корректирующее действие для критических/повторяющихся |
+| Связь со сварщиком | Только `Defect → WeldOperation → Welder`; прямая связь Defect↔сварщик не создаётся; уровни `POSSIBLE`/`PROBABLE`/`CONFIRMED`; персональная ответственность — только `CONFIRMED` |
+| Repair | Отдельная сущность, `Defect ↔ Repair` многие-ко-многим; выполненный Repair не устраняет Defect автоматически; план утверждает ОГС, согласовывает ОТК; WPS обязателен для сварочного Repair; план после утверждения неизменяем (новая версия); лимиты `Defect`/`Joint`/`Repair Zone Repair Count` |
+| Reinspection | Привязан к конкретному Repair; итог по самому строгому результату; после подтверждений ОГС и ОТК Defect → `CLOSED_AFTER_REPAIR` |
+| Quality State Joint | При окончательном отклонении — качество-состояние `REJECTED` (история сохраняется, производство блокируется); снятие — только главный сварщик новой версией решения |
+| Quality Document | Единая сущность (связь с Inspection/Finding/Defect/Repair/Reinspection); типы `WORKING`/`EVIDENCE`/`OFFICIAL`; версионирование без перезаписи выпущенного файла; контрольная сумма и дедупликация; единый реестр; экспорт Excel/PDF (ЭП, контрольная сумма, QR) |
+
+Жизненные циклы:
+
+```text
+Defect:   DRAFT → CONFIRMED → REPAIR_REQUIRED → REINSPECTION_REQUIRED → CLOSURE_PENDING
+                → CLOSED_AFTER_REPAIR / CLOSED_AS_ACCEPTABLE  (+ REJECTED / CANCELLED)
+Repair:   DRAFT → PLANNED → APPROVED → IN_PROGRESS → PAUSED → REWORK_REQUIRED → PERFORMED
+                → VERIFICATION_PENDING → COMPLETED  (+ REJECTED / CANCELLED; RESUMED — событие)
+Document: DRAFT → UNDER_REVIEW → APPROVED → ISSUED → SUPERSEDED / CANCELLED
+```
+
+Роли (существующий канон, новых role_code нет): ОГС/`WELDING_ENGINEER` — оценка,
+владелец Defect, план Repair, техническая причина; ОТК (`OTK_INSPECTOR`) —
+соответствие нормативам, подтверждение Defect, согласование Repair; `CHIEF_WELDER` —
+разрешение разногласий, override/отмена итога, критические исключения; мастер —
+заявка на ремонт и его выполнение; лаборатория НК — Reinspection.
+
+**Исключения из канона (не входят):** печатные формы и макеты PDF (008-06),
+генераторы документов, реализация ЭП, публичный API проверки подлинности, frontend,
+backend, миграции, импорт документов и результатов НК, реализация уведомлений и
+фактическая реализация Defect/Repair/Reinspection.
 
 ## 6. Ключевые правила модели данных
 
@@ -1134,7 +1188,7 @@ backend или оставить отдельным слоём до миграц�
 ## Связанные документы
 
 - [[docs/00_PROJECT_CONTEXT|Контекст проекта]] — назначение, жизненный цикл, 7 модулей
-- [[docs/project/DECISIONS|Журнал решений (ADR)]] — [[docs/project/DECISIONS#ADR-001. Модель организаций и проектов|ADR-001]] · [[docs/project/ADR-002-double-welder-accounting|ADR-002: двойной учёт сварщика]] · [[docs/project/DECISIONS#ADR-003. Исключение модуля нормирования из активного MVP|ADR-003: нормирование в backlog]] · [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007: жизненный цикл стыка]] · [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008: каноническая модель предметной области]] · [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009: физическая модель БД и API]] · [[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010: Joint MVP]] · [[docs/project/DECISIONS#ADR-011. Жизненный цикл Joint, согласования, блокировки и контроль областей|ADR-011: lifecycle Joint]] · [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012: WeldOperation]] · [[docs/project/DECISIONS#ADR-013. Импорт XLSX и разрешение конфликтов (Task 8E)|ADR-013: импорт XLSX]] · [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014: термическая обработка]] · [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015: контроль и НК]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 004|Session 004]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 005|Session 005]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 006|Session 006]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Session 007]]
+- [[docs/project/DECISIONS|Журнал решений (ADR)]] — [[docs/project/DECISIONS#ADR-001. Модель организаций и проектов|ADR-001]] · [[docs/project/ADR-002-double-welder-accounting|ADR-002: двойной учёт сварщика]] · [[docs/project/DECISIONS#ADR-003. Исключение модуля нормирования из активного MVP|ADR-003: нормирование в backlog]] · [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007: жизненный цикл стыка]] · [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008: каноническая модель предметной области]] · [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009: физическая модель БД и API]] · [[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010: Joint MVP]] · [[docs/project/DECISIONS#ADR-011. Жизненный цикл Joint, согласования, блокировки и контроль областей|ADR-011: lifecycle Joint]] · [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012: WeldOperation]] · [[docs/project/DECISIONS#ADR-013. Импорт XLSX и разрешение конфликтов (Task 8E)|ADR-013: импорт XLSX]] · [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014: термическая обработка]] · [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015: контроль и НК]] · [[docs/project/DECISIONS#ADR-016. Quality Execution Model (Task 9C)|ADR-016: модель выполнения контроля]] · [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017: решения по качеству, дефекты, ремонт, документы]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 004|Session 004]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 005|Session 005]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 006|Session 006]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Session 007]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Session 008]]
 - [[03_База_данных/Модель_организаций_и_проектов|Модель организаций и проектов]] · [[03_База_данных/WeldPassport_Реестр_сущностей_БД_v0.1|Реестр сущностей БД]]
 - [[05_Роли_и_права/00_Ролевая_цепочка_ответственности|Ролевая цепочка ответственности]] · [[02_Процессы/WeldPassport_Процессы_v0.1|Процессы v0.1]]
 - [[10_Проектирование_WeldPassport/03_Работники_и_сварщики/01_Модель_данных_Работники_и_сварщики_v0.1|Модель данных: работники и сварщики]] · [[10_Проектирование_WeldPassport/03_Работники_и_сварщики/02_План_реализации_Работники_и_сварщики_v0.1|План реализации]]

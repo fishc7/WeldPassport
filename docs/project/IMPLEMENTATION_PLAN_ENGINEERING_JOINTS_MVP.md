@@ -835,10 +835,7 @@ Inspection / NDTInspection, полноценный МТО, учёт бригад
 | **9A — Inspection Core — DONE** | `Inspection`, нумерация (`<PROJECT_CODE>-INS-<SEQUENCE>`), связь с `Joint`, lifecycle, готовность `Joint`, permissions/scope, базовый `Joint.inspection_state` |
 | **9B — Method Assignment and Laboratory — DONE** | методы (`VT`/`RT`/`UT`/`PT`/`MT`/`LT`), `InspectionMethodAssignment`, лаборатория через `project_companies` (роль `NDT_LAB`), lifecycle назначения `ASSIGNED`/`CANCELLED`/`REPLACED`, проверки лаборатории (реализовано; ТЗ Task 9B сузило исходную формулировку — отдельный `NdtLaboratoryProfile`, сроки, приоритет и стоимость **не входят**) |
 | **9C — Method Execution and Results — DONE** | `MethodExecution`, локальные `MethodExecutionResultItem`, редакции выполнения и результатов, `LaboratoryConclusion` и его редакции, внешняя лаборатория/лица, Quality Audit и API; `LAB_CONFIRMED` не является решением ОТК, `VERIFIED` отложен |
-| **9D — OGS Decisions and Joint State** | `InspectionDecision`, системная рекомендация, решения ОГС, исключения `CHIEF_WELDER`, автоматическое закрытие, состояния `Joint` |
-| **9E — Coverage, Samples and Defect Integration** | `InspectionCoverage`, `InspectionSample`, групповые выборки, `Defect`, только точки интеграции с ремонтом |
-| **9F — Reports and Evidence** | `InspectionReport`, `InspectionEvidence`, файлы, object storage, подписанные ссылки, RBAC, rate limit |
-| **9G — Journals and Document Packages** | журнал, XLSX/PDF/CSV/JSON, снимки, пакеты, версии, публикация |
+| **9D — 9K (Session 008)** | Предварительная разбивка 9D — 9G (Session 007: OGS Decisions / Coverage/Samples/Defect / Reports/Evidence / Journals) **замещена** более детальной последовательностью Tasks **9D — 9K** каноном [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Session 008]] / [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]] — см. раздел [«Следующий этап — Решения по качеству, дефекты, ремонт и документы (Session 008)»](#следующий-этап--решения-по-качеству-дефекты-ремонт-и-документы-session-008) |
 
 **Согласованность:** готовность и актуальность результатов опираются на актуальную
 завершённую `WeldOperation` (ADR-012); `reweld` → новый `Inspection`; обязательный
@@ -926,8 +923,44 @@ lifecycle `Joint`.
   `quality_audit_events` и API. `LAB_CONFIRMED` подтверждает лабораторный результат
   или регистрацию внешнего документа и не является решением ОТК; `VERIFIED`
   зарезервирован для будущей проверки ОТК.
-- **Tasks 9D — 9G — planned / not implemented.** Логика импорта результатов НК
-  (Architecture Session 008) **отсутствует**.
+- **Post-9C (Tasks 9D — 9K) — planned / not implemented.** Разбивка после Task 9C
+  задана каноном Session 008 (см. следующий раздел). Логика импорта результатов НК
+  **отсутствует** и в объём Session 008 не входит.
+
+---
+
+## Следующий этап — Решения по качеству, дефекты, ремонт и документы (Session 008)
+
+> **Предусловие:** к Task 9D переходят **только после** принятия
+> [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Architecture Session 008]]
+> и [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]].
+> На Session 008 **код, миграции и тесты не создавались**; детальные ТЗ Tasks
+> 9D — 9K в этом документе **не раскрываются**.
+
+Канон: Session 008 (блоки 008-01 — 008-05) · ADR-017. Session 008 **замещает**
+предварительную (Session-007) разбивку Tasks 9D — 9G более детальной
+последовательностью **9D — 9K**. Контур:
+`Inspection Result → Quality Finding → Engineering Evaluation → Defect →
+Quality Decision → Repair → Reinspection → Defect Closure`.
+
+| Task | Содержание |
+|------|-----------|
+| **9D — Quality Finding and Engineering Evaluation** | `Quality Finding`, инженерная оценка Finding, разделение `Inspection Result ≠ Finding ≠ Defect` |
+| **9E — Quality Decision Workflow** | решения ОГС/ОТК, разрешение разногласий главным сварщиком, override/отмена итога, версии и обоснование |
+| **9F — Defect Core** | сущность `Defect`, жизненный цикл, подтверждение ОГС/ОТК, связь `Finding ↔ Defect` (многие-ко-многим) |
+| **9G — Defect Cause, Severity and Localization** | причина и коренная причина, критичность, локализация, корректирующие действия, повторяемость, причинная связь с `WeldOperation` |
+| **9H — Repair Core and Repair Planning** | `Repair`, план ремонта, версии, лимиты и зоны ремонтов |
+| **9I — Repair Execution and Verification** | выполнение, остановки/возобновление, отклонения, подтверждения ОГС/ОТК, заключение по ремонту |
+| **9J — Reinspection Integration** | повторный контроль, привязка к `Repair`, итог, автоматическое закрытие `Defect` |
+| **9K — Quality Documents and Registry** | `Quality Document`, версии, владение, подписи, комплектность, реестр, экспорт |
+
+**Не входит в Session 008 (открыто):** блок **008-06 «Печатные формы»** (шаблоны и
+макеты PDF, генераторы, реализация ЭП, публичный API проверки подлинности), а также
+**детальная архитектура импорта результатов НК** — отдельная будущая архитектурная
+сессия.
+
+**Статус реализации (2026-07-15):** Tasks **9D — 9K — planned / not implemented**;
+Session 008 фиксирует только архитектурный канон (ADR-017).
 
 ---
 
@@ -972,11 +1005,14 @@ lifecycle `Joint`.
 - [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012]] (принят — канон WeldOperation, Tasks 8A — 8F)
 - [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014]] (принят — термическая обработка, Task 8F)
 - [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Session 007]] (контроль качества и НК)
-- [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] (принят — канон контроля/НК; Task 9C завершает ядро выполнения методов и лабораторных заключений; Tasks 9D — 9G planned / not implemented)
+- [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] (принят — канон контроля/НК; Task 9C завершает ядро выполнения методов и лабораторных заключений)
+- [[docs/project/DECISIONS#ADR-016. Quality Execution Model (Task 9C)|ADR-016]] (принят — модель выполнения контроля, Task 9C)
+- [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Session 008]] · [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]] (принят — канон решений по качеству, дефектов, ремонта и документов; Tasks 9D — 9K planned / not implemented)
 - [[docs/ARCHITECTURE#5.3. Физическая модель БД и API Production/Joints MVP (Session 004)|ARCHITECTURE §5.3]]
 
 *Версия плана: 2026-07-15 (Tasks 8A–8F и 9A–9C реализованы и приняты; Task 9C
 завершает ядро выполнения назначенных методов контроля и регистрации лабораторных
-заключений; Tasks 9D–9G planned / not implemented по ADR-015). Задач: 17
-реализованных (1–4, 5A, 5B, 6, 7, 8A–8F, 9A, 9B, 9C) + 4 запланированных (9D–9G).
+заключений. Session 008 / ADR-017 задаёт разбивку post-9C на Tasks 9D–9K —
+planned / not implemented; блок 008-06 «Печатные формы» открыт). Задач: 17
+реализованных (1–4, 5A, 5B, 6, 7, 8A–8F, 9A, 9B, 9C) + 8 запланированных (9D–9K).
 Ветка: feature/engineering-joints-mvp.*
