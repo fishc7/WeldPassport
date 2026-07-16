@@ -2593,8 +2593,10 @@ Joint. Положительные решения по методам не соз
 
 ### Последствия
 
-До Task 9D обновляются архитектура, словарь, roadmap и post-9C план. Tasks 9D–9K
-остаются planned / not implemented и должны быть перепланированы по этому канону.
+До Task 9D выполняется отдельный Post-9C compatibility audit. Актуальный post-9C
+план зафиксирован как Tasks 9D–9M; **9L — External Acceptance**, **9M — Joint
+Quality Closure Integration**. Compatibility audit и Tasks 9D–9M остаются planned /
+not implemented.
 Код и миграции этим ADR не изменяются. ADR-019 частично замещает только явно
 перечисленные положения ADR-015/017; модель исполнения ADR-016 и канон печатных
 форм ADR-018 сохраняются.
