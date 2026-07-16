@@ -2025,7 +2025,7 @@ ADR-016 и Ubiquitous Language.
 | **Номер** | 008 |
 | **Дата** | 2026-07-15 |
 | **Тема** | Решения по качеству, дефекты, ремонт и документы качества |
-| **Статус** | Завершена (блоки 008-01 — 008-05); блок 008-06 «Печатные формы» открыт |
+| **Статус** | Завершена (блоки 008-01 — 008-06); блоки 008-01 — 008-05 — ADR-017, блок 008-06 «Печатные формы» завершён 2026-07-16 и принят в ADR-018 |
 
 ### Краткое описание
 
@@ -2068,10 +2068,12 @@ Welder`; сущность `Repair` и её жизненный цикл; повт
 лимиты ремонтов и зоны; качество-состояние Joint `REJECTED`; единая сущность
 `Quality Document`, её версионирование, владение, подписи, реестр и экспорт.
 
-**Не входит (008-06 и смежное):** шаблоны печатных форм и макеты PDF; генераторы
-документов; реализация ЭП; публичный API проверки подлинности; frontend; backend;
-миграции; импорт документов; реализация уведомлений; фактическая реализация Defect,
-Repair и Reinspection. **Детальная архитектура импорта результатов НК** (XLSX, CSV,
+**Не входит (реализация и смежное):** генераторы документов и конкретные макеты PDF;
+реализация ЭП; публичный API проверки подлинности; frontend; backend; миграции;
+импорт документов; реализация уведомлений; фактическая реализация Defect, Repair и
+Reinspection. **Канон печатных форм** (блок 008-06) завершён отдельно и принят в
+[[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018]].
+**Детальная архитектура импорта результатов НК** (XLSX, CSV,
 PDF, API лаборатории), ранее прогнозно привязанная к «Session 008», в эту сессию
 **не вошла** и остаётся открытой для отдельной будущей сессии
 (см. [Согласование границы с Session 007](#согласование-границы-с-session-007)).
@@ -2117,6 +2119,34 @@ REJECTED — отклонено по качеству (история сохра
 - **Мастер** — заявка на ремонт, `IN_PROGRESS`, фиксация завершения, остановка/отмена;
 - **Лаборатория НК** — Reinspection. Новые `role_code` **не вводятся**.
 
+### Блок 008-06 — Электронные документы и печатные формы (Electronic Documents and Printed Forms)
+
+**Статус:** Completed (завершён 2026-07-16). Канон зафиксирован в
+[[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018]].
+**Код, миграции, API и тесты не создавались.**
+
+Блок 008-06 фиксирует канон управления официальными документами сварочного
+производства как **доказательствами выполнения работ** (Electronic Document
+Management), а не только генерацию PDF.
+
+| Решение | Суть |
+|---------|------|
+| **008-06-01** | `Preview` и `Official Document` разделены |
+| **008-06-02** | Операционные документы и документы закрытия разделены |
+| **008-06-03** | Ответственность выпуска определяется типом документа |
+| **008-06-04** | Официальный документ содержит PDF, Snapshot, Source Links и Hash |
+| **008-06-05** | Выпущенные документы неизменяемы; изменения создают новые версии |
+| **008-06-06** | Источники документа связываются через универсальную модель Document Sources |
+| **008-06-07** | Выпуск документа выполняется после утверждения ответственного лица |
+| **008-06-08** | История формирования документа хранится через Document History Events |
+| **008-06-09** | Используется гибридная модель шаблонов документов |
+
+**Результат:** Adopted Electronic Documents and Printed Forms Canon — формируется
+единый слой **Electronic Documentation**. Task **9D — Quality Finding and Engineering
+Evaluation** должен ссылаться на конкретные редакции **Official Document**;
+исполнительная документация получает версионность и аудит. Реализация (генераторы,
+макеты форм, ЭП, публичный API, backend, миграции) — отдельными задачами.
+
 ### Согласование границы с Session 007
 
 Session 007 (ADR-015) прогнозно называл «Architecture Session 008» сессией **импорта
@@ -2145,16 +2175,20 @@ Session 008 уточняет и **замещает** предварительн�
 
 ### Финальная сводка
 
-**Architecture Session 008 завершена** (блоки 008-01 — 008-05). Блок **008-06
-«Печатные формы»** не завершён и **не входит** в принятый канон. Канон зафиксирован
-в ADR-017; реализация — Tasks **9D — 9K** (planned / not implemented).
+**Architecture Session 008 завершена** (блоки 008-01 — 008-06). Блоки 008-01 — 008-05
+зафиксированы в **ADR-017**. Блок **008-06 «Печатные формы»** завершён 2026-07-16 и
+зафиксирован в **ADR-018** (Electronic Documents and Printed Forms Canon). Реализация
+всей сессии — Tasks **9D — 9K** и отдельные задачи документного слоя (planned / not
+implemented).
 
 **Следующий этап:** Task 9D — Quality Finding and Engineering Evaluation (после
-принятия ADR-017).
+принятия ADR-017; должен ссылаться на конкретные редакции Official Document по
+ADR-018).
 
 ### Связанные ADR
 
 - [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017 — Quality Decision, Defect, Repair and Quality Documents Canon (008-01 — 008-05)]]
+- [[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018 — Electronic Documents and Printed Forms Canon (008-06)]]
 - Продолжает [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] ·
   [[docs/project/DECISIONS#ADR-016. Quality Execution Model (Task 9C)|ADR-016]]; опирается на
   [[docs/project/ADR-006-domain-ownership-matrix|ADR-006]] ·
@@ -2163,11 +2197,11 @@ Session 008 уточняет и **замещает** предварительн�
 
 ### Синхронизированные документы
 
-- `docs/project/DECISIONS.md` (ADR-017)
+- `docs/project/DECISIONS.md` (ADR-017; ADR-018 — блок 008-06)
 - `docs/ARCHITECTURE.md` (§5.8)
-- `docs/project/PROJECT_SUMMARY.md`
-- `docs/project/UBIQUITOUS_LANGUAGE.md` (Раздел 10)
-- `docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md` (Tasks 9D — 9K)
+- `docs/project/PROJECT_SUMMARY.md` (Electronic Documentation Layer)
+- `docs/project/UBIQUITOUS_LANGUAGE.md` (Раздел 10; термины Official Document и др. — ADR-018)
+- `docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md` (Tasks 9D — 9K; Task 9D зависит от ADR-018)
 
 ---
 
@@ -2202,7 +2236,8 @@ Session 008 уточняет и **замещает** предварительн�
 
 ---
 
-*Версия журнала: 2026-07-15. Записей: 8 (Session 008 завершена — блоки 008-01 —
+*Версия журнала: 2026-07-16. Записей: 8 (Session 008 завершена — блоки 008-01 —
 008-05, ADR-017: канон решений по качеству, дефектов, ремонта и документов качества;
-блок 008-06 «Печатные формы» открыт; реализация — Tasks 9D — 9K planned / not
+блок 008-06 «Печатные формы» завершён 2026-07-16 и принят в ADR-018: Electronic
+Documents and Printed Forms Canon; реализация — Tasks 9D — 9K planned / not
 implemented. Session 007 завершена; Task 9C — ADR-016).*

@@ -2144,6 +2144,12 @@ docs/project/UBIQUITOUS_LANGUAGE.md
 создавались**. Реализация вынесена в Tasks **9D — 9K** (planned / not implemented).
 Блок **008-06 «Печатные формы»** не завершён и **не входит** в принятый канон.
 
+> **Обновление (2026-07-16, ADR-018):** блок **008-06 «Печатные формы»**
+> впоследствии завершён отдельной сессией 008-06 и зафиксирован как
+> [[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018 — Electronic Documents and Printed Forms Canon]].
+> Формулировки ниже (в т.ч. «008-06 остаётся открытым» / «не входит в канон»)
+> отражают объём ADR-017 на момент принятия и сохранены как история.
+
 Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Session 008]]
 
 Продолжает и уточняет: [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] ·
@@ -2413,6 +2419,76 @@ docs/project/DECISIONS.md (ADR-017)
 docs/project/PROJECT_SUMMARY.md
 docs/project/UBIQUITOUS_LANGUAGE.md (Раздел 10)
 docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Tasks 9D — 9K)
+```
+
+---
+
+## ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)
+
+Дата: 2026-07-16
+
+Статус: **ACCEPTED — принято** — закрывает блок Architecture Session **008-06
+«Печатные формы»** (решения 008-06-01 — 008-06-09). Канон утверждён; **код,
+миграции, API и тесты на этой сессии не создавались**.
+
+Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Блок 008-06 — Электронные документы и печатные формы (Electronic Documents and Printed Forms)|Session 008-06 — Printed Forms]]
+
+Продолжает и уточняет: [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]] ·
+[[docs/project/DECISIONS#ADR-016. Quality Execution Model (Task 9C)|ADR-016]] ·
+[[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]]
+
+Опирается на: [[docs/project/ADR-006-domain-ownership-matrix|ADR-006]] (владельцы доменов) ·
+[[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012]] (неизменяемый производственный факт)
+
+> **Номер:** ADR-015 занят каноном контроля/НК, ADR-016 — моделью выполнения
+> (Task 9C), ADR-017 — каноном решений по качеству; блок 008-06 «Печатные формы» в
+> ADR-017 остался открытым, поэтому его канон зафиксирован как **ADR-018**.
+
+### Контекст
+
+WeldPassport должен обеспечить управление официальными документами сварочного
+производства как **доказательствами выполнения работ**, а не только генерацию PDF.
+ADR-017 (Session 008) зафиксировал канон решений по качеству, дефектов, ремонта и
+документов качества, но блок 008-06 «Печатные формы» остался открытым. Session 008-06
+закрывает его, вводя канон Electronic Document Management.
+
+### Решение
+
+Принята модель **Electronic Document Management**:
+
+- **Preview** и **Official Document** разделены (008-06-01).
+- Операционные документы и документы закрытия разделены (008-06-02).
+- Ответственность выпуска определяется типом документа (008-06-03).
+- Официальный документ содержит **PDF, Snapshot, Source Links и Hash** (008-06-04).
+- Выпущенные документы **неизменяемы**; изменения создают **новые версии** документа
+  (008-06-05).
+- Источники документа связываются через универсальную модель **Document Sources**
+  (008-06-06).
+- Выпуск документа выполняется **после утверждения ответственного лица** (008-06-07).
+- История формирования документа хранится через **Document History Events**
+  (008-06-08).
+- Используется **гибридная модель шаблонов документов** (008-06-09).
+
+### Последствия
+
+- Формируется единый слой **Electronic Documentation**.
+- Task **9D — Quality Finding and Engineering Evaluation** должен использовать ссылки
+  на **Official Documents**; инженерная оценка качества обязана ссылаться на
+  конкретные **редакции** (Document Revision) официального документа.
+- Исполнительная документация получает **версионность и аудит**.
+- Реализация (генераторы PDF, конкретные макеты форм, реализация ЭП, публичный API
+  проверки подлинности, backend, миграции) — **отдельными задачами**; ADR-018
+  фиксирует только канон.
+
+### Где зафиксировано
+
+```text
+docs/project/DECISIONS.md (ADR-018)
+docs/project/ARCHITECTURE_SESSIONS.md (Session 008-06)
+docs/project/UBIQUITOUS_LANGUAGE.md (Official Document, Document Revision,
+  Document Snapshot, Document Source, Document Template, Document History Event)
+docs/project/PROJECT_SUMMARY.md (Electronic Documentation Layer)
+docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Task 9D зависит от ADR-018)
 ```
 
 ---

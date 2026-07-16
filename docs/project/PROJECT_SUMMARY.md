@@ -84,7 +84,8 @@ WeldPassport — внутренняя система для отдела гла�
   `Inspection Result → Quality Finding → Engineering Evaluation → Defect →
   Quality Decision → Repair → Reinspection → Defect Closure`. Код не создавался;
   реализация — Tasks **9D — 9K** (planned / not implemented). Блок **008-06
-  «Печатные формы»** открыт; детальная архитектура импорта результатов НК — отдельная
+  «Печатные формы»** завершён (2026-07-16, **ADR-018** — Electronic Documents and
+  Printed Forms Canon); детальная архитектура импорта результатов НК — отдельная
   будущая сессия.
 - **Инженерный контур реализован** (Tasks 1–7):
   `Project → Line → EngineeringDocument → DocumentRevision → Joint` (ADR-010/011).
@@ -104,6 +105,25 @@ WeldPassport — внутренняя система для отдела гла�
   (planned / not implemented); импорт результатов НК в объём Session 008 не входит.
 
 План реализации: [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP|Engineering Joints MVP — Implementation Plan]].
+
+## Слой электронной документации (Electronic Documentation Layer)
+
+**Статус:** Architecture approved (Session 008-06, **ADR-018** — Electronic Documents
+and Printed Forms Canon, 2026-07-16). Управление официальными документами как
+доказательствами выполнения работ, а не только генерация PDF. Код, миграции и API не
+создавались.
+
+Включает:
+
+- document lifecycle — жизненный цикл документа (Preview → Official Document, события);
+- document versioning — версионность ([[docs/project/UBIQUITOUS_LANGUAGE#Document Revision|Document Revision]], выпущенные документы неизменяемы);
+- snapshots — фиксация состояния данных на момент выпуска ([[docs/project/UBIQUITOUS_LANGUAGE#Document Snapshot|Document Snapshot]]);
+- audit history — история формирования через [[docs/project/UBIQUITOUS_LANGUAGE#Document History Event|Document History Events]];
+- templates — гибридная модель шаблонов документов ([[docs/project/UBIQUITOUS_LANGUAGE#Document Template|Document Template]]);
+- official document issuance — выпуск после утверждения ответственного лица, PDF + Snapshot + Source Links + Hash.
+
+Канон: [[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018]] ·
+[[docs/project/ARCHITECTURE_SESSIONS#Блок 008-06 — Электронные документы и печатные формы (Electronic Documents and Printed Forms)|Session 008-06]].
 
 ## Текущее состояние backend (2026-07-06)
 
@@ -230,8 +250,8 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 > PDF, API лаборатории) зафиксирован **только как интеграционное требование верхнего
 > уровня** (импорт не принимает результат автоматически). Детальная архитектура
 > импорта **не вошла** в Session 008 (посвящённую канону решений по качеству) и
-> остаётся открытой для отдельной будущей сессии; блок **008-06 «Печатные формы»**
-> также открыт.
+> остаётся открытой для отдельной будущей сессии. Блок **008-06 «Печатные формы»**
+> завершён (ADR-018) — см. [Слой электронной документации](#слой-электронной-документации-electronic-documentation-layer).
 
 ## Ключевые проектные файлы
 
