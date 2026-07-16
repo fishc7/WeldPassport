@@ -1406,6 +1406,15 @@ ADR-006
 > разделение Session 007 (лаборатория фиксирует индикацию → ОТК подтверждает → ОГС
 > решает) сохраняется как вход в оценку. Полное определение жизненного цикла и правил
 > — Раздел 10 (Session 008).
+>
+> **Уточнение (Session 008-07, ADR-019).** `Defect` создаётся только после `APPROVED`
+> [[#Engineering Evaluation|Engineering Evaluation]] с классификацией `CONFIRMED_DEFECT`.
+> Критичность в текущем каноне — [[#Confirmed Severity|Confirmed Severity]] (термин
+> `Defect Severity` — историчен). Подтверждение ОТК — **опционально** (решение
+> 008-07-BP): при отсутствии внутреннего ОТК критические полномочия выполняет
+> `CHIEF_WELDER`. См. также [[#Defect Type|Defect Type]],
+> [[#Defect Measurement|Defect Measurement]],
+> [[#Defect Acceptance Assessment|Defect Acceptance Assessment]] (Раздел 11).
 
 ### Определение
 
@@ -1415,7 +1424,8 @@ ADR-006
 проверки и контроля закрытия. Связь с [[#Quality Finding|Quality Finding]] —
 многие-ко-многим. Содержит тип (из расширяемого справочника), описание,
 [[#Defect Localization|локализацию]], размеры, нормативные классификаторы и
-[[#Defect Severity|критичность]].
+критичность ([[#Confirmed Severity|Confirmed Severity]]; исторически —
+[[#Defect Severity|Defect Severity]]).
 
 Жизненный цикл (ADR-017): `DRAFT — черновик → CONFIRMED — подтверждён →
 REPAIR_REQUIRED — требуется ремонт → REINSPECTION_REQUIRED — требуется повторный
@@ -2117,10 +2127,16 @@ ADR-015
 Термины канона процессов **после получения результата контроля** (ADR-017, блоки
 008-01 — 008-05). Контур: `Inspection Result → Quality Finding → Engineering
 Evaluation → Defect → Quality Decision → Repair → Reinspection → Defect Closure`.
-Реализация — Tasks **9D — 9K** (planned / not implemented). Английские статусы
-сопровождаются русскими пояснениями. Термины [[#Defect|Defect]], [[#Repair|Repair]] и
-[[#Reinspection|Reinspection]] определены в своих статьях (обновлены под ADR-017) и
-здесь не дублируются.
+Реализация — planned / not implemented. Английские статусы сопровождаются русскими
+пояснениями. Термины [[#Defect|Defect]], [[#Repair|Repair]] и [[#Reinspection|Reinspection]]
+определены в своих статьях (обновлены под ADR-017) и здесь не дублируются.
+
+> **Частичное замещение ADR-019 (решение 008-07-BQ).** `Quality Decision` декомпозировано
+> на [[#Engineering Evaluation|Engineering Evaluation]] →
+> [[#Defect Acceptance Assessment|Defect Acceptance Assessment]] →
+> [[#Finding Disposition|Finding Disposition]] и **более не является доменной сущностью**
+> (только обобщённое бизнес-понятие). Термин `Defect Severity` в текущем каноне заменён
+> на [[#Confirmed Severity|Confirmed Severity]]. Актуальные определения — Раздел 11.
 
 ## Quality Finding
 
@@ -2155,54 +2171,61 @@ ADR-017
 
 ### Определение
 
-Инженерная оценка [[#Quality Finding|Quality Finding]], выполняемая совместно: ОГС —
-техническая и технологическая оценка, ОТК — соответствие нормативам и требованиям
-качества. Результат оценки — [[#Quality Decision|Quality Decision]] и, при признании
-несоответствия недопустимым, — [[#Defect|Defect]].
+Инженерная оценка [[#Quality Finding|Quality Finding]] — версионная сущность (ADR-019),
+отвечающая на вопрос «что установлено технически». Готовит `WELDING_ENGINEER`,
+утверждает `CHIEF_WELDER`; имеет классификацию ([[#Evaluation Classification|Evaluation
+Classification]]), [[#Confirmed Severity|Confirmed Severity]] и [[#Impact Scope|Impact
+Scope]]. Отделена от решения о действии ([[#Finding Disposition|Finding Disposition]]) и
+от приемлемости дефекта ([[#Defect Acceptance Assessment|Defect Acceptance Assessment]]).
+При классификации `CONFIRMED_DEFECT` порождает [[#Defect|Defect]]. Роль `OTK_INSPECTOR`
+в оценке — **опциональная** (решение 008-07-BP; fallback — `CHIEF_WELDER`).
 
 ### Владелец
 
-Quality — ОГС (техника/технология) + ОТК (нормативы/качество)
+Quality — `WELDING_ENGINEER` (подготовка) + `CHIEF_WELDER` (утверждение); `OTK_INSPECTOR`
+— опционально по конфигурации проекта
 
 ### Не является
 
 - автоматическим признанием дефекта;
-- единоличным решением одного подразделения.
+- решением о действии ([[#Finding Disposition|Finding Disposition]]);
+- приемлемостью дефекта ([[#Defect Acceptance Assessment|Defect Acceptance Assessment]]).
 
 ### Связанные ADR
 
-ADR-017
+ADR-017 (частично замещён), ADR-019
 
 ---
 
 ## Quality Decision
 
-**Статус:** Канон
+**Статус:** Обобщённое бизнес-понятие (решение 008-07-BQ) — **не доменная сущность**
 
 ### Определение
 
-Решение ОГС, ОТК или главного сварщика по результату инженерной оценки
-[[#Quality Finding|Quality Finding]]. Решения ОГС и ОТК фиксируются раздельно.
-Итоговые значения: `ACCEPT — принять`, `REPAIR_REQUIRED — требуется ремонт`,
-`REINSPECTION_REQUIRED — требуется повторный контроль`, `REJECT — окончательно
-отклонить`. Для каждого решения (в т.ч. `ACCEPT`) обязательны нормативный документ,
-пункт/критерий приёмки, текстовое обоснование, автор, дата и время. После фиксации
-решение не редактируется — только новая версия с обязательной причиной; старая
-версия остаётся в истории. Принимается **отдельно по каждому** Finding.
+Историческое ADR-017 «Quality Decision» — обобщённое бизнес-понятие «решение по
+качеству по результату инженерной оценки [[#Quality Finding|Quality Finding]]». В
+текущем каноне (ADR-019) оно **декомпозировано** и **более не является самостоятельной
+доменной сущностью**:
 
-### Владелец
+- [[#Engineering Evaluation|Engineering Evaluation]] — «что установлено технически»;
+- [[#Defect Acceptance Assessment|Defect Acceptance Assessment]] — «приемлем ли дефект»;
+- [[#Finding Disposition|Finding Disposition]] — «что необходимо сделать».
 
-Quality — ОГС / ОТК; при разногласии — главный сварщик
+Термин допустимо использовать только как обобщённое бизнес-понятие в обсуждениях, не
+как модельную сущность или поле. Историческая формулировка ADR-017 (`ACCEPT` /
+`REPAIR_REQUIRED` / `REINSPECTION_REQUIRED` / `REJECT`) сохранена в ADR-017 как история.
 
 ### Не является
 
-- `Inspection Result`;
-- редактируемым полем статуса;
-- итоговым решением по Inspection (это [[#Final Decision|Final Decision]]).
+- доменной сущностью или полем модели (декомпозировано в ADR-019);
+- заменой [[#Engineering Evaluation|Engineering Evaluation]] /
+  [[#Defect Acceptance Assessment|Defect Acceptance Assessment]] /
+  [[#Finding Disposition|Finding Disposition]].
 
 ### Связанные ADR
 
-ADR-017
+ADR-017 (частично замещён), ADR-019
 
 ---
 
@@ -2237,27 +2260,26 @@ ADR-017
 
 ## Defect Severity
 
-**Статус:** Канон
+**Статус:** Исторический термин ADR-017 — **заменён на [[#Confirmed Severity|Confirmed
+Severity]]** (решение 008-07-BQ)
 
 ### Определение
 
-Степень критичности [[#Defect|дефекта]]: `MINOR — малозначительный`,
-`MAJOR — значительный`, `CRITICAL — критический`. Определяется на основании
-норматива, типа дефекта, размеров, расположения и других критериев приёмки.
-Изменение критичности — только новой версией инженерной оценки.
-
-### Владелец
-
-Quality — ОГС (оценка) / ОТК (подтверждение)
+Историческое ADR-017 обозначение степени критичности [[#Defect|дефекта]] (`MINOR` /
+`MAJOR` / `CRITICAL`). В текущем каноне (ADR-019) подтверждённая серьёзность
+устанавливается утверждённой [[#Engineering Evaluation|Engineering Evaluation]] и
+называется [[#Confirmed Severity|Confirmed Severity]] (`NOT_APPLICABLE` / `MINOR` /
+`MAJOR` / `CRITICAL`). Термин `Defect Severity` сохранён как история ADR-017 и в
+текущем каноне не используется.
 
 ### Не является
 
-- фиксированным свойством типа дефекта без оценки;
+- действующим термином текущего канона (использовать `Confirmed Severity`);
 - редактируемым полем без версии.
 
 ### Связанные ADR
 
-ADR-017
+ADR-017 (частично замещён), ADR-019
 
 ---
 
@@ -2794,8 +2816,624 @@ ADR-018
 
 ---
 
+# Раздел 11. Quality Finding и Engineering Evaluation (Session 008-07)
+
+Термины углублённой архитектуры **Task 9D** (ADR-019). Контур:
+`QualityFinding → EngineeringEvaluation → Defect / DefectAcceptanceAssessment →
+FindingDisposition → ProductionHold → Corrective Action / Reinspection →
+CustomerQualityDecision → Closure`. **Реализация Task 9D не начата** (9D-1 … 9D-8,
+planned / not implemented). Английские статусы сопровождаются русскими пояснениями.
+
+> Термины [[#Quality Finding|Quality Finding]], [[#Engineering Evaluation|Engineering
+> Evaluation]] и [[#Defect|Defect]] определены в своих статьях (Раздел 10) и здесь не
+> дублируются. ADR-019 **частично замещает** ADR-017 (решение 008-07-BQ): единое
+> [[#Quality Decision|Quality Decision]] разделено на три отдельных решения —
+> `Engineering Evaluation` («что установлено технически»),
+> [[#Defect Acceptance Assessment|Defect Acceptance Assessment]] («приемлем ли дефект»)
+> и [[#Finding Disposition|Finding Disposition]] («что необходимо сделать»); `Quality
+> Decision` более не доменная сущность. `Defect` создаётся только после `APPROVED`
+> evaluation с классификацией `CONFIRMED_DEFECT`. Роль `OTK_INSPECTOR` —
+> **опциональная проектная роль** (решение 008-07-BP): внутреннее ОТК не обязательно;
+> при его отсутствии критические полномочия выполняет `CHIEF_WELDER`; представитель
+> заказчика фиксируется через [[#Customer Quality Decision|Customer Quality Decision]] и
+> **не** является внутренним ОТК.
+
+## Finding Origin
+
+**Статус:** Канон
+
+### Определение
+
+Происхождение [[#Quality Finding|Quality Finding]] (`origin_type`) из канонического
+справочника: `INSPECTION_RESULT`, `VISUAL_OBSERVATION`, `WELDING_PROCESS`,
+`PERSONNEL_ADMISSION`, `WELDING_MATERIAL`, `BASE_MATERIAL`, `HEAT_TREATMENT`,
+`ENGINEERING_DOCUMENT`, `EXECUTIVE_DOCUMENTATION`, `TRACEABILITY`, `CUSTOMER_REMARK`,
+`INTERNAL_REVIEW`, `OTHER`. Не заменяет инженерную классификацию
+([[#Evaluation Classification|Evaluation Classification]]).
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Finding Location
+
+**Статус:** Канон
+
+### Определение
+
+Локализация [[#Quality Finding|Quality Finding]] в пределах `Joint`. Один finding
+охватывает несколько зон только при однородности зон, одном техническом значении, одной
+инженерной оценке и одном [[#Finding Disposition|disposition]]. Для разных дефектов,
+причин или решений создаются отдельные finding.
+
+### Не является
+
+- [[#Defect Localization|Defect Localization]] (локализацией подтверждённого дефекта).
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Finding Evidence
+
+**Статус:** Канон
+
+### Определение
+
+Аудируемое доказательство, приложенное к [[#Quality Finding|Quality Finding]] после
+регистрации. Исходное наблюдение finding неизменяемо; дополнения оформляются как
+отдельные `FindingEvidence`.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Finding Correction
+
+**Статус:** Канон
+
+### Определение
+
+Аудируемая корректирующая запись к [[#Quality Finding|Quality Finding]]. Исходное
+описание не перезаписывается; исправление фиксируется отдельной сущностью
+`FindingCorrection` с сохранением истории.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Finding Assignment
+
+**Статус:** Канон
+
+### Определение
+
+Аудируемая запись назначения ответственного по [[#Quality Finding|Quality Finding]]
+(история назначений). Регистрировать finding может любой авторизованный участник
+проекта; ОГС подтверждает получение, управляет оценкой и disposition.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Evaluation Classification
+
+**Статус:** Канон
+
+### Определение
+
+Классификация [[#Engineering Evaluation|Engineering Evaluation]]: `CONFIRMED_DEFECT`,
+`NOT_CONFIRMED`, `TECHNOLOGICAL_DEVIATION`, `DOCUMENTATION_NONCONFORMITY`,
+`INSPECTION_PROCESS_NONCONFORMITY`, `MATERIAL_TRACEABILITY_NONCONFORMITY`,
+`PERSONNEL_QUALIFICATION_NONCONFORMITY`, `REQUIRES_ADDITIONAL_EVIDENCE`, `OUT_OF_SCOPE`.
+Только `CONFIRMED_DEFECT` порождает [[#Defect|Defect]].
+
+### Не является
+
+- [[#Finding Disposition|Finding Disposition]] (решением о действии);
+- [[#Finding Origin|Finding Origin]] (происхождением finding).
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Initial Risk
+
+**Статус:** Канон
+
+### Определение
+
+Первоначальный риск [[#Quality Finding|Quality Finding]]: `LOW`, `MEDIUM`, `HIGH`,
+`CRITICAL`, `UNKNOWN`. Назначается **до** завершения инженерной оценки; используется для
+приоритета, SLA и эскалации.
+
+### Не является
+
+- [[#Confirmed Severity|Confirmed Severity]] (подтверждённой серьёзностью).
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Confirmed Severity
+
+**Статус:** Канон
+
+### Определение
+
+Подтверждённая серьёзность: `NOT_APPLICABLE`, `MINOR`, `MAJOR`, `CRITICAL`.
+Устанавливается **только** утверждённой [[#Engineering Evaluation|Engineering
+Evaluation]].
+
+### Не является
+
+- [[#Initial Risk|Initial Risk]] (первоначальным риском до оценки).
+
+> Заменяет исторический термин [[#Defect Severity|Defect Severity]] ADR-017 в текущем
+> каноне (решение 008-07-BQ).
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Impact Scope
+
+**Статус:** Канон
+
+### Определение
+
+Область воздействия, определяемая [[#Engineering Evaluation|Engineering Evaluation]]:
+`NO_OPERATIONAL_IMPACT`, `DOCUMENT_HANDOVER_BLOCK`, `INSPECTION_ACCEPTANCE_BLOCK`,
+`FURTHER_PROCESSING_BLOCK`, `TECHNICAL_ACCEPTANCE_BLOCK`, `FULL_JOINT_BLOCK`. Основание
+для вычисления состояния `Joint` и [[#Production Hold|Production Hold]].
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Requirement Reference
+
+**Статус:** Канон
+
+### Определение
+
+Структурированная ссылка на нормативное требование: документ, редакция документа, пункт
+или раздел, снимок применённого текста, источник, применимость к проекту, связь с
+[[#Engineering Evaluation|Engineering Evaluation]], [[#Finding Disposition|disposition]]
+или другим решением. Историческое решение **не** изменяется при появлении новой редакции
+документа.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Document Applicability
+
+**Статус:** Канон
+
+### Определение
+
+Применимость документа к проекту, отделённая от наличия документа в системе:
+`REFERENCE_ONLY`, `UNDER_REVIEW`, `APPLICABLE`, `APPLICABLE_WITH_LIMITATIONS`,
+`SUPERSEDED`, `NOT_APPLICABLE`. Обязательным нормативным основанием служат только
+`APPLICABLE` и `APPLICABLE_WITH_LIMITATIONS`. Документ `REFERENCE_ONLY` (загружен для
+ознакомления) правил проекта **не** активирует. `WELDING_ENGINEER` готовит оценку,
+`CHIEF_WELDER` утверждает техническую применимость; применимость версионна. Режимы
+перехода на новую редакцию: `NEW_WORK_ONLY`, `ALL_OPEN_FINDINGS`, `ALL_UNCLOSED_JOINTS`,
+`PROJECT_WIDE_REASSESSMENT`, `MANUAL_SCOPE`.
+
+### Не является
+
+- активным машинным правилом (`applicable document ≠ active machine rule` —
+  [[#Compliance Rule|Compliance Rule]] — будущий контур).
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Defect Type
+
+**Статус:** Канон
+
+### Определение
+
+Управляемый справочник типов [[#Defect|дефекта]]: канонический внутренний код, русское
+наименование, описание, внешние отображения и коды, период действия. Полный перечень
+дефектов **не** зашивается в enum приложения.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Defect Measurement
+
+**Статус:** Канон
+
+### Определение
+
+Измерение [[#Defect|дефекта]] на основании фактического источника контроля: тип
+измерения, значение, единица, местоположение, метод контроля, источник результата,
+автор, дата/время, версия, статус применимости. ОГС **не** переписывает измерения
+лаборатории; отдельным действием принимает или отклоняет применимость измерения для
+инженерной оценки.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Defect Acceptance Assessment
+
+**Статус:** Канон
+
+### Определение
+
+Оценка технической **приемлемости** дефекта: `ACCEPTABLE`, `UNACCEPTABLE`,
+`CONDITIONALLY_ACCEPTABLE`, `INSUFFICIENT_DATA`, `NOT_APPLICABLE`. Приемлемость **не
+равна** решению о действии ([[#Finding Disposition|Finding Disposition]]) — например
+`UNACCEPTABLE + REPAIR` или `CONDITIONALLY_ACCEPTABLE + ACCEPT_AS_IS`. Противоречивые
+комбинации блокируются.
+
+### Не является
+
+- [[#Finding Disposition|Finding Disposition]] (решением о необходимом действии).
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Finding Disposition
+
+**Статус:** Канон
+
+### Определение
+
+Решение о необходимом действии по [[#Quality Finding|Quality Finding]] («что необходимо
+сделать?»), отделённое от [[#Engineering Evaluation|Engineering Evaluation]] («что
+установлено?»). Типы: `NO_ACTION_REQUIRED`, `ADDITIONAL_INSPECTION`,
+`DOCUMENT_CORRECTION`, `PROCESS_REVIEW`, `ACCEPT_AS_IS`, `REPAIR`, `REWELD`,
+`CUT_OUT_AND_REPLACE`, `REJECT_JOINT`, `RETURN_FOR_ADDITIONAL_EVALUATION`. Создаётся
+только по актуальной `APPROVED` evaluation. Критические типы утверждает `CHIEF_WELDER`;
+`ACCEPT_AS_IS` требует внутреннего обоснования ОГС и, при необходимости, внешнего
+решения ([[#Customer Quality Decision|Customer Quality Decision]]). Lifecycle:
+`DRAFT → PENDING_APPROVAL → APPROVED → IN_EXECUTION → COMPLETED` (+ `RETURNED`,
+`SUPERSEDED`, `CANCELLED`). `COMPLETED` **не** закрывает finding автоматически.
+
+### Не является
+
+- [[#Engineering Evaluation|Engineering Evaluation]] (технической классификацией);
+- [[#Defect Acceptance Assessment|Defect Acceptance Assessment]] (приемлемостью дефекта);
+- самостоятельным `Quality Decision` — историческое единое решение ADR-017
+  декомпозировано в ADR-019, и `Finding Disposition` — его часть «что необходимо
+  сделать» (решение 008-07-BQ).
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Corrective Action Authorization
+
+**Статус:** Канон
+
+### Определение
+
+Отдельное аудируемое действие `authorize_corrective_action_start`. Утверждение
+[[#Finding Disposition|disposition]] **не** означает автоматического разрешения начать
+работу; до этого действия нельзя начинать repair, reweld, cut-out, replacement и иные
+критические корректирующие действия. Выдаётся в пределах матрицы полномочий.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Corrective Action Link
+
+**Статус:** Канон
+
+### Определение
+
+Связь [[#Finding Disposition|disposition]] с фактическими действиями: `Repair`,
+`Reweld`, `CutOutAndReplacement`, дополнительный `Inspection`, `DocumentCorrection`,
+`ProcessReview`, иное утверждённое действие. Disposition не считается исполненным по
+текстовой отметке пользователя — состояние исполнения вычисляется по связанным
+фактическим объектам.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Reinspection Requirement
+
+**Статус:** Канон
+
+### Определение
+
+Утверждённое требование к повторному контролю для disposition `REPAIR`, `REWELD`,
+`CUT_OUT_AND_REPLACE` **до** разрешения начала работы: обязательные методы, объём, зоны,
+этап выполнения, критерии завершения, необходимость внешнего решения, применимые
+требования. Нельзя сначала завершить ремонт, а затем неаудируемо определить требуемый
+контроль.
+
+### Не является
+
+- фактическим повторным контролем ([[#Reinspection|Reinspection]]) — это требование к
+  нему.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Production Hold
+
+**Статус:** Канон
+
+### Определение
+
+Блокировка производства по [[#Quality Finding|Quality Finding]]. Разделяются временный
+оперативный hold и подтверждённый инженерный hold. Хранит уровень (`PARTIAL`/`FULL`),
+область действия, перечень запрещённых операций, основание, автора, время установки,
+связь с finding, подтверждение ОГС и release history. Lifecycle:
+`ACTIVE → CONFIRMED → PARTIALLY_RELEASED → RELEASED` (+ `SUPERSEDED`; `INVALIDATED` для
+ошибочной регистрации). Снятие — только через [[#Production Hold Release|Production Hold
+Release]]; прямое редактирование статуса запрещено; при нескольких hold применяется
+наиболее строгое совокупное ограничение.
+
+### Не является
+
+- полем статуса `Joint` (состояние качества вычисляется отдельно от lifecycle Joint).
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Production Hold Release
+
+**Статус:** Канон
+
+### Определение
+
+Аудируемое снятие [[#Production Hold|Production Hold]] (частичное или полное). `RELEASED`
+**не** закрывает finding; после release может быть создан новый hold; просроченный hold
+автоматически не снимается.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Customer Quality Decision
+
+**Статус:** Канон
+
+### Определение
+
+Внешнее решение заказчика/проектировщика по качеству, **не** являющееся внутренней
+[[#Engineering Evaluation|Engineering Evaluation]] ОГС. Разделяются внешний участник,
+фактически принявший решение, и внутренний регистратор (`CHIEF_WELDER`,
+`WELDING_ENGINEER`, `PTO_ENGINEER`, `INSPECTOR`). Обязательно доказательство (документ,
+письмо, протокол, подписанная форма, ссылка на подтверждённый источник). История
+версионна и неизменяема.
+
+### Не является
+
+- внутренним решением ОГС;
+- заменой [[#Engineering Evaluation|Engineering Evaluation]] или
+  [[#Finding Disposition|disposition]].
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Closure Readiness
+
+**Статус:** Канон
+
+### Определение
+
+Вычисляемая системой готовность [[#Quality Finding|Quality Finding]] к закрытию
+(`READY_FOR_CLOSURE`): актуальная `APPROVED` evaluation; допустимый актуальный
+disposition; завершённые обязательные действия; выполненные
+[[#Reinspection Requirement|Reinspection Requirement]]; зарегистрированное обязательное
+внешнее решение; снятые/допустимо заменённые [[#Production Hold|Production Hold]];
+отсутствие блокирующих зависимостей; обязательные доказательства. Формальное закрытие
+выполняет авторизованная роль ОГС.
+
+### Не является
+
+- статусом, выбираемым пользователем произвольно.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Responsibility Assessment
+
+**Статус:** Будущий контур (не входит в первую реализацию Task 9D)
+
+### Определение
+
+Отдельная ограниченная сущность оценки ответственности. **Не** назначает виновного
+автоматически, **не** считает сварщика ответственным автоматически, **не** является
+частью исходного [[#Quality Finding|Quality Finding]] и **не** видна всем ролям.
+Зафиксирована как архитектурная точка расширения; в Task 9D не реализуется.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Finding Pattern
+
+**Статус:** Будущий контур (не входит в первую реализацию Task 9D)
+
+### Определение
+
+Анализ повторяемости [[#Quality Finding|Quality Finding]]. Система может предложить
+pattern; ОГС подтверждает вручную. Точка расширения; в Task 9D не реализуется.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Corrective and Preventive Action
+
+**Статус:** Будущий контур (не входит в первую реализацию Task 9D)
+
+### Определение
+
+Отдельный системный процесс CAPA: `CORRECTIVE_ACTION`, `PREVENTIVE_ACTION`,
+`PROCESS_IMPROVEMENT`, `TRAINING_ACTION`, `DOCUMENT_UPDATE`, `SYSTEM_CHANGE`,
+`SUPPLIER_ACTION`. Может связываться с одним или несколькими finding,
+[[#Finding Pattern|Finding Pattern]], [[#Compliance Rule Execution|Compliance Rule
+Execution]], аудитом, внутренней проверкой. **Локальный ремонт `Joint` не является
+CAPA.** Точка расширения; в Task 9D не реализуется.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Compliance Rule
+
+**Статус:** Будущий контур (не входит в первую реализацию Task 9D)
+
+### Определение
+
+Будущая сущность машинного правила соответствия. Архитектурная граница: **applicable
+document ≠ active machine rule** — применимый документ ([[#Document Applicability|Document
+Applicability]]) сам по себе не является активным правилом. Типы: `VALIDATION`,
+`WARNING`, `BLOCKING_CONDITION`, `CALCULATION`, `WORKFLOW_TRIGGER`, `REQUIRED_APPROVAL`,
+`REQUIRED_INSPECTION`, `LIMIT_POLICY`. Статусы: `DRAFT`, `TECHNICAL_REVIEW`, `APPROVED`,
+`ACTIVE`, `SUSPENDED`, `SUPERSEDED`, `RETIRED`. `WELDING_ENGINEER` формулирует,
+`CHIEF_WELDER` утверждает технический смысл, `SYSTEM_ADMIN`/`PROJECT_ADMIN` активирует; до
+активации нужны `ComplianceRuleTestCase`, `AutomatedRuleTest` и подтверждённое покрытие
+сценариев. Точка расширения; в Task 9D не реализуется.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Compliance Rule Execution
+
+**Статус:** Будущий контур (не входит в первую реализацию Task 9D)
+
+### Определение
+
+Неизменяемая запись исполнения [[#Compliance Rule|Compliance Rule]]: правило и версия,
+входной snapshot, outcome (`PASSED`/`WARNING`/`BLOCKED`/`APPROVAL_REQUIRED`/
+`INSPECTION_REQUIRED`/`NOT_APPLICABLE`/`ERROR`), объяснение, влияние на workflow, время,
+объект проверки. Статусы актуальности: `CURRENT`, `SUPERSEDED`, `INVALIDATED`, `EXPIRED`.
+Точка расширения; в Task 9D не реализуется.
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Compliance Override
+
+**Статус:** Будущий контур (не входит в первую реализацию Task 9D)
+
+### Определение
+
+Ограниченное допустимое отступление, когда правило сработало **корректно**: типы
+`ONE_TIME_EXCEPTION`, `CONDITIONAL_EXCEPTION`, `TEMPORARY_WAIVER`,
+`PROJECT_SPECIFIC_DEVIATION`. Исходный `BLOCKED` execution неизменен; override утверждает
+`CHIEF_WELDER`; техническое обоснование обязательно; область ограничена объектом,
+действием и сроком; бессрочное глобальное исключение запрещено; невозможен для
+non-overridable rule.
+
+### Не является
+
+- [[#Compliance Execution Correction|Compliance Execution Correction]] (исправлением
+  ошибочного результата).
+
+### Связанные ADR
+
+ADR-019
+
+---
+
+## Compliance Execution Correction
+
+**Статус:** Будущий контур (не входит в первую реализацию Task 9D)
+
+### Определение
+
+Исправление **ошибочного** исполнения правила: причины `INPUT_DATA_ERROR`,
+`RULE_IMPLEMENTATION_ERROR`, `RULE_CONFIGURATION_ERROR`, `APPLICABILITY_ERROR`,
+`SYSTEM_ERROR`, `MANUAL_DATA_CORRECTION`. Ошибочный execution не удаляется, становится
+`INVALIDATED`, получает обязательную причину, связывается с новым execution, требует
+повторной проверки и может потребовать пересмотра ранее принятого решения.
+
+### Не является
+
+- [[#Compliance Override|Compliance Override]] (допустимым отступлением при корректно
+  сработавшем правиле).
+
+### Связанные ADR
+
+ADR-019
+
+---
+
 *Версия словаря: 2026-07-16. Канонических терминов: 59 (+ Session 008: 18 новых
 терминов, `Repair` и `Reinspection` переведены из черновика в канон, `Defect`
 уточнён под ADR-017; + Session 008-06 / ADR-018: 6 новых терминов — Official
 Document, Document Revision, Document Snapshot, Document Source, Document Template,
-Document History Event). Черновиков: 28.*
+Document History Event; + Session 008-07 / ADR-019: Раздел 11 — 21 канонический термин
+контура Quality Finding / Engineering Evaluation и 8 терминов будущих контуров
+Responsibility / Pattern / CAPA / Compliance как точки расширения; `Quality Finding`,
+`Engineering Evaluation` уточнены. Решения 008-07-BQ: `Quality Decision` переведён в
+обобщённое бизнес-понятие (не доменная сущность), `Defect Severity` — исторический
+термин, заменён на `Confirmed Severity`; 008-07-BP: `OTK_INSPECTOR` — опциональная
+проектная роль). Черновиков: 28.*

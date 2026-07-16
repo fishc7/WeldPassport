@@ -66,7 +66,8 @@ WeldPassport — внутренняя система для отдела гла�
 [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014: термическая обработка]] ·
 [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015: контроль качества и НК]] ·
 [[docs/project/DECISIONS#ADR-016. Quality Execution Model (Task 9C)|ADR-016: модель выполнения контроля (Task 9C)]] ·
-[[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017: решения по качеству, дефекты, ремонт и документы качества]].
+[[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017: решения по качеству, дефекты, ремонт и документы качества]] (`PARTIALLY_SUPERSEDED_BY_ADR-019`) ·
+[[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019: Quality Finding и Engineering Evaluation (углублённая архитектура Task 9D)]].
 
 ## Текущий статус архитектуры (2026-07-15)
 
@@ -82,11 +83,22 @@ WeldPassport — внутренняя система для отдела гла�
 - **Architecture Session 008 завершена** — канон решений по качеству, дефектов,
   ремонта и документов качества (ADR-017, блоки 008-01 — 008-05):
   `Inspection Result → Quality Finding → Engineering Evaluation → Defect →
-  Quality Decision → Repair → Reinspection → Defect Closure`. Код не создавался;
-  реализация — Tasks **9D — 9K** (planned / not implemented). Блок **008-06
+  Quality Decision → Repair → Reinspection → Defect Closure`. Код не создавался.
+  ADR-017 — **`PARTIALLY_SUPERSEDED_BY_ADR-019`** (решение 008-07-BQ). Блок **008-06
   «Печатные формы»** завершён (2026-07-16, **ADR-018** — Electronic Documents and
   Printed Forms Canon); детальная архитектура импорта результатов НК — отдельная
   будущая сессия.
+- **Architecture Session 008-07 завершена** — углублённая архитектура **Task 9D**
+  (ADR-019, Quality Finding and Engineering Evaluation): контур
+  `QualityFinding → EngineeringEvaluation → Defect / DefectAcceptanceAssessment →
+  FindingDisposition → ProductionHold → Corrective Action / Reinspection →
+  CustomerQualityDecision → Closure`. Ранее единое `Quality Decision` разделено на
+  три решения (evaluation / acceptance / disposition) и **более не является доменной
+  сущностью** (008-07-BQ). **Архитектурный канон Task 9D принят; реализация не начата**
+  (planned / not implemented). Действующая реализационная структура — **9D-1 … 9D-8**
+  (решение 008-07-BO); историческая разбивка Session 008 на **9E — 9K** —
+  `SUPERSEDED_BY_TASK_9D`. Роль `OTK_INSPECTOR` — опциональная проектная роль, fallback —
+  `CHIEF_WELDER` (008-07-BP). Модели, миграции и API **не создавались**.
 - **Инженерный контур реализован** (Tasks 1–7):
   `Project → Line → EngineeringDocument → DocumentRevision → Joint` (ADR-010/011).
 - **WeldOperation реализован** — Tasks **8A — 8E** (ADR-012, импорт — ADR-013).
@@ -101,8 +113,10 @@ WeldPassport — внутренняя система для отдела гла�
   внешней лаборатории, `QualityExternalPerson` и `LaboratoryAccreditation`; Quality
   Audit и API. `LAB_CONFIRMED` подтверждает лабораторный результат/регистрацию
   внешнего документа и не является решением ОТК; `VERIFIED` оставлен будущему этапу
-  проверки ОТК. Разбивку post-9C задаёт Session 008 / ADR-017 — Tasks **9D — 9K**
-  (planned / not implemented); импорт результатов НК в объём Session 008 не входит.
+  проверки качества. Действующую реализационную структуру post-9C задаёт Session 008-07
+  / ADR-019 — Tasks **9D-1 … 9D-8** (решение 008-07-BO; историческая разбивка 9E — 9K —
+  `SUPERSEDED_BY_TASK_9D`), planned / not implemented; импорт результатов НК в объём не
+  входит.
 
 План реализации: [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP|Engineering Joints MVP — Implementation Plan]].
 
@@ -226,7 +240,7 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 > этапы `ROOT`/`FILL`/`COVER`, блокировка при отсутствии допуска,
 > `replaces_operation_id`, ремонт как часть `WeldOperation`) **замещены ADR-012**.
 
-## Контроль качества и НК (ADR-015/016; Tasks 9A–9C: Execution Core; 9D–9K planned)
+## Контроль качества и НК (ADR-015/016; Tasks 9A–9C: Execution Core; Task 9D-1 … 9D-8 planned)
 
 Канон зафиксирован в
 [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Architecture Session 007]]
@@ -243,8 +257,9 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 | Методы | `VT`/`RT`/`UT`/`PT`/`MT`/`LT`; выполнение — `MethodExecution`; лаборатория — `project.companies` через `project_companies` с ролью `NDT_LAB` |
 | Состояние Joint | Вычисляемое `inspection_state`; основной lifecycle `Joint` не переписывается |
 | Связь с ТО | Обязательный контроль после термообработки — связь `Inspection ↔ HeatTreatmentOperation` (ADR-014) |
-| После результата (Session 008) | `Inspection Result → Quality Finding → Engineering Evaluation → Defect → Quality Decision → Repair → Reinspection → Defect Closure`; Result ≠ Finding ≠ Defect; решения ОГС/ОТК раздельны, разногласия — главный сварщик; единая сущность `Quality Document` (ADR-017) |
-| Реализация | Tasks **9A — 9C — DONE** (ядро выполнения контроля и лабораторных заключений); Tasks **9D — 9K** (канон решений/дефектов/ремонта/документов, Session 008) — planned / not implemented |
+| После результата (Session 008, ADR-017 — `PARTIALLY_SUPERSEDED_BY_ADR-019`) | `Inspection Result → Quality Finding → Engineering Evaluation → Defect → Quality Decision → Repair → Reinspection → Defect Closure`; Result ≠ Finding ≠ Defect; единая сущность `Quality Document`. `Quality Decision` декомпозировано в ADR-019 (см. строку ниже) |
+| Углублённая архитектура Task 9D (Session 008-07, ADR-019) | `QualityFinding → EngineeringEvaluation → Defect / DefectAcceptanceAssessment → FindingDisposition → ProductionHold → Corrective Action / Reinspection → CustomerQualityDecision → Closure`; `Quality Decision` разделено на evaluation / acceptance / disposition (более не доменная сущность); `Confirmed Severity`; `Defect` — только после `CONFIRMED_DEFECT`; `OTK_INSPECTOR` — опциональная роль (fallback `CHIEF_WELDER`). **Канон принят, реализация не начата** |
+| Реализация | Tasks **9A — 9C — DONE** (ядро выполнения контроля и лабораторных заключений); канон качества post-9C (Session 008 / ADR-017, Session 008-07 / ADR-019) — planned / not implemented. Действующая структура — **9D-1 … 9D-8** (решение 008-07-BO); историческая разбивка 9E — 9K — `SUPERSEDED_BY_TASK_9D`, непоглощённый остаток (9H/9I/9K) — будущие задачи |
 
 > **Граница по импорту и печатным формам.** Импорт результатов контроля (XLSX, CSV,
 > PDF, API лаборатории) зафиксирован **только как интеграционное требование верхнего

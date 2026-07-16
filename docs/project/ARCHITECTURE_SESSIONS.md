@@ -2113,9 +2113,12 @@ REJECTED — отклонено по качеству (история сохра
 - **ОГС / `WELDING_ENGINEER`** — техническая/технологическая оценка, владелец Defect,
   план Repair, техническая причина, техническое заключение;
 - **ОТК / `OTK_INSPECTOR`** — соответствие нормативам, подтверждение Defect,
-  согласование Repair, подтверждение качества;
+  согласование Repair, подтверждение качества (**опциональная проектная роль** —
+  решение 008-07-BP: не обязательна; при отсутствии внутреннего ОТК его критические
+  полномочия выполняет `CHIEF_WELDER`);
 - **`CHIEF_WELDER`** — разрешение разногласий, override/отмена итога, критические
   исключения, утверждение правил повторяемости и комплектности (с обоснованием);
+  **обязательный fallback** полномочий ОТК (008-07-BP);
 - **Мастер** — заявка на ремонт, `IN_PROGRESS`, фиксация завершения, остановка/отмена;
 - **Лаборатория НК** — Reinspection. Новые `role_code` **не вводятся**.
 
@@ -2157,33 +2160,38 @@ Session 007 (ADR-015) прогнозно называл «Architecture Session 0
 архитектурной сессии**. Историческая формулировка Session 007/ADR-015 сохранена как
 запись прогноза и не переписывается.
 
-### Задачи реализации (Tasks 9D — 9K)
+### Задачи реализации (историческая разбивка Session 008; пересмотрена 008-07-BO)
 
-Session 008 уточняет и **замещает** предварительную (Session-007) разбивку Tasks
-9D — 9G более детальной последовательностью. Реализация — после принятия ADR-017.
+> **Пересмотр (2026-07-16, решение 008-07-BO).** Приведённая ниже разбивка на Tasks
+> **9E — 9K** — **историческая** и более **не** является действующей реализационной
+> структурой. Действующая структура — **9D-1 … 9D-8** (Session 008-07 / ADR-019);
+> поглощённые части — `SUPERSEDED_BY_TASK_9D`, непоглощённый объём (`9H`, `9I`, `9K`,
+> остаток `9G`) — будущие задачи. Соответствие —
+> [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP#Соответствие старых Tasks 9E — 9K блокам 9D-1 … 9D-8 (решение 008-07-BO)|Implementation Plan]].
 
-| Task | Содержание |
-|------|-----------|
-| **9D — Quality Finding and Engineering Evaluation** | `Quality Finding`, инженерная оценка Finding, разделение Result/Finding |
-| **9E — Quality Decision Workflow** | решения ОГС/ОТК, разрешение разногласий, override/отмена итога, версии и обоснование |
-| **9F — Defect Core** | сущность `Defect`, жизненный цикл, подтверждение ОГС/ОТК, связь `Finding ↔ Defect` |
-| **9G — Defect Cause, Severity and Localization** | причина, коренная причина, критичность, локализация, корректирующие действия, повторяемость, причинная связь с `WeldOperation` |
-| **9H — Repair Core and Repair Planning** | `Repair`, план, версии, лимиты и зоны ремонтов |
-| **9I — Repair Execution and Verification** | выполнение, остановки/возобновление, отклонения, подтверждения ОГС/ОТК, заключение по ремонту |
-| **9J — Reinspection Integration** | повторный контроль, привязка к Repair, итог, автоматическое закрытие Defect |
-| **9K — Quality Documents and Registry** | `Quality Document`, версии, владение, подписи, комплектность, реестр, экспорт |
+| Task (историческая разбивка Session 008) | Содержание | Статус (008-07-BO) |
+|------|-----------|--------------------|
+| **9D — Quality Finding and Engineering Evaluation** | `Quality Finding`, инженерная оценка Finding, разделение Result/Finding | детализирован в **9D-1 … 9D-8** |
+| **9E — Quality Decision Workflow** | решения ОГС/ОТК, разрешение разногласий, override/отмена итога, версии и обоснование | `SUPERSEDED_BY_TASK_9D` → 9D-2 + 9D-4 + 9D-5 |
+| **9F — Defect Core** | сущность `Defect`, жизненный цикл, подтверждение ОГС/ОТК, связь `Finding ↔ Defect` | `SUPERSEDED_BY_TASK_9D` → 9D-3 |
+| **9G — Defect Cause, Severity and Localization** | причина, коренная причина, критичность, локализация, корректирующие действия, повторяемость, причинная связь с `WeldOperation` | частично `SUPERSEDED_BY_TASK_9D` → 9D-2 + 9D-3; остаток — будущий контур |
+| **9H — Repair Core and Repair Planning** | `Repair`, план, версии, лимиты и зоны ремонтов | не поглощён; будущая задача |
+| **9I — Repair Execution and Verification** | выполнение, остановки/возобновление, отклонения, подтверждения ОГС/ОТК, заключение по ремонту | не поглощён; будущая задача |
+| **9J — Reinspection Integration** | повторный контроль, привязка к Repair, итог, автоматическое закрытие Defect | частично `SUPERSEDED_BY_TASK_9D` → 9D-6; фактическое выполнение — в Inspection Core |
+| **9K — Quality Documents and Registry** | `Quality Document`, версии, владение, подписи, комплектность, реестр, экспорт | не поглощён; будущая задача |
 
 ### Финальная сводка
 
 **Architecture Session 008 завершена** (блоки 008-01 — 008-06). Блоки 008-01 — 008-05
-зафиксированы в **ADR-017**. Блок **008-06 «Печатные формы»** завершён 2026-07-16 и
-зафиксирован в **ADR-018** (Electronic Documents and Printed Forms Canon). Реализация
-всей сессии — Tasks **9D — 9K** и отдельные задачи документного слоя (planned / not
-implemented).
+зафиксированы в **ADR-017** (`PARTIALLY_SUPERSEDED_BY_ADR-019`). Блок **008-06 «Печатные
+формы»** завершён 2026-07-16 и зафиксирован в **ADR-018** (Electronic Documents and
+Printed Forms Canon). Действующая реализационная структура качества — **9D-1 … 9D-8**
+(Session 008-07 / ADR-019, решение 008-07-BO); историческая разбивка 9E — 9K —
+`SUPERSEDED_BY_TASK_9D`; всё — planned / not implemented.
 
-**Следующий этап:** Task 9D — Quality Finding and Engineering Evaluation (после
-принятия ADR-017; должен ссылаться на конкретные редакции Official Document по
-ADR-018).
+**Следующий этап:** Task 9D (блоки 9D-1 … 9D-8) — Quality Finding and Engineering
+Evaluation (после принятия ADR-017/ADR-019; должен ссылаться на конкретные редакции
+Official Document по ADR-018).
 
 ### Связанные ADR
 
@@ -2202,6 +2210,167 @@ ADR-018).
 - `docs/project/PROJECT_SUMMARY.md` (Electronic Documentation Layer)
 - `docs/project/UBIQUITOUS_LANGUAGE.md` (Раздел 10; термины Official Document и др. — ADR-018)
 - `docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md` (Tasks 9D — 9K; Task 9D зависит от ADR-018)
+
+---
+
+## Architecture Session 008-07 — Quality Finding and Engineering Evaluation
+
+| | |
+|---|---|
+| **Номер** | 008-07 |
+| **Дата** | 2026-07-16 |
+| **Тема** | Углублённая архитектура Task 9D: Quality Finding, Engineering Evaluation, Defect, Disposition, Holds, Customer Decision, Corrective/Reinspection Links |
+| **Статус** | Завершена. Канон зафиксирован в [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019]]. Код, модели, миграции, API и тесты не создавались; реализация Task 9D **не начата** |
+
+### Краткое описание
+
+Сессия углубляет участок `Quality Finding → Closure` канона Session 008 (ADR-017) и
+фиксирует детальную архитектуру **Task 9D**. Ключевое уточнение: ранее единое
+`Quality Decision` разделено на **три** решения — `EngineeringEvaluation` («что
+установлено технически»), `DefectAcceptanceAssessment` («приемлем ли дефект») и
+`FindingDisposition` («что необходимо сделать»); введены `ProductionHold`,
+`CustomerQualityDecision`, `CorrectiveActionLink`, `ReinspectionRequirement`.
+
+Основной канонический процесс:
+
+```text
+QualityFinding
+  → EngineeringEvaluation
+  → Defect / DefectAcceptanceAssessment
+  → FindingDisposition
+  → ProductionHold
+  → Corrective Action / Reinspection
+  → CustomerQualityDecision
+  → Closure
+```
+
+> **Код, миграции, API и тесты на этой сессии не создавались.** Session 008-07
+> фиксирует только архитектурный канон; реализация Task 9D начинается **после**
+> принятия ADR-019 и подготовки отдельного ТЗ на Task 9D-1.
+
+### Границы сессии
+
+**Входит:** канон `QualityFinding` (нумерация `<PROJECT_CODE>-QF-<SEQUENCE>`, origin,
+initial risk, location, evidence, correction, assignment, source linkage, управляемое
+автосоздание); `EngineeringEvaluation` (версии, классификация, confirmed severity,
+impact scope, `RequirementReference`, document applicability); `Defect` / `DefectType` /
+`DefectMeasurement` / `DefectAcceptanceAssessment` (вычисляемый lifecycle, разделение
+геометрии дефекта и ремонта); `FindingDisposition` и corrective action authorization;
+`ProductionHold` / `ProductionHoldRelease`; `CustomerQualityDecision`;
+`CorrectiveActionLink`, `ReinspectionRequirement`; вычисляемые quality state Joint и
+closure readiness; жизненные циклы finding/evaluation/disposition/hold.
+
+**Не входит (реализация и будущие контуры):** модели, миграции, API, тесты, frontend,
+backend; импорт результатов НК; `ResponsibilityAssessment`, `FindingPattern`,
+`CorrectivePreventiveAction`, `ComplianceRule` и связанные сущности
+(`ComplianceRuleTestCase`, `AutomatedRuleTest`, `ComplianceRuleExecution`,
+`ComplianceOverride`, `ComplianceExecutionCorrection`); полный универсальный нормативный
+движок repair eligibility; генераторы документов и ЭП.
+
+### Ключевые принятые решения
+
+| # | Решение |
+|---|---------|
+| 1 | `QualityFinding` — зарегистрированный факт для рассмотрения; **не** = Defect, **не** = негодность Joint, **не** = решение ОГС; исходное наблюдение неизменяемо; `DRAFT` удаляем, `REGISTERED` → `CANCELLED` только с основанием |
+| 2 | `origin_type` — канонический справочник происхождения (не заменяет инженерную классификацию) |
+| 3 | Разделены `initial_risk` (до оценки) и `confirmed_severity` (только по `APPROVED` evaluation) |
+| 4 | `FindingLocation`: несколько зон — только при однородности, одном значении, одной оценке и одном disposition |
+| 5 | Многоуровневая source linkage; ссылка на точный `InspectionResultItem` предпочтительнее |
+| 6 | Управляемое автосоздание finding по версионируемому правилу с dedup key; положительный повторный контроль не закрывает finding автоматически |
+| 7 | `EngineeringEvaluation` — версионная сущность; готовит `WELDING_ENGINEER`, утверждает `CHIEF_WELDER`; `APPROVED` неизменяема; новая версия → предыдущая `SUPERSEDED`; классификации `CONFIRMED_DEFECT`/`NOT_CONFIRMED`/… |
+| 8 | `Defect` создаётся только после `APPROVED` evaluation с `CONFIRMED_DEFECT`; `DefectType` — управляемый справочник, не enum; lifecycle вычисляемый |
+| 9 | `DefectAcceptanceAssessment` (`ACCEPTABLE`/`UNACCEPTABLE`/`CONDITIONALLY_ACCEPTABLE`/`INSUFFICIENT_DATA`/`NOT_APPLICABLE`) ≠ `FindingDisposition`; противоречивые комбинации блокируются |
+| 10 | `FindingDisposition` («что сделать») отделён от evaluation («что установлено»); критические типы утверждает `CHIEF_WELDER` |
+| 11 | Отдельное действие `authorize_corrective_action_start` до начала repair/reweld/cut-out |
+| 12 | Для `REPAIR`/`REWELD`/`CUT_OUT_AND_REPLACE` до старта работ — утверждённый `ReinspectionRequirement`; disposition исполняется по `CorrectiveActionLink`, не по текстовой отметке |
+| 13 | `CustomerQualityDecision` — внешнее решение (внешний участник + внутренний регистратор + обязательное доказательство), не внутренняя оценка ОГС |
+| 14 | Quality state Joint (`technical_quality_state`/`documentation_state`/`customer_acceptance_state`/`handover_readiness`/`production_hold`) агрегируется по всем активным finding (наиболее строгое) |
+| 15 | `ProductionHold` — отдельная сущность; снятие только через `ProductionHoldRelease`; прямое редактирование статуса запрещено |
+| 16 | Closure readiness вычисляется системой; формальное закрытие — авторизованная роль ОГС |
+| 17 | Границы будущих контуров зафиксированы как точки расширения без пустых таблиц: `applicable document ≠ active machine rule` |
+
+### Жизненные циклы
+
+```text
+QualityFinding:
+DRAFT → REGISTERED → UNDER_EVALUATION → DISPOSITION_PENDING → ACTION_REQUIRED
+      → ACTION_IN_PROGRESS → REINSPECTION_PENDING → READY_FOR_CLOSURE → CLOSED
+      (ветка: DISPOSITION_PENDING → CUSTOMER_DECISION_PENDING → READY_FOR_CLOSURE)
+      (+ DRAFT → deleted; REGISTERED → CANCELLED; CLOSED/CANCELLED конечны)
+
+EngineeringEvaluation:
+DRAFT → PENDING_APPROVAL → APPROVED → SUPERSEDED
+      (+ PENDING_APPROVAL → RETURNED → DRAFT; DRAFT/RETURNED → CANCELLED)
+
+FindingDisposition:
+DRAFT → PENDING_APPROVAL → APPROVED → IN_EXECUTION → COMPLETED
+      (+ RETURNED → DRAFT; APPROVED/IN_EXECUTION → SUPERSEDED)
+
+ProductionHold:
+ACTIVE → CONFIRMED → PARTIALLY_RELEASED → RELEASED
+      (+ SUPERSEDED; ACTIVE → INVALIDATED для ошибочной регистрации)
+```
+
+### Разбиение Task 9D (утверждено)
+
+| Подзадача | Содержание |
+|-----------|-----------|
+| **9D-1** | QualityFinding Core (finding, location, evidence, correction, assignment, numbering, register, acknowledge, lifecycle) |
+| **9D-2** | Engineering Evaluation (версии, approval, классификация, `confirmed_severity`, impact_scope, RequirementReference) |
+| **9D-3** | Defect Technical Model (Defect, DefectType, DefectMeasurement, DefectAcceptanceAssessment, lifecycle) |
+| **9D-4** | Finding Disposition and Holds (FindingDisposition, ProductionHold, ProductionHoldRelease, quality state) |
+| **9D-5** | Customer Quality Decision (внешний участник, внутренний регистратор, evidence, версии) |
+| **9D-6** | Corrective Action and Reinspection Links (CorrectiveActionLink, ReinspectionRequirement, closure readiness) |
+| **9D-7** | API, permissions and integration (API, RBAC, cross-module validation, integration tests) |
+| **9D-8** | Architecture consolidation (после реализации блоков) |
+
+### Принятые решения 008-07-BO / BP / BQ
+
+Три ранее открытых вопроса закрыты утверждёнными решениями:
+
+- **008-07-BO — структура Task 9D.** Официальная реализационная структура — **9D-1 …
+  9D-8**. Историческая разбивка Session 008 на Tasks **9E — 9K** **не** остаётся
+  параллельной: поглощённые части — `SUPERSEDED_BY_TASK_9D` (`9E → 9D-2 + 9D-4 + 9D-5`;
+  `9F → 9D-3`; `9G → частично 9D-2 + 9D-3`; `9J → частично 9D-6`), непоглощённый объём
+  (`9H`, `9I`, `9K`, остаток `9G`) сохранён как будущие задачи и подлежит отдельной
+  перенумерации после утверждения mapping table. Полная таблица —
+  [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP#Соответствие старых Tasks 9E — 9K блокам 9D-1 … 9D-8 (решение 008-07-BO)|Implementation Plan]].
+- **008-07-BP — роль ОТК.** `OTK_INSPECTOR = optional project role`: внутреннее ОТК не
+  обязательно, определяется конфигурацией проекта; workflow не требует фиктивного
+  пользователя ОТК; критический fallback — `CHIEF_WELDER` (`WELDING_ENGINEER` его не
+  заменяет); представитель заказчика — внешний контур (`CustomerQualityDecision`), не
+  внутренний ОТК.
+- **008-07-BQ — статус ADR-017.** `ADR-017 = PARTIALLY_SUPERSEDED_BY_ADR-019`. Декомпозиция
+  `Quality Decision → EngineeringEvaluation → DefectAcceptanceAssessment →
+  FindingDisposition`; `Quality Decision` — более не доменная сущность (только обобщённое
+  бизнес-понятие); `Defect Severity` → `Confirmed Severity`.
+
+Подробнее — [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019 → «Решения 008-07-BO / BP / BQ»]].
+
+### Финальная сводка
+
+**Architecture Session 008-07 завершена.** Канон Task 9D зафиксирован в **ADR-019**;
+реализация **не начата** (planned / not implemented). Текущая консолидация выполнена
+**до** реализации и не заменяет будущий блок **9D-8**.
+
+**Следующий этап:** подготовка отдельного ТЗ на **Task 9D-1 — QualityFinding Core**.
+
+### Связанные ADR
+
+- [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019 — Quality Finding and Engineering Evaluation Canon]]
+- Углубляет [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]] ·
+  опирается на [[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018]] ·
+  [[docs/project/DECISIONS#ADR-016. Quality Execution Model (Task 9C)|ADR-016]] ·
+  [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] ·
+  [[docs/project/ADR-006-domain-ownership-matrix|ADR-006]]
+
+### Синхронизированные документы
+
+- `docs/project/DECISIONS.md` (ADR-019)
+- `docs/ARCHITECTURE.md` (§5.9)
+- `docs/project/PROJECT_SUMMARY.md` (Quality Finding / Task 9D canon)
+- `docs/project/UBIQUITOUS_LANGUAGE.md` (Раздел 11)
+- `docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md` (Task 9D — 9D-1 … 9D-8)
 
 ---
 
@@ -2236,8 +2405,11 @@ ADR-018).
 
 ---
 
-*Версия журнала: 2026-07-16. Записей: 8 (Session 008 завершена — блоки 008-01 —
+*Версия журнала: 2026-07-16. Записей: 9 (Session 008 завершена — блоки 008-01 —
 008-05, ADR-017: канон решений по качеству, дефектов, ремонта и документов качества;
 блок 008-06 «Печатные формы» завершён 2026-07-16 и принят в ADR-018: Electronic
-Documents and Printed Forms Canon; реализация — Tasks 9D — 9K planned / not
-implemented. Session 007 завершена; Task 9C — ADR-016).*
+Documents and Printed Forms Canon; Session 008-07 завершена 2026-07-16 — ADR-019:
+углублённая архитектура Task 9D, Quality Finding and Engineering Evaluation, решения
+008-07-BO/BP/BQ; ADR-017 = PARTIALLY_SUPERSEDED_BY_ADR-019; действующая структура
+качества — Tasks 9D-1 … 9D-8 (историческая 9E — 9K → SUPERSEDED_BY_TASK_9D), реализация
+не начата. Session 007 завершена; Task 9C — ADR-016).*

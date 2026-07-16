@@ -2139,16 +2139,42 @@ docs/project/UBIQUITOUS_LANGUAGE.md
 
 Дата: 2026-07-15
 
-Статус: **ACCEPTED — принято** — закрывает блоки Architecture Session 008
-(008-01 — 008-05). Канон утверждён; **код, миграции и тесты на этой сессии не
-создавались**. Реализация вынесена в Tasks **9D — 9K** (planned / not implemented).
-Блок **008-06 «Печатные формы»** не завершён и **не входит** в принятый канон.
+Статус: **ACCEPTED — принято**, **`PARTIALLY_SUPERSEDED_BY_ADR-019`** (решение
+008-07-BQ, 2026-07-16) — закрывает блоки Architecture Session 008 (008-01 — 008-05).
+Канон утверждён; **код, миграции и тесты на этой сессии не создавались**. Блок
+**008-06 «Печатные формы»** не завершён и **не входит** в принятый канон.
+
+> **Частичное замещение (2026-07-16, ADR-019, решение 008-07-BQ).** Модель участка
+> `Quality Finding → Closure` углублена в
+> [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019]].
+> **Замещены** следующие положения ADR-017:
+> - самостоятельная доменная сущность **Quality Decision** — декомпозирована на
+>   `EngineeringEvaluation` → `DefectAcceptanceAssessment` → `FindingDisposition`
+>   (термин «Quality Decision» сохраняется только как обобщённое бизнес-понятие);
+> - **единая модель технической оценки и решения** — разделена на оценку («что
+>   установлено»), приемлемость дефекта и disposition («что сделать»);
+> - термин **`Defect Severity`** — заменён на **`Confirmed Severity`**;
+> - **безусловная обязательность внутреннего ОТК** — снята: `OTK_INSPECTOR` —
+>   опциональная проектная роль, критический fallback — `CHIEF_WELDER` (решение
+>   008-07-BP).
+>
+> ADR-017 **не удаляется** и **продолжает действовать в непересекающейся части**:
+> общий принцип внутреннего и внешнего решения; связь с печатными формами (ADR-018);
+> роли и внешние решения, не противоречащие ADR-019; положения вне модели
+> finding/evaluation/defect/disposition. Реализационная структура Task 9D — блоки
+> **9D-1 … 9D-8** (mapping старых Tasks 9E — 9K —
+> [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP#Соответствие старых Tasks 9E — 9K блокам 9D-1 … 9D-8 (решение 008-07-BO)|таблица соответствия]]).
 
 > **Обновление (2026-07-16, ADR-018):** блок **008-06 «Печатные формы»**
 > впоследствии завершён отдельной сессией 008-06 и зафиксирован как
 > [[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018 — Electronic Documents and Printed Forms Canon]].
 > Формулировки ниже (в т.ч. «008-06 остаётся открытым» / «не входит в канон»)
 > отражают объём ADR-017 на момент принятия и сохранены как история.
+
+> **Реализация Tasks 9D — 9K:** структура пересмотрена решением 008-07-BO —
+> см. [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019]]
+> и [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP#Соответствие старых Tasks 9E — 9K блокам 9D-1 … 9D-8 (решение 008-07-BO)|таблицу соответствия]].
+> Ниже сохранена историческая формулировка «Tasks 9D — 9K» на момент принятия ADR-017.
 
 Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Session 008]]
 
@@ -2489,6 +2515,420 @@ docs/project/UBIQUITOUS_LANGUAGE.md (Official Document, Document Revision,
   Document Snapshot, Document Source, Document Template, Document History Event)
 docs/project/PROJECT_SUMMARY.md (Electronic Documentation Layer)
 docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Task 9D зависит от ADR-018)
+```
+
+---
+
+## ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)
+
+Дата: 2026-07-16
+
+Статус: **ACCEPTED — принято** — закрывает Architecture Session **008-07 «Quality
+Finding and Engineering Evaluation»** (углублённая проработка Task 9D). Канон
+утверждён; **код, модели, миграции, API и тесты на этой сессии не создавались**.
+Реализация Task 9D **не начата** (planned / not implemented).
+
+Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008-07 — Quality Finding and Engineering Evaluation|Session 008-07]]
+
+Продолжает и углубляет: [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]] (канон процессов после результата контроля) ·
+[[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018]] (официальные документы и редакции)
+
+Опирается на: [[docs/project/ADR-006-domain-ownership-matrix|ADR-006]] (владельцы доменов) ·
+[[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] ·
+[[docs/project/DECISIONS#ADR-016. Quality Execution Model (Task 9C)|ADR-016]] (`Inspection Result` как технический факт) ·
+[[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012]]
+
+> **Номер:** ADR-017 занят каноном решений по качеству (Session 008), ADR-018 —
+> электронными документами (008-06); углублённая архитектура Task 9D зафиксирована
+> как **ADR-019**.
+
+> **Отношение к ADR-017 (`PARTIALLY_SUPERSEDED_BY_ADR-019`, решение 008-07-BQ).**
+> ADR-017 зафиксировал контур `Result → Finding → Evaluation → Defect →
+> Quality Decision → Repair → Reinspection → Closure` на уровне Session 008. ADR-019
+> **углубляет и частично замещает** участок от `Quality Finding` до `Closure`, разделяя
+> ранее единое `Quality Decision` на **три** отдельных решения (`EngineeringEvaluation`
+> — «что установлено», `DefectAcceptanceAssessment` — «приемлем ли дефект технически»,
+> `FindingDisposition` — «что необходимо сделать») и вводя `ProductionHold`,
+> `CustomerQualityDecision`, `CorrectiveActionLink`, `ReinspectionRequirement`.
+> Замещённые положения ADR-017 (самостоятельная сущность `Quality Decision`; единая
+> модель оценки и решения; термин `Defect Severity`; безусловная обязательность ОТК) и
+> сохранённая в силе часть перечислены в статусном блоке ADR-017. Историческая
+> формулировка ADR-017 не переписывается. Реализационные решения 008-07-BO (структура
+> Task 9D), 008-07-BP (роль ОТК) и 008-07-BQ (статус ADR-017) зафиксированы ниже в
+> разделе «Решения 008-07-BO / BP / BQ»; таблица соответствия старых Tasks 9E — 9K
+> блокам 9D-1 … 9D-8 — в
+> [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP#Соответствие старых Tasks 9E — 9K блокам 9D-1 … 9D-8 (решение 008-07-BO)|Implementation Plan]].
+
+### Контекст
+
+ADR-015/016 зафиксировали `Inspection Result` как технический факт, ADR-017 — контур
+процессов после результата контроля. Оставалась недостаточно детализированной
+**внутренняя механика участка `Quality Finding → Closure`**: как признак становится
+(или не становится) подтверждённым дефектом, как отделяется инженерная классификация
+от решения о действии и от технической приемлемости дефекта, как блокируется
+производство, как фиксируется внешнее решение заказчика, как связываются
+корректирующие действия и повторный контроль, как вычисляется готовность к закрытию.
+
+### Основной канонический процесс
+
+```text
+QualityFinding
+  → EngineeringEvaluation
+  → Defect / DefectAcceptanceAssessment
+  → FindingDisposition
+  → ProductionHold
+  → Corrective Action / Reinspection
+  → CustomerQualityDecision
+  → Closure
+```
+
+`QualityFinding` — зарегистрированный факт потенциального или подтверждённого
+несоответствия, требующий формального рассмотрения. Сам по себе finding **не**
+означает наличия `Defect`, негодности `Joint`, необходимости ремонта и **не** является
+решением ОГС. `Defect` создаётся **только** после утверждённой `EngineeringEvaluation`
+с классификацией `CONFIRMED_DEFECT`.
+
+### Решение
+
+**1. QualityFinding.** Принадлежит одному `Joint`; имеет UUID; после регистрации
+получает человекочитаемый номер `<PROJECT_CODE>-QF-<SEQUENCE>`; поддерживает внешние
+номера/ссылки, `origin_type`, `initial_risk`, неизменяемое исходное наблюдение,
+location/evidence/correction/assignment history и точные ссылки на источник контроля.
+Регистрировать finding может любой авторизованный участник проекта в пределах
+полномочий. ОГС подтверждает получение (acknowledge), управляет инженерной оценкой,
+контролирует disposition и выполняет формальное закрытие. Исходное описание после
+регистрации **неизменяемо**; дополнения и исправления оформляются отдельными
+аудируемыми сущностями `FindingEvidence`, `FindingCorrection`, `FindingAssignment`.
+`DRAFT` можно удалить; `REGISTERED` физически удалить нельзя; ошибочная/дублирующая
+зарегистрированная запись переводится в `CANCELLED` с обязательным основанием.
+
+**2. Origin Type** (канонический справочник происхождения; не заменяет инженерную
+классификацию): `INSPECTION_RESULT`, `VISUAL_OBSERVATION`, `WELDING_PROCESS`,
+`PERSONNEL_ADMISSION`, `WELDING_MATERIAL`, `BASE_MATERIAL`, `HEAT_TREATMENT`,
+`ENGINEERING_DOCUMENT`, `EXECUTIVE_DOCUMENTATION`, `TRACEABILITY`, `CUSTOMER_REMARK`,
+`INTERNAL_REVIEW`, `OTHER`.
+
+**3. Risk и Severity разделены.** `initial_risk` (`LOW`/`MEDIUM`/`HIGH`/`CRITICAL`/
+`UNKNOWN`) назначается до завершения оценки и используется для приоритета, SLA и
+эскалации. `confirmed_severity` (`NOT_APPLICABLE`/`MINOR`/`MAJOR`/`CRITICAL`)
+устанавливается **только** утверждённой `EngineeringEvaluation`.
+
+**4. FindingLocation.** Один finding может охватывать несколько зон только при
+одновременном соблюдении: зоны однородны, имеют одно техническое значение, требуют
+одной инженерной оценки и одного disposition. Для разных дефектов, причин или решений
+создаются отдельные finding.
+
+**5. Source Linkage.** Многоуровневая связь finding с источником: `Inspection` →
+`MethodExecution` → `InspectionResult` → `InspectionResultItem` →
+`LaboratoryConclusion`; также `WeldOperation`, `Repair`, `HeatTreatment`, редакция
+`EngineeringDocument` и другие подтверждённые производственные записи. Ссылка на
+точный `ResultItem` предпочтительнее общей ссылки на `Inspection`.
+
+**6. Automatic Finding Creation** (управляемая). Автосоздание finding по финальным
+отрицательным результатам контроля выполняется по явному **версионируемому правилу** с
+**deduplication key**; повторная обработка одного результата не создаёт дубликат;
+автоматически созданный finding проходит обычный lifecycle; положительный повторный
+контроль **не** закрывает finding автоматически. Машинный движок `ComplianceRule` в
+первую реализацию Task 9D **не входит**.
+
+**7. EngineeringEvaluation** — отдельная версионная сущность. `WELDING_ENGINEER`
+создаёт, редактирует `DRAFT`, отправляет на утверждение, дорабатывает после возврата.
+`CHIEF_WELDER` возвращает и утверждает. Утверждённая версия неизменяема; новая версия
+создаётся отдельно, ссылается на предыдущую, не перезаписывает историю и после
+утверждения делает предыдущую `SUPERSEDED`. Одновременно активна только одна
+`APPROVED`-версия. Классификации: `CONFIRMED_DEFECT`, `NOT_CONFIRMED`,
+`TECHNOLOGICAL_DEVIATION`, `DOCUMENTATION_NONCONFORMITY`,
+`INSPECTION_PROCESS_NONCONFORMITY`, `MATERIAL_TRACEABILITY_NONCONFORMITY`,
+`PERSONNEL_QUALIFICATION_NONCONFORMITY`, `REQUIRES_ADDITIONAL_EVIDENCE`,
+`OUT_OF_SCOPE`.
+
+**8. RequirementReference** (структурированная). Сохраняет документ, редакцию
+документа, пункт/раздел, снимок применённого текста, источник, применимость к проекту
+и связь с `EngineeringEvaluation`/disposition/другим решением. Историческое решение
+**не** изменяется при появлении новой редакции документа.
+
+**9. Document Applicability** отделена от наличия документа в системе. Статусы:
+`REFERENCE_ONLY`, `UNDER_REVIEW`, `APPLICABLE`, `APPLICABLE_WITH_LIMITATIONS`,
+`SUPERSEDED`, `NOT_APPLICABLE`. Как **обязательное нормативное основание** используются
+только `APPLICABLE` и `APPLICABLE_WITH_LIMITATIONS`. Документ, загруженный только для
+ознакомления (`REFERENCE_ONLY`), **не** активирует правила проекта. `WELDING_ENGINEER`
+готовит оценку применимости, `CHIEF_WELDER` утверждает техническую применимость;
+внешнее согласование заказчика/проектировщика фиксируется отдельно при необходимости.
+Применимость версионна и действует во времени; режимы перехода на новую редакцию:
+`NEW_WORK_ONLY`, `ALL_OPEN_FINDINGS`, `ALL_UNCLOSED_JOINTS`, `PROJECT_WIDE_REASSESSMENT`,
+`MANUAL_SCOPE`.
+
+**10. Impact Scope.** `EngineeringEvaluation` определяет `impact_scope`:
+`NO_OPERATIONAL_IMPACT`, `DOCUMENT_HANDOVER_BLOCK`, `INSPECTION_ACCEPTANCE_BLOCK`,
+`FURTHER_PROCESSING_BLOCK`, `TECHNICAL_ACCEPTANCE_BLOCK`, `FULL_JOINT_BLOCK`. Impact
+scope — основание для вычисления состояния `Joint` и `ProductionHold`.
+
+**11. Defect** — отдельная подтверждённая техническая запись; создаётся только после
+утверждённой `EngineeringEvaluation` с классификацией `CONFIRMED_DEFECT` (finding —
+процесс рассмотрения, Defect — подтверждённый факт). `DefectType` — управляемый
+справочник (канонический внутренний код, русское наименование, описание, внешние
+отображения/коды, период действия); полный перечень дефектов **не** зашивается в enum
+приложения. Вычисляемый lifecycle Defect: `CONFIRMED`, `ACTION_PLANNED`,
+`UNDER_CORRECTION`, `REINSPECTION_PENDING`, `REINSPECTION_FAILED`, `REMOVED`,
+`ACCEPTED_AS_IS`, `NOT_REMOVABLE`, `VOIDED` — пользователь не выбирает вычисляемый
+статус произвольно.
+
+**12. DefectAcceptanceAssessment** (техническая приемлемость дефекта, отдельно от
+disposition): `ACCEPTABLE`, `UNACCEPTABLE`, `CONDITIONALLY_ACCEPTABLE`,
+`INSUFFICIENT_DATA`, `NOT_APPLICABLE`. Приемлемость ≠ `FindingDisposition`
+(например `UNACCEPTABLE + REPAIR`; `UNACCEPTABLE + CUT_OUT_AND_REPLACE`;
+`CONDITIONALLY_ACCEPTABLE + ACCEPT_AS_IS`; `INSUFFICIENT_DATA + ADDITIONAL_INSPECTION`).
+Система блокирует противоречивые комбинации.
+
+**13. DefectMeasurement** создаётся на основании фактического источника контроля и
+хранит тип измерения, значение, единицу, местоположение, метод контроля, источник
+результата, автора, дату/время, версию и статус применимости. ОГС **не** переписывает
+измерения лаборатории; отдельным действием принимает или отклоняет применимость
+измерения для инженерной оценки.
+
+**14. Геометрия дефекта и ремонта разделена** на три сущности: `DefectLocation`
+(обнаруженная область), `RepairExcavationZone` (фактическая выборка), `RepairWeldZone`
+(фактическая ремонтная сварка). Они не являются одной сущностью.
+
+**15. FindingDisposition** отделён от `EngineeringEvaluation`: оценка отвечает «что
+установлено технически?», disposition — «что необходимо сделать?». Типы:
+`NO_ACTION_REQUIRED`, `ADDITIONAL_INSPECTION`, `DOCUMENT_CORRECTION`, `PROCESS_REVIEW`,
+`ACCEPT_AS_IS`, `REPAIR`, `REWELD`, `CUT_OUT_AND_REPLACE`, `REJECT_JOINT`,
+`RETURN_FOR_ADDITIONAL_EVALUATION`. Disposition создаётся только на основании
+актуальной `APPROVED` `EngineeringEvaluation`. Уровень утверждения зависит от типа:
+`WELDING_ENGINEER` утверждает решения низкого воздействия в пределах утверждённой
+матрицы полномочий; `CHIEF_WELDER` — критические (`ACCEPT_AS_IS`, `REPAIR`, `REWELD`,
+`CUT_OUT_AND_REPLACE`, `REJECT_JOINT` и иные с техническим блокированием).
+`ACCEPT_AS_IS` включает внутреннее техническое обоснование ОГС и отдельное решение
+заказчика/проектировщика, если оно требуется.
+
+**16. Corrective Action Authorization.** Утверждение disposition **не** означает
+автоматического разрешения начать работу. Вводится отдельное аудируемое действие
+`authorize_corrective_action_start`; до него нельзя начинать repair, reweld, cut-out,
+replacement и иные критические корректирующие действия. Разрешение выдаётся в пределах
+матрицы полномочий.
+
+**17. Repair Eligibility.** `RepairLimitPolicy` и `RepairEligibilityAssessment` —
+часть канона; полный универсальный нормативный движок в первый объём 9D **не входит**.
+`RepairEligibilityAssessment` определяет допустимость выбранного действия по типу
+дефекта, числу предыдущих ремонтов, зоне, материалу, толщине, технологии, применимому
+документу и другим проектным ограничениям.
+
+**18. ReinspectionRequirement.** Для disposition `REPAIR`, `REWELD`,
+`CUT_OUT_AND_REPLACE` до разрешения начала работы должен существовать утверждённый
+`ReinspectionRequirement` (обязательные методы, объём, зоны, этап, критерии завершения,
+необходимость внешнего решения, применимые требования). Нельзя сначала завершить
+ремонт, а затем неаудируемо определить требуемый контроль.
+
+**19. CorrectiveActionLink.** `FindingDisposition` связывается с фактическими
+действиями через `CorrectiveActionLink` (цели: `Repair`, `Reweld`,
+`CutOutAndReplacement`, дополнительный `Inspection`, `DocumentCorrection`,
+`ProcessReview`, иное утверждённое действие). Disposition не считается исполненным по
+текстовой отметке пользователя; состояние исполнения вычисляется по связанным
+фактическим объектам.
+
+**20. Reinspection Result.** Положительный повторный контроль **не** закрывает finding
+автоматически — подтверждает выполнение одного из условий и может перевести finding в
+`READY_FOR_CLOSURE` при выполнении остальных. Отрицательный повторный контроль:
+продолжает текущий finding при том же дефекте в той же зоне; создаёт новую версию
+`EngineeringEvaluation` и disposition при необходимости; создаёт новый связанный
+finding при новом дефекте, новой зоне или самостоятельной проблеме.
+
+**21. CustomerQualityDecision** — отдельная сущность, **не** внутренняя
+`EngineeringEvaluation` ОГС. Разделяются внешний участник, фактически принявший
+решение, и внутренний пользователь, зарегистрировавший его (`CHIEF_WELDER`,
+`WELDING_ENGINEER`, `PTO_ENGINEER`, `INSPECTOR`). Доказательство внешнего решения
+обязательно (документ, письмо, протокол, подписанная форма, ссылка на подтверждённый
+источник). История внешних решений версионна и неизменяема.
+
+**22. Quality State Joint.** Lifecycle `Joint` не смешивается с состоянием качества.
+Для `Joint` вычисляются отдельно `technical_quality_state`, `documentation_state`,
+`customer_acceptance_state`, `handover_readiness`, `production_hold`. Агрегация — по
+всем активным finding; применяется наиболее строгое действующее состояние; API
+возвращает ссылки на finding, блокирующие `Joint`.
+
+**23. ProductionHold** — отдельная сущность; разделяются временный оперативный hold и
+подтверждённый инженерный hold. Хранит уровень (`PARTIAL`/`FULL`), область действия,
+перечень запрещённых операций, основание, автора, время установки, связь с finding,
+подтверждение ОГС и release history. Снятие — только через `ProductionHoldRelease`;
+прямое редактирование статуса запрещено; при нескольких hold применяется наиболее
+строгое совокупное ограничение.
+
+**24. Root Cause.** Локальное устранение состояния отделено от расследования системной
+причины. Статусы root cause: `NOT_REQUIRED`, `NOT_INVESTIGATED`, `UNDER_INVESTIGATION`,
+`IDENTIFIED`, `ACTION_PLANNED`, `ACTION_IMPLEMENTED`, `EFFECTIVENESS_VERIFIED`. Закрытие
+отдельного finding не всегда требует завершённого CAPA.
+
+**25. Будущие контуры (зафиксированы как точки расширения, не реализуются в 9D):**
+`ResponsibilityAssessment` (ограниченная сущность; не назначает виновного
+автоматически, не считает сварщика ответственным автоматически, не часть исходного
+finding, не видна всем ролям); `FindingPattern` (система предлагает, ОГС подтверждает
+вручную); `CorrectivePreventiveAction` (`CORRECTIVE_ACTION`, `PREVENTIVE_ACTION`,
+`PROCESS_IMPROVEMENT`, `TRAINING_ACTION`, `DOCUMENT_UPDATE`, `SYSTEM_CHANGE`,
+`SUPPLIER_ACTION`; локальный ремонт Joint — не CAPA); `ComplianceRule` /
+`ComplianceRuleTestCase` / `AutomatedRuleTest` / `ComplianceRuleExecution` /
+`ComplianceOverride` / `ComplianceExecutionCorrection`. Архитектурная граница:
+**applicable document ≠ active machine rule**.
+
+### Жизненные циклы
+
+```text
+QualityFinding:
+DRAFT → REGISTERED → UNDER_EVALUATION → DISPOSITION_PENDING → ACTION_REQUIRED
+      → ACTION_IN_PROGRESS → REINSPECTION_PENDING → READY_FOR_CLOSURE → CLOSED
+Ветка внешнего решения:
+DISPOSITION_PENDING → CUSTOMER_DECISION_PENDING → READY_FOR_CLOSURE
+Исключения:  DRAFT → deleted ;  REGISTERED → CANCELLED
+(CLOSED и CANCELLED конечны; закрытый finding не открывается повторно —
+новое обстоятельство создаёт новый finding или новую версию оценки)
+
+EngineeringEvaluation:
+DRAFT → PENDING_APPROVAL → APPROVED → SUPERSEDED
+Возврат:  PENDING_APPROVAL → RETURNED → DRAFT
+Отмена:   DRAFT → CANCELLED ;  RETURNED → CANCELLED
+(APPROVED неизменяема и не отменяется через CANCELLED; исправление — новой версией;
+утверждает только CHIEF_WELDER)
+
+FindingDisposition:
+DRAFT → PENDING_APPROVAL → APPROVED → IN_EXECUTION → COMPLETED
+Возврат:  PENDING_APPROVAL → RETURNED → DRAFT
+Отмена:   DRAFT → CANCELLED ;  RETURNED → CANCELLED
+Пересмотр: APPROVED / IN_EXECUTION → SUPERSEDED
+(создаётся только по APPROVED EngineeringEvaluation; IN_EXECUTION вычисляется по
+фактическим действиям; COMPLETED не закрывает finding автоматически; REJECT_JOINT
+может быть COMPLETED, даже если Joint остаётся отклонённым)
+
+ProductionHold:
+ACTIVE → CONFIRMED → PARTIALLY_RELEASED → RELEASED
+Замена:  ACTIVE / CONFIRMED / PARTIALLY_RELEASED → SUPERSEDED
+Ошибка:  ACTIVE → INVALIDATED
+(подтверждает ОГС; partial/full release — через ProductionHoldRelease; прямое
+изменение статуса запрещено; RELEASED не закрывает finding; просроченный hold не
+снимается автоматически)
+```
+
+### Closure
+
+Готовность к закрытию **вычисляется системой**. Finding становится `READY_FOR_CLOSURE`
+только если: существует актуальная `APPROVED` `EngineeringEvaluation`; существует
+допустимый актуальный disposition; обязательные действия завершены;
+`ReinspectionRequirement` выполнены; обязательное внешнее решение зарегистрировано;
+активные `ProductionHold` сняты либо допустимо заменены; нет незавершённых блокирующих
+зависимостей; обязательные доказательства присутствуют. Формальное закрытие выполняет
+авторизованная роль ОГС; уровень полномочий зависит от серьёзности и disposition.
+
+### Роли (действующий канон; новых role_code не вводится)
+
+- **`CHIEF_WELDER`** — неограниченная административная роль системы: утверждение
+  `EngineeringEvaluation`, критические disposition, подтверждение технических hold,
+  формальное закрытие критических finding, техническое утверждение применимости
+  документов; утверждение `ComplianceOverride` — в будущем контуре. **Обязательный
+  fallback** критических полномочий ОТК при отсутствии внутреннего ОТК (решение
+  008-07-BP).
+- **`WELDING_ENGINEER`** — контур ОГС: подготовка evaluation, регистрация и
+  рассмотрение finding, подготовка disposition, действия в пределах утверждённой
+  матрицы полномочий; общесистемные административные права **не** получает; **не
+  заменяет** `CHIEF_WELDER` в критических решениях.
+- **`OTK_INSPECTOR`** — **опциональная проектная роль** (решение 008-07-BP): наличие
+  внутреннего ОТК определяется конфигурацией проекта; отдельное внутреннее
+  подразделение ОТК **не обязательно**. Workflow **не требует** фиктивного пользователя
+  ОТК: при отсутствии внутреннего ОТК его критические полномочия в сварочном контуре
+  выполняет `CHIEF_WELDER`. При наличии реального внутреннего ОТК роль активируется
+  **без изменения доменной модели**.
+- **Заказчик** — **не** является внутренним ОТК и **не** заменяет внутреннее инженерное
+  решение ОГС; фиксируется через `CustomerQualityDecision`. Результат контроля
+  «годен / не годен», установленный представителем заказчика, сохраняется как **внешний**
+  результат/решение (или внешний inspection result), а не как внутреннее решение ОГС.
+
+Итоговая схема (решение 008-07-BP): `internal OTK workflow = configurable` ·
+`CHIEF_WELDER fallback = mandatory` · `customer inspector = external quality contour`.
+
+### Границы первой реализации Task 9D
+
+**Входят:** `QualityFinding`, `FindingLocation`, `FindingEvidence`, `FindingCorrection`,
+`FindingAssignment`, `EngineeringEvaluation`, `RequirementReference`, `Defect`,
+`DefectType`, `DefectMeasurement`, `DefectAcceptanceAssessment`, `FindingDisposition`,
+`ProductionHold`, `ProductionHoldRelease`, `CustomerQualityDecision`,
+`CorrectiveActionLink`, `ReinspectionRequirement`.
+
+**Не входят:** `ResponsibilityAssessment`, `FindingPattern`,
+`CorrectivePreventiveAction`, `ComplianceRule`, `ComplianceRuleTestCase`,
+`AutomatedRuleTest`, `ComplianceRuleExecution`, `ComplianceOverride`,
+`ComplianceExecutionCorrection`. Для исключённых контуров фиксируются архитектурные
+точки расширения; пустые таблицы не создаются, API не обещается, реализация в Task 9D
+не выполняется.
+
+### Разбиение Task 9D (утверждено Session 008-07)
+
+| Подзадача | Содержание |
+|-----------|-----------|
+| **9D-1 — QualityFinding Core** | `QualityFinding`, `FindingLocation`, `FindingEvidence`, `FindingCorrection`, `FindingAssignment`, нумерация, register, acknowledge, базовый lifecycle |
+| **9D-2 — Engineering Evaluation** | `EngineeringEvaluation`, версии, approval, классификация, `confirmed_severity`, `impact_scope`, `RequirementReference` |
+| **9D-3 — Defect Technical Model** | `Defect`, `DefectType`, `DefectMeasurement`, `DefectAcceptanceAssessment`, вычисляемый lifecycle |
+| **9D-4 — Finding Disposition and Holds** | `FindingDisposition`, `ProductionHold`, `ProductionHoldRelease`, вычисление quality state |
+| **9D-5 — Customer Quality Decision** | `CustomerQualityDecision`, внешний участник, внутренний регистратор, evidence, version history |
+| **9D-6 — Corrective Action and Reinspection Links** | `CorrectiveActionLink`, `ReinspectionRequirement`, интеграция с repair/reweld/inspection, closure readiness |
+| **9D-7 — API, permissions and integration** | API, RBAC, cross-module validation, integration tests |
+| **9D-8 — Architecture consolidation** | финальная консолидация документации **после** реализации блоков |
+
+> Текущее задание — **архитектурная консолидация Session 008-07 до начала реализации**
+> и **не заменяет** будущий блок **9D-8** (консолидация по итогам реализации).
+
+### Архитектурные границы
+
+- ADR-019 определяет **внутреннюю механику участка `Quality Finding → Closure`** и не
+  переопределяет технический слой контроля (ADR-015/016) и контур официальных
+  документов (ADR-018).
+- Инженерная оценка обязана ссылаться на конкретные **редакции** официального документа
+  (`Document Revision`, ADR-018) и на структурированную `RequirementReference`.
+- В канон **не входят**: реализация (модели, миграции, API, тесты, frontend, backend),
+  импорт результатов НК, будущие контуры Responsibility/Pattern/CAPA/Compliance,
+  генераторы документов и ЭП.
+
+### Решения 008-07-BO / BP / BQ
+
+Три ранее открытых вопроса консолидации закрыты утверждёнными решениями Session 008-07.
+
+**008-07-BO — реализационная структура Task 9D.** Официальной реализационной структурой
+становится **9D-1 … 9D-8** (см. «Разбиение Task 9D»). Старые Tasks **9E — 9K** (Session
+008 / ADR-017) **не** остаются параллельной конкурирующей структурой: полностью или
+частично поглощённые части помечаются `SUPERSEDED_BY_TASK_9D`; непоглощённый
+функциональный объём (полный ремонтный lifecycle, реестр документов качества)
+сохраняется как будущие задачи и подлежит отдельной перенумерации после утверждения
+mapping table. Полная таблица соответствия (старый Task → поглощённый блок 9D →
+остаточный объём → будущая задача) — в
+[[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP#Соответствие старых Tasks 9E — 9K блокам 9D-1 … 9D-8 (решение 008-07-BO)|Implementation Plan]].
+Кратко: `9E → 9D-2 + 9D-4 + 9D-5`; `9F → 9D-3`; `9G → частично 9D-2 + 9D-3` (root cause
+и `ResponsibilityAssessment` — будущий контур); `9J → частично 9D-6` (фактическое
+выполнение контроля — в Inspection Core).
+
+**008-07-BP — роль ОТК.** Канон: `OTK_INSPECTOR = optional project role` (см. «Роли»).
+Отдельное внутреннее подразделение ОТК не обязательно; его наличие определяется
+конфигурацией проекта; workflow не требует фиктивного пользователя ОТК; при отсутствии
+внутреннего ОТК критические полномочия выполняет `CHIEF_WELDER` (`CHIEF_WELDER fallback =
+mandatory`); `WELDING_ENGINEER` не заменяет `CHIEF_WELDER`; представитель заказчика —
+внешний контур качества (`CustomerQualityDecision`), а не внутренний ОТК. Согласовано с
+ADR-017 (частичное замещение безусловной обязательности ОТК) и разделами архитектуры
+(§5.8/§5.9, матрица владельцев доменов).
+
+**008-07-BQ — статус ADR-017.** `ADR-017 = PARTIALLY_SUPERSEDED_BY_ADR-019` (см. статусный
+блок ADR-017). Каноническая декомпозиция: `Quality Decision → EngineeringEvaluation →
+DefectAcceptanceAssessment → FindingDisposition`; **`Quality Decision` более не является
+самостоятельной доменной сущностью** — допустимо только как обобщённое бизнес-понятие.
+Термин `Defect Severity` в текущем каноне заменён на `Confirmed Severity`. ADR-017
+сохраняется в истории и действует в непересекающейся части (общий принцип внутреннего и
+внешнего решения; связь с печатными формами; роли и внешние решения, не противоречащие
+ADR-019; положения вне модели finding/evaluation/defect/disposition).
+
+### Где зафиксировано
+
+```text
+docs/ARCHITECTURE.md (§5.9)
+docs/project/ARCHITECTURE_SESSIONS.md (Session 008-07)
+docs/project/DECISIONS.md (ADR-019)
+docs/project/PROJECT_SUMMARY.md (Quality Finding / Task 9D canon)
+docs/project/UBIQUITOUS_LANGUAGE.md (Раздел 11)
+docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Task 9D — 9D-1 … 9D-8)
 ```
 
 ---
