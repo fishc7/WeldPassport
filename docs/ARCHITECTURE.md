@@ -85,7 +85,7 @@ Backend делится на следующие модули:
 | `workforce` | **DEPRECATED** — legacy-таблицы `РАБОТНИКИ`, `СВАРЩИКИ` | переходный |
 | `admissions` | внутренние допуски, допуски заказчика (целевой; часть в `welding`) | ОГС |
 | `production` | задания, назначенные участники, подготовка, факт сварки | **СМР** |
-| `quality` | лаборатория НК — выполнение контроля и технический результат; ОГС/главный сварщик — техническая оценка, Defect и технологическое решение; внешний орган приёмки — официальный итог; в MVP ОГС регистрирует внешнее решение | **НК** + **ОГС** + **внешний орган приёмки** |
+| `quality` | лаборатория НК — выполнение контроля и технический результат; инженер ОГС — Engineering Evaluation и подготовка решения; `CHIEF_WELDER` или сотрудник с действующим `DecisionDelegation` — подтверждение Defect и итоговое техническое решение; внешний орган приёмки — официальный итог; в MVP ОГС регистрирует внешнее решение | **НК** + **ОГС** + **внешний орган приёмки** |
 | `mto` | поставки, партии, плавки, сертификаты, учёт материалов | **МТО** |
 | `documents` | комплект ИД, элементы, связи с фактами; файлы — вложения | **ПТО** |
 | `reporting` | реестры, сводки, выгрузки Excel/PDF | — |
@@ -477,7 +477,8 @@ HeatTreatmentOperation  → Joint
 (Inspection, Method Assignment, Method Execution, результаты, редакции,
 Laboratory Conclusion, внешняя лаборатория, аудит, API). Tasks **9D — 9G** —
 planned / not implemented; Task 9D должен быть перепланирован совместимо с ADR-019
-(техническая оценка и Defect ОГС, отдельная внешняя приёмка, evidence/файлы, журналы).
+(Engineering Evaluation инженера ОГС, подтверждение Defect и итоговое решение
+`CHIEF_WELDER`/делегата, отдельная внешняя приёмка, evidence/файлы, журналы).
 Отложена только детальная реализация импорта результатов НК — до Architecture
 Session 008.
 
@@ -565,8 +566,8 @@ Inspection  (DRAFT → REQUESTED → ASSIGNED → IN_PROGRESS → COMPLETED → 
   │           ├── InspectionCoverage       (зона частичного контроля)
   │           └── InspectionEvidence       (снимки, УЗК, фото ВИК, схемы)
   ├── LaboratoryConclusion (официальное заключение; DRAFT → PREPARED → LAB_APPROVED → ISSUED)
-  ├── InspectionDecision (решение ОГС: RESULT / INSPECTION)
-  └── Defect             (индикация → Engineering Evaluation → подтверждение ОГС)
+  ├── InspectionDecision (подготовка инженером ОГС; итог — CHIEF_WELDER/делегат)
+  └── Defect             (индикация → Engineering Evaluation → подтверждение CHIEF_WELDER/делегатом)
   ↓
 Joint.inspection_state (вычисляемо)
   ↓
@@ -578,13 +579,13 @@ Joint.inspection_state (вычисляемо)
 | Правило | Суть |
 | --- | --- |
 | Inspection | Заявка/мероприятие для одного `Joint` либо утверждённой `InspectionSample`; инициатор — ОГС |
-| Разделение результата и решения | Технический результат лаборатории (`MethodExecutionResultItem`) и технологическое решение ОГС (`InspectionDecision`) — **раздельны**; `LAB_CONFIRMED` подтверждает лабораторный результат и **не** является внешней приёмкой; `VERIFIED` в Task 9C не введён, его окончательный смысл определяется при совместимой реализации ADR-019 |
+| Разделение результата и решения | Технический результат лаборатории (`MethodExecutionResultItem`) и техническое решение (`InspectionDecision`) — **раздельны**; инженер ОГС готовит оценку и проект решения, итог утверждает `CHIEF_WELDER` или сотрудник с действующим `DecisionDelegation`; `LAB_CONFIRMED` подтверждает лабораторный результат и **не** является внешней приёмкой; `VERIFIED` в Task 9C не введён, его окончательный смысл определяется при совместимой реализации ADR-019 |
 | Назначение и выполнение | `InspectionMethodAssignment` → несколько `MethodExecution` (первичное, повтор, доп. зона, повторная попытка); назначение и выполнение — разные сущности |
 | Методы | `VT`/`RT`/`UT`/`PT`/`MT`; ВИК — в общем контуре `Inspection`; коды методов неизменяемы |
 | Требуемый ↔ назначенный | Требуемый контроль на `Joint` и назначенный в `InspectionMethodAssignment` разделены; отклонение — только с обоснованием ОГС; задним числом не пересчитывается |
 | Заключения и материалы | `LaboratoryConclusion` ссылается на конкретные редакции одного или нескольких подтверждённых `MethodExecution`; `InspectionEvidence` — первичные материалы |
-| Дефект | Лаборатория фиксирует индикацию; ОГС выполняет Engineering Evaluation, подтверждает/классифицирует Defect и принимает технологическое решение; полный ремонтный lifecycle — отдельный контур |
-| Лаборатория НК | `NdtLaboratoryProfile` через `project_companies` role `ndt_lab`; `Company` остаётся юрлицом |
+| Дефект | Лаборатория фиксирует индикацию; инженер ОГС выполняет Engineering Evaluation и готовит решение; Defect подтверждает/классифицирует и итоговое техническое решение принимает только `CHIEF_WELDER` или сотрудник с действующим `DecisionDelegation`; полный ремонтный lifecycle — отдельный контур |
+| Лаборатория НК | Существующая `projects.companies` через действующую связь `project_companies` с ролью `NDT_LAB` того же проекта; отдельный `NdtLaboratoryProfile` в Task 9B **не вводился** |
 | Состояние Joint | Вычисляемое `inspection_state` (`NOT_REQUIRED`/`PENDING`/`IN_PROGRESS`/`PASSED`/`FAILED`/`REPAIR_REQUIRED`/`REINSPECTION_REQUIRED`); `PASSED` — только после принятых результатов по всем обязательным методам |
 | Связь с ТО | Обязательный контроль после термообработки — явная связь `Inspection ↔ HeatTreatmentOperation` (ADR-014) |
 | Повторный контроль | Без ремонта — внутри того же `Inspection`; после ремонта/переварки — новый `Inspection` |
@@ -592,9 +593,10 @@ Joint.inspection_state (вычисляемо)
 | Файлы | Метаданные + checksum в PostgreSQL, файлы — в объектном хранилище; подписанные ссылки; rate limit → `429` + `Retry-After` |
 | Журнал | Представление из канонических сущностей (XLSX/PDF/CSV/JSON); снимки закрытых периодов неизменяемы |
 
-Роли: ОГС/`WELDING_ENGINEER` (`OGS_ENGINEER`) — создание, методы, техническая
-оценка и решения; лаборатория НК — выполнение, результаты, отчёты, материалы;
-`CHIEF_WELDER` — подтверждение Defect и технологическое решение; внешний орган —
+Роли: ОГС/`WELDING_ENGINEER` (`OGS_ENGINEER`) — создание, методы, Engineering
+Evaluation и подготовка решения; лаборатория НК — выполнение, результаты, отчёты,
+материалы; `CHIEF_WELDER` или сотрудник с действующим `DecisionDelegation` —
+подтверждение Defect и итоговое техническое решение; внешний орган —
 официальный итог приёмки, регистрируемый ОГС в MVP; СМР — готовность; ПТО —
 требования и получение отчётов/журналов. Права `OTK_INSPECTOR`, уже реализованные в
 Tasks 9A — 9C, остаются legacy-каноном до совместимой миграции по ADR-019.
@@ -684,8 +686,10 @@ Laboratory Result → Engineering Evaluation → Defect → Chief Welder Decisio
                                              ↘ External Acceptance Decision
 ```
 
-- Defect подтверждает ОГС после `EngineeringEvaluation`; лаборатория и внешний
-  орган не создают подтверждённый Defect автоматически.
+- Инженер ОГС выполняет `EngineeringEvaluation` и готовит решение; Defect
+  подтверждает только `CHIEF_WELDER` или сотрудник с действующим
+  `DecisionDelegation`. Лаборатория и внешний орган не создают подтверждённый
+  Defect автоматически.
 - `ChiefWelderDecision` и `ExternalAcceptanceDecision` — отдельные решения.
 - Repair согласуется внешним органом только тогда, когда этого требует
   версионируемое правило проекта или договор.
@@ -849,7 +853,8 @@ erDiagram
 | Инженерия, стык | `engineering.joints`, `engineering_documents` | Реализовано (Tasks 4–7, ADR-010/011) |
 | Сварочные операции | `production.weld_operations` | Спроектировано (ADR-012, Session 005); Tasks 8A — 8F |
 | Ремонт, термообработка | `production.repair_operations`, `heat_treatment_operations` | Спроектировано (ADR-009), не реализовано; локальный ремонт вне Task 8 |
-| Контроль, дефекты | `quality.inspections`, `quality.defects` | Спроектировано (ADR-009), не реализовано |
+| Контроль | `quality.inspections` | Реализовано (Task 9A, миграция `20260713_15_inspection_core`) |
+| Дефекты | `quality.defects` | Planned / not implemented; Task 9D должен быть перепланирован по ADR-019 |
 | Файлы | `documents.document_files` | Спроектировано (ADR-009), не реализовано |
 | Периодика КСС | `periodic_kss.*` | Проектирование (backlog) |
 | Исполнительная документация | PTO executive documents | Проектирование (backlog) |
@@ -1128,7 +1133,8 @@ frontend/
 | Факт выполнения, назначения | СМР | `production` — факт, участники |
 | Рабочая и исполнительная документация | ПТО | РД, комплект ИД (не технология) |
 | Выполнение контроля и технический результат | Лаборатория НК | `quality` — execution/result |
-| Техническая оценка, Defect и технологическое решение | ОГС / главный сварщик | `quality` — evaluation/decision |
+| Engineering Evaluation и подготовка решения | Инженер ОГС | `quality` — evaluation/draft decision |
+| Подтверждение Defect и итоговое техническое решение | `CHIEF_WELDER` или сотрудник с действующим `DecisionDelegation` | `quality` — final technical decision |
 | Официальный итог приёмки | Внешний орган приёмки; регистрация в MVP — ОГС | `quality` — external acceptance |
 | Поставки, партии, сертификаты | МТО | `mto.*` |
 | Стык (центральный объект, инженерная модель) | `engineering` | `joints`, `engineering_documents`, `lines`, материалы, ревизии |
