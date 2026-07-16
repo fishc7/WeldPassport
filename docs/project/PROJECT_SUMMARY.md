@@ -44,7 +44,7 @@ WeldPassport — внутренняя система для отдела гла�
 В системе принята производственная цепочка:
 
 ```text
-ОК → ОГС → СМР → ПТО → ОТК → Закрытие
+ОК → ОГС → СМР → ПТО → Контроль / внешняя приёмка → Закрытие
 ```
 
 Расшифровка:
@@ -53,7 +53,8 @@ WeldPassport — внутренняя система для отдела гла�
 - **ОГС** — профиль сварщика, допуски, WPS, PQR, технология сварки (`welding.*`);
 - **СМР** — фактическое выполнение и назначения на работу;
 - **ПТО** — исполнительная документация (**не** технологические решения по сварке);
-- **ОТК** — контроль качества;
+- **Контроль / внешняя приёмка** — лаборатория фиксирует результат, ОГС принимает
+  техническое решение, внешний орган выдаёт официальный итог;
 - **Закрытие** — полная история стыка.
 
 Границы доменов — [[docs/project/CONSTITUTION|Конституция §8]] · [[docs/project/ADR-006-domain-ownership-matrix|ADR-006: матрица владения]] ·
@@ -66,9 +67,10 @@ WeldPassport — внутренняя система для отдела гла�
 [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014: термическая обработка]] ·
 [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015: контроль качества и НК]] ·
 [[docs/project/DECISIONS#ADR-016. Quality Execution Model (Task 9C)|ADR-016: модель выполнения контроля (Task 9C)]] ·
-[[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017: решения по качеству, дефекты, ремонт и документы качества]].
+[[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017: решения по качеству, дефекты, ремонт и документы качества]] ·
+[[docs/project/DECISIONS#ADR-019. External Quality Acceptance and Welding Responsibility Canon|ADR-019: внешняя приёмка и ответственность за качество]].
 
-## Текущий статус архитектуры (2026-07-15)
+## Текущий статус архитектуры (2026-07-16)
 
 - **Architecture Session 003 завершена** — доменная модель Production/Joints MVP
   (ADR-008, решения 003-A — 003-AM).
@@ -87,6 +89,10 @@ WeldPassport — внутренняя система для отдела гла�
   «Печатные формы»** завершён (2026-07-16, **ADR-018** — Electronic Documents and
   Printed Forms Canon); детальная архитектура импорта результатов НК — отдельная
   будущая сессия.
+- **ADR-019 принят** — лабораторный результат, техническое решение ОГС и внешняя
+  приёмка разделены; конфликтующие ролевые положения ADR-015/017 частично
+  замещены. Код, миграции и API не создавались; реализация остаётся **planned /
+  not implemented**, а Tasks **9D — 9K** должны быть перепланированы.
 - **Инженерный контур реализован** (Tasks 1–7):
   `Project → Line → EngineeringDocument → DocumentRevision → Joint` (ADR-010/011).
 - **WeldOperation реализован** — Tasks **8A — 8E** (ADR-012, импорт — ADR-013).
@@ -100,9 +106,10 @@ WeldPassport — внутренняя система для отдела гла�
   и результатов; отдельный агрегат `LaboratoryConclusion` и его редакции; модель
   внешней лаборатории, `QualityExternalPerson` и `LaboratoryAccreditation`; Quality
   Audit и API. `LAB_CONFIRMED` подтверждает лабораторный результат/регистрацию
-  внешнего документа и не является решением ОТК; `VERIFIED` оставлен будущему этапу
-  проверки ОТК. Разбивку post-9C задаёт Session 008 / ADR-017 — Tasks **9D — 9K**
-  (planned / not implemented); импорт результатов НК в объём Session 008 не входит.
+  внешнего документа и не является внешней приёмкой; окончательный смысл
+  `VERIFIED` определяется при совместимой реализации ADR-019. Разбивка post-9C
+  должна быть обновлена по ADR-019; Tasks **9D — 9K** остаются planned / not
+  implemented. Импорт результатов НК в объём Session 008 не входит.
 
 План реализации: [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP|Engineering Joints MVP — Implementation Plan]].
 
@@ -226,7 +233,7 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 > этапы `ROOT`/`FILL`/`COVER`, блокировка при отсутствии допуска,
 > `replaces_operation_id`, ремонт как часть `WeldOperation`) **замещены ADR-012**.
 
-## Контроль качества и НК (ADR-015/016; Tasks 9A–9C: Execution Core; 9D–9K planned)
+## Контроль качества и НК (ADR-015/016/019; Tasks 9A–9C: Execution Core; 9D–9K planned)
 
 Канон зафиксирован в
 [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Architecture Session 007]]
@@ -237,14 +244,23 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 
 | Принцип | Суть |
 |---------|------|
-| Контур | `Joint → Inspection → назначение методов → выполнение → технические результаты → ОТК → решение ОГС → состояние Joint → журнал` |
+| Контур | `Joint → Inspection → назначение методов → выполнение → результат лаборатории → техническое решение ОГС → внешняя приёмка (если требуется) → состояние Joint → журнал` |
 | Inspection | Заявка/мероприятие для одного `Joint` либо утверждённой групповой выборки (`InspectionSample`) |
 | Разделение | Локальный технический результат лаборатории (`MethodExecutionResultItem`), официальное `LaboratoryConclusion` и решение ОГС (`InspectionDecision`) — **раздельно** |
 | Методы | `VT`/`RT`/`UT`/`PT`/`MT`/`LT`; выполнение — `MethodExecution`; лаборатория — `project.companies` через `project_companies` с ролью `NDT_LAB` |
 | Состояние Joint | Вычисляемое `inspection_state`; основной lifecycle `Joint` не переписывается |
 | Связь с ТО | Обязательный контроль после термообработки — связь `Inspection ↔ HeatTreatmentOperation` (ADR-014) |
-| После результата (Session 008) | `Inspection Result → Quality Finding → Engineering Evaluation → Defect → Quality Decision → Repair → Reinspection → Defect Closure`; Result ≠ Finding ≠ Defect; решения ОГС/ОТК раздельны, разногласия — главный сварщик; единая сущность `Quality Document` (ADR-017) |
-| Реализация | Tasks **9A — 9C — DONE** (ядро выполнения контроля и лабораторных заключений); Tasks **9D — 9K** (канон решений/дефектов/ремонта/документов, Session 008) — planned / not implemented |
+| После результата | `Inspection Result → Engineering Evaluation → Defect → Chief Welder Decision → Repair → Reinspection`; Result ≠ Defect; лаборатория и внешний орган не подтверждают Defect автоматически (ADR-019) |
+| Реализация | Tasks **9A — 9C — DONE** (ядро выполнения контроля и лабораторных заключений); ADR-019 принят как архитектурный канон, но его код и миграции отсутствуют; Tasks **9D — 9K** — planned / not implemented и требуют перепланирования |
+
+Лаборатория фиксирует результат; ОГС принимает техническое решение; внешний орган
+приёмки выдаёт официальный итог. В MVP решение регистрирует ОГС. Закрытие требует
+отсутствия `TechnicalHold` и, когда это установлено проектом, актуального внешнего
+итога `ГОДЕН`.
+
+Исторические ролевые положения ADR-015 и ADR-017 об ОТК сохранены в журнале
+решений, но в актуальном каноне частично замещены
+[[docs/project/DECISIONS#ADR-019. External Quality Acceptance and Welding Responsibility Canon|ADR-019]].
 
 > **Граница по импорту и печатным формам.** Импорт результатов контроля (XLSX, CSV,
 > PDF, API лаборатории) зафиксирован **только как интеграционное требование верхнего
