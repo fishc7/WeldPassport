@@ -83,16 +83,21 @@ WeldPassport — внутренняя система для отдела гла�
   решения 007-01 — 007-27); Tasks **9A — 9C реализованы**.
 - **Architecture Session 008 завершена** — канон решений по качеству, дефектов,
   ремонта и документов качества (ADR-017, блоки 008-01 — 008-05):
-  `Inspection Result → Quality Finding → Engineering Evaluation → Defect →
-  Quality Decision → Repair → Reinspection → Defect Closure`. Код не создавался;
-  реализация — Tasks **9D — 9K** (planned / not implemented). Блок **008-06
+  `Inspection Result → Quality Finding → Engineering Evaluation → подтверждение
+  Defect и Chief Welder Decision → Repair → Reinspection`; подтверждение Defect и
+  решение/hold могут оформляться совместно по результатам оценки, а не как
+  обязательная последовательность друг за другом. Код не создавался; актуальная
+  реализация — compatibility audit, затем Tasks **9D — 9M** (planned / not
+  implemented). Блок **008-06
   «Печатные формы»** завершён (2026-07-16, **ADR-018** — Electronic Documents and
   Printed Forms Canon); детальная архитектура импорта результатов НК — отдельная
   будущая сессия.
 - **ADR-019 принят** — лабораторный результат, техническое решение ОГС и внешняя
   приёмка разделены; конфликтующие ролевые положения ADR-015/017 частично
   замещены. Код, миграции и API не создавались; реализация остаётся **planned /
-  not implemented**, а Tasks **9D — 9K** должны быть перепланированы.
+  not implemented**; актуальная разбивка уже зафиксирована: compatibility audit,
+  затем Tasks **9D — 9M**, где **9L — External Acceptance**, **9M — Joint Quality
+  Closure Integration**.
 - **Инженерный контур реализован** (Tasks 1–7):
   `Project → Line → EngineeringDocument → DocumentRevision → Joint` (ADR-010/011).
 - **WeldOperation реализован** — Tasks **8A — 8E** (ADR-012, импорт — ADR-013).
@@ -107,9 +112,9 @@ WeldPassport — внутренняя система для отдела гла�
   внешней лаборатории, `QualityExternalPerson` и `LaboratoryAccreditation`; Quality
   Audit и API. `LAB_CONFIRMED` подтверждает лабораторный результат/регистрацию
   внешнего документа и не является внешней приёмкой; окончательный смысл
-  `VERIFIED` определяется при совместимой реализации ADR-019. Разбивка post-9C
-  должна быть обновлена по ADR-019; Tasks **9D — 9K** остаются planned / not
-  implemented. Импорт результатов НК в объём Session 008 не входит.
+  `VERIFIED` определяется в отдельном Post-9C compatibility audit. После него
+  актуальная разбивка post-9C — Tasks **9D — 9M** (planned / not implemented).
+  Импорт результатов НК в объём Session 008 не входит.
 
 План реализации: [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP|Engineering Joints MVP — Implementation Plan]].
 
@@ -233,7 +238,7 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 > этапы `ROOT`/`FILL`/`COVER`, блокировка при отсутствии допуска,
 > `replaces_operation_id`, ремонт как часть `WeldOperation`) **замещены ADR-012**.
 
-## Контроль качества и НК (ADR-015/016/019; Tasks 9A–9C: Execution Core; 9D–9K planned)
+## Контроль качества и НК (ADR-015/016/019; Tasks 9A–9C: Execution Core; 9D–9M planned)
 
 Канон зафиксирован в
 [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Architecture Session 007]]
@@ -250,8 +255,8 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 | Методы | `VT`/`RT`/`UT`/`PT`/`MT`/`LT`; выполнение — `MethodExecution`; лаборатория — `project.companies` через `project_companies` с ролью `NDT_LAB` |
 | Состояние Joint | Вычисляемое `inspection_state`; основной lifecycle `Joint` не переписывается |
 | Связь с ТО | Обязательный контроль после термообработки — связь `Inspection ↔ HeatTreatmentOperation` (ADR-014) |
-| После результата | `Inspection Result → Engineering Evaluation → Defect → Chief Welder Decision → Repair → Reinspection`; Result ≠ Defect; лаборатория и внешний орган не подтверждают Defect автоматически (ADR-019) |
-| Реализация | Tasks **9A — 9C — DONE** (ядро выполнения контроля и лабораторных заключений); ADR-019 принят как архитектурный канон, но его код и миграции отсутствуют; Tasks **9D — 9K** — planned / not implemented и требуют перепланирования |
+| После результата | `Inspection Result → Quality Finding → Engineering Evaluation → подтверждение Defect и Chief Welder Decision → Repair → Reinspection`; решение/hold может сопровождать подтверждение Defect; **Result ≠ Finding ≠ Defect**; лаборатория и внешний орган не подтверждают Defect автоматически (ADR-019) |
+| Реализация | Tasks **9A — 9C — DONE**; ADR-019 принят как архитектурный канон, но его код и миграции отсутствуют; далее отдельный compatibility audit, затем Tasks **9D — 9M** — planned / not implemented; **9L — External Acceptance**, **9M — Joint Quality Closure Integration** |
 
 Лаборатория фиксирует результат; ОГС принимает техническое решение; внешний орган
 приёмки выдаёт официальный итог. В MVP решение регистрирует ОГС. Закрытие требует

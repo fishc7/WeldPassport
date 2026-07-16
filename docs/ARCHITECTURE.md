@@ -475,8 +475,9 @@ HeatTreatmentOperation  → Joint
 **Статус:** канон принят; **реализованы Tasks 9A — 9C**. Task 9C завершает ядро
 выполнения назначенных методов контроля и регистрации лабораторных заключений
 (Inspection, Method Assignment, Method Execution, результаты, редакции,
-Laboratory Conclusion, внешняя лаборатория, аудит, API). Tasks **9D — 9G** —
-planned / not implemented; Task 9D должен быть перепланирован совместимо с ADR-019
+Laboratory Conclusion, внешняя лаборатория, аудит, API). Отдельный Post-9C
+compatibility audit и Tasks **9D — 9M** — planned / not implemented; audit
+обязателен перед Task 9D
 (Engineering Evaluation инженера ОГС, подтверждение Defect и итоговое решение
 `CHIEF_WELDER`/делегата, отдельная внешняя приёмка, evidence/файлы, журналы).
 Отложена только детальная реализация импорта результатов НК — до Architecture
@@ -619,7 +620,8 @@ API лаборатории) зафиксирован **только как ин�
 Канон: [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]] ·
 [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Architecture Session 008]].
 **Статус:** канон принят (блоки 008-01 — 008-05, ADR-017); **код, миграции и тесты не
-создавались**; реализация — Tasks **9D — 9K** (planned / not implemented). Блок
+создавались**; актуальная реализация — compatibility audit, затем Tasks **9D — 9M**
+(planned / not implemented). Блок
 **008-06 «Печатные формы»** завершён 2026-07-16 и зафиксирован в **ADR-018**
 (Electronic Documents and Printed Forms Canon). Ролевые положения ADR-017 частично
 замещены ADR-019; исторический текст решения не переписывается.
@@ -682,8 +684,8 @@ ADR-019 частично замещает ролевые положения ADR-
 исполнения Tasks 9A — 9C и принцип **Result ≠ Finding ≠ Defect**.
 
 ```text
-Laboratory Result → Engineering Evaluation → Defect → Chief Welder Decision
-                                             ↘ External Acceptance Decision
+Laboratory Result → Engineering Evaluation → подтверждение Defect и Chief Welder Decision
+                                                    ↘ External Acceptance Decision
 ```
 
 - Инженер ОГС выполняет `EngineeringEvaluation` и готовит решение; Defect
@@ -708,8 +710,9 @@ Laboratory Result → Engineering Evaluation → Defect → Chief Welder Decisio
 | Получен `НЕ ГОДЕН` | Закрытие всегда блокируется независимо от внутренней оценки |
 | Внешняя приёмка не требуется | Качество закрывает главный сварщик или делегат после контроля, устранения Defect и снятия блокировок |
 
-Следующий этап: **документационная фиксация ADR-019, затем перепланированный Task
-9D**. Код, миграции и API ADR-019 пока не реализуют.
+Следующий этап: отдельный **Post-9C compatibility audit**, затем Tasks **9D — 9M**;
+**9L — External Acceptance**, **9M — Joint Quality Closure Integration**. Код,
+миграции и API ADR-019 пока не реализуют.
 
 ## 6. Ключевые правила модели данных
 
@@ -854,7 +857,7 @@ erDiagram
 | Сварочные операции | `production.weld_operations` | Спроектировано (ADR-012, Session 005); Tasks 8A — 8F |
 | Ремонт, термообработка | `production.repair_operations`, `heat_treatment_operations` | Спроектировано (ADR-009), не реализовано; локальный ремонт вне Task 8 |
 | Контроль | `quality.inspections` | Реализовано (Task 9A, миграция `20260713_15_inspection_core`) |
-| Дефекты | `quality.defects` | Planned / not implemented; Task 9D должен быть перепланирован по ADR-019 |
+| Дефекты | `quality.defects` | Planned / not implemented; compatibility audit, затем Tasks 9D — 9M по ADR-019 |
 | Файлы | `documents.document_files` | Спроектировано (ADR-009), не реализовано |
 | Периодика КСС | `periodic_kss.*` | Проектирование (backlog) |
 | Исполнительная документация | PTO executive documents | Проектирование (backlog) |

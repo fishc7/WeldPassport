@@ -2365,7 +2365,9 @@ ADR-015
 Result → Quality Finding → Engineering Evaluation → Chief Welder Decision →
 Defect → Repair → Reinspection → External Acceptance Decision (если требуется) →
 Defect Closure`.
-Реализация — Tasks **9D — 9K** (planned / not implemented). Английские статусы
+Реализация — отдельный Post-9C compatibility audit, затем Tasks **9D — 9M**
+(planned / not implemented); **9L — External Acceptance**, **9M — Joint Quality
+Closure Integration**. Английские статусы
 сопровождаются русскими пояснениями. Термины [[#Defect|Defect]], [[#Repair|Repair]] и
 [[#Reinspection|Reinspection]] определены в своих статьях (обновлены под ADR-019) и
 здесь не дублируются.

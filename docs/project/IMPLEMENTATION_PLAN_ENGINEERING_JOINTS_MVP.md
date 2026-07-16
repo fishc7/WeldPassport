@@ -955,9 +955,13 @@ lifecycle `Joint`.
 Канон: Session 009 (решения 009-01 — 009-08) · ADR-019. Он частично замещает
 конфликтующие прогнозные положения ADR-015/ADR-017, не изменяя реализованную модель
 исполнения ADR-016 и канон печатных форм ADR-018. Контур будущей реализации:
-`Inspection Result → Quality Finding → Engineering Evaluation → Chief Welder Decision
-→ Defect → Cause and Responsibility → Repair → Reinspection → External Acceptance
+`Inspection Result → Quality Finding → Engineering Evaluation → подтверждение Defect
+и Chief Welder Decision → Cause and Responsibility → Repair → Reinspection → External Acceptance
 → Joint Quality Closure`.
+
+Подтверждение Defect и Chief Welder Decision / `TechnicalHold` могут оформляться
+согласованно по результатам Engineering Evaluation; канон не требует, чтобы любой
+Defect всегда хронологически предшествовал решению или наоборот.
 
 ### Post-9C compatibility audit — planned / not implemented
 
