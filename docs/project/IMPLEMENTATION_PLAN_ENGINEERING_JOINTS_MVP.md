@@ -954,13 +954,22 @@ Quality Decision → Repair → Reinspection → Defect Closure`.
 | **9J — Reinspection Integration** | повторный контроль, привязка к `Repair`, итог, автоматическое закрытие `Defect` |
 | **9K — Quality Documents and Registry** | `Quality Document`, версии, владение, подписи, комплектность, реестр, экспорт |
 
-**Не входит в Session 008 (открыто):** блок **008-06 «Печатные формы»** (шаблоны и
-макеты PDF, генераторы, реализация ЭП, публичный API проверки подлинности), а также
-**детальная архитектура импорта результатов НК** — отдельная будущая архитектурная
-сессия.
+**Блок 008-06 «Печатные формы»** завершён (2026-07-16) и зафиксирован в
+[[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018 — Electronic Documents and Printed Forms Canon]]
+(Electronic Documentation Layer: document lifecycle, versioning, snapshots, audit
+history, templates, official document issuance). Реализация документного слоя
+(генераторы, макеты PDF, ЭП, публичный API проверки подлинности) — отдельными
+задачами. **Детальная архитектура импорта результатов НК** остаётся открытой для
+отдельной будущей архитектурной сессии.
 
-**Статус реализации (2026-07-15):** Tasks **9D — 9K — planned / not implemented**;
-Session 008 фиксирует только архитектурный канон (ADR-017).
+**Зависимость Task 9D от ADR-018.** Task 9D (Quality Finding and Engineering
+Evaluation) зависит от **ADR-018**: инженерная оценка качества должна ссылаться на
+конкретные **редакции Official Document** (Document Revision), а не на изменяемые
+данные.
+
+**Статус реализации (2026-07-16):** Tasks **9D — 9K — planned / not implemented**;
+Session 008 фиксирует только архитектурный канон (ADR-017 — блоки 008-01 — 008-05;
+ADR-018 — блок 008-06).
 
 ---
 
@@ -1008,11 +1017,12 @@ Session 008 фиксирует только архитектурный кано�
 - [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] (принят — канон контроля/НК; Task 9C завершает ядро выполнения методов и лабораторных заключений)
 - [[docs/project/DECISIONS#ADR-016. Quality Execution Model (Task 9C)|ADR-016]] (принят — модель выполнения контроля, Task 9C)
 - [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Session 008]] · [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]] (принят — канон решений по качеству, дефектов, ремонта и документов; Tasks 9D — 9K planned / not implemented)
+- [[docs/project/ARCHITECTURE_SESSIONS#Блок 008-06 — Электронные документы и печатные формы (Electronic Documents and Printed Forms)|Session 008-06]] · [[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018]] (принят — канон электронных документов и печатных форм; Task 9D ссылается на редакции Official Document)
 - [[docs/ARCHITECTURE#5.3. Физическая модель БД и API Production/Joints MVP (Session 004)|ARCHITECTURE §5.3]]
 
 *Версия плана: 2026-07-15 (Tasks 8A–8F и 9A–9C реализованы и приняты; Task 9C
 завершает ядро выполнения назначенных методов контроля и регистрации лабораторных
 заключений. Session 008 / ADR-017 задаёт разбивку post-9C на Tasks 9D–9K —
-planned / not implemented; блок 008-06 «Печатные формы» открыт). Задач: 17
-реализованных (1–4, 5A, 5B, 6, 7, 8A–8F, 9A, 9B, 9C) + 8 запланированных (9D–9K).
+planned / not implemented; блок 008-06 «Печатные формы» завершён — ADR-018). Задач:
+17 реализованных (1–4, 5A, 5B, 6, 7, 8A–8F, 9A, 9B, 9C) + 8 запланированных (9D–9K).
 Ветка: feature/engineering-joints-mvp.*
