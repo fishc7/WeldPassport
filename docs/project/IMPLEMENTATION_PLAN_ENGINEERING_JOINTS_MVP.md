@@ -825,17 +825,20 @@ Inspection / NDTInspection, полноценный МТО, учёт бригад
 > На Session 007 **код, миграции и тесты не создавались**; детальное ТЗ Task 9A в
 > этом документе **не раскрывается**.
 
-Канон: Session 007 (решения 007-01 — 007-27) · ADR-015. Основной инициатор заявки на
-контроль — **ОГС**. Контур:
+**Исторический baseline:** Session 007 (решения 007-01 — 007-27) · ADR-015. Основной
+инициатор заявки на контроль — **ОГС**. Зафиксированный тогда контур:
 `Joint → Inspection → назначение методов → выполнение → технические результаты →
-проверка ОТК → решение ОГС → состояние Joint → журнал контроля`.
+проверка ОТК → решение ОГС → состояние Joint → журнал контроля`. Часть после
+технических результатов частично замещена Session 009 / ADR-019; актуальная будущая
+цепочка приведена в разделе [«Следующий этап — Решения по качеству, дефекты, ремонт,
+внешняя приёмка и документы (Session 009)»](#следующий-этап--решения-по-качеству-дефекты-ремонт-внешняя-приёмка-и-документы-session-009).
 
 | Task | Содержание |
 |------|-----------|
 | **9A — Inspection Core — DONE** | `Inspection`, нумерация (`<PROJECT_CODE>-INS-<SEQUENCE>`), связь с `Joint`, lifecycle, готовность `Joint`, permissions/scope, базовый `Joint.inspection_state` |
 | **9B — Method Assignment and Laboratory — DONE** | методы (`VT`/`RT`/`UT`/`PT`/`MT`/`LT`), `InspectionMethodAssignment`, лаборатория через `project_companies` (роль `NDT_LAB`), lifecycle назначения `ASSIGNED`/`CANCELLED`/`REPLACED`, проверки лаборатории (реализовано; ТЗ Task 9B сузило исходную формулировку — отдельный `NdtLaboratoryProfile`, сроки, приоритет и стоимость **не входят**) |
 | **9C — Method Execution and Results — DONE** | `MethodExecution`, локальные `MethodExecutionResultItem`, редакции выполнения и результатов, `LaboratoryConclusion` и его редакции, внешняя лаборатория/лица, Quality Audit и API; `LAB_CONFIRMED` не является решением ОТК, `VERIFIED` отложен |
-| **9D — 9K (Session 008)** | Предварительная разбивка 9D — 9G (Session 007: OGS Decisions / Coverage/Samples/Defect / Reports/Evidence / Journals) **замещена** более детальной последовательностью Tasks **9D — 9K** каноном [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Session 008]] / [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]] — см. раздел [«Следующий этап — Решения по качеству, дефекты, ремонт и документы (Session 008)»](#следующий-этап--решения-по-качеству-дефекты-ремонт-и-документы-session-008) |
+| **Post-9C (ADR-019)** | После отдельного compatibility audit будущая реализация разбита на Tasks **9D — 9M** по [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 009|Session 009]] / [[docs/project/DECISIONS#ADR-019. External Quality Acceptance and Welding Responsibility Canon|ADR-019]] — см. раздел [«Следующий этап — Решения по качеству, дефекты, ремонт, внешняя приёмка и документы (Session 009)»](#следующий-этап--решения-по-качеству-дефекты-ремонт-внешняя-приёмка-и-документы-session-009) |
 
 **Согласованность:** готовность и актуальность результатов опираются на актуальную
 завершённую `WeldOperation` (ADR-012); `reweld` → новый `Inspection`; обязательный
@@ -850,9 +853,14 @@ lifecycle `Joint`.
   `CONFORMING`/`NONCONFORMING`/`INCONCLUSIVE`/`NOT_EVALUATED`;
   `NOT_EVALUATED` означает, что оценка ещё не сформирована, а
   `CONTROL_NOT_PERFORMED` — что контроль не выполнен; это разные понятия;
-- прежняя схема `quality.defects` (ADR-009) — предварительный черновик; канон:
-  `индикация лаборатории → подтверждение и классификация ОТК → Defect → решение ОГС`;
-  полный ремонтный lifecycle — вне **Task 9E**;
+- прежняя схема `quality.defects` (ADR-009) — предварительный черновик. Цепочка
+  `индикация лаборатории → подтверждение и классификация ОТК → Defect → решение ОГС`
+  — исторический канон ADR-015, частично замещённый ADR-019. Актуальная будущая
+  цепочка: `Laboratory Result → Engineering Evaluation ОГС → подтверждение Defect
+  главным сварщиком или делегатом с действующим DecisionDelegation → отдельная
+  External Acceptance`, если она обязательна по правилу проекта. Решения ОГС и
+  `TechnicalHold` относятся к **Task 9E**, планирование и выполнение Repair — к
+  **Tasks 9H–9I**, Reinspection — к **Task 9J**;
 - роль: бизнес-наименование `WELDING_ENGINEER`, технический `role_code` —
   `OGS_ENGINEER`; новый `role_code` не вводится.
 
@@ -860,12 +868,12 @@ lifecycle `Joint`.
 `RepairOperation`, `Reweld`, полная аттестация дефектоскопистов, полный реестр
 оборудования НК, полная модель аккредитации лабораторий.
 
-> **Граница с Architecture Session 008.** Импорт результатов контроля (XLSX, CSV, PDF,
-> API лаборатории) в Session 007 зафиксирован **только как интеграционное требование
-> верхнего уровня**: импорт **не может автоматически принимать результат**. Детальная
+> **Историческая граница Session 007.** Импорт результатов контроля (XLSX, CSV, PDF,
+> API лаборатории) был зафиксирован **только как интеграционное требование верхнего
+> уровня**: импорт **не может автоматически принимать результат**. Детальная
 > архитектура импорта результатов НК (форматы, разбор протоколов, PDF-извлечение, API
-> лабораторий, staging/сопоставление/конфликты/провенанс, ручное подтверждение)
-> проектируется в будущей **Architecture Session 008** и в Tasks 9A — 9G **не входит**.
+> лабораторий, staging/сопоставление/конфликты/провенанс, ручное подтверждение) не
+> вошла ни в Tasks 9A — 9G, ни в Session 008 и остаётся отдельным будущим блоком.
 
 **Статус реализации (2026-07-13):**
 
@@ -911,8 +919,10 @@ lifecycle `Joint`.
   общесистемного права не получает; COMPANY-scope — только чтение); вычисляемая
   сводка готовности заявки (`has_method_assignments`, `active_method_assignment_count`,
   `assigned_method_codes`, `all_assignments_have_laboratory`, ограниченный
-  `ready_for_execution`) без изменения статуса `Inspection`. Решения ОГС/ОТК,
-  дефекты, файлы и журналы (Tasks 9D — 9G) пока не реализованы. Полная регрессия
+  `ready_for_execution`) без изменения статуса `Inspection`. На момент приёмки
+  Task 9B исторически планировавшиеся ADR-015 решения ОГС/ОТК, дефекты, файлы и
+  журналы (тогда Tasks 9D — 9G) ещё не были реализованы; актуальный post-9C scope
+  определяется Session 009 / ADR-019. Полная регрессия
   блока 9B — **854 passed**.
 - **Task 9C — Method Execution and Results — реализована и принята.** Task 9C
   завершает ядро выполнения назначенных методов контроля и регистрации
@@ -921,38 +931,66 @@ lifecycle `Joint`.
   истории, отдельный агрегат `LaboratoryConclusion` и его редакции, модель внешней
   лаборатории и `QualityExternalPerson`, снимок `LaboratoryAccreditation`,
   `quality_audit_events` и API. `LAB_CONFIRMED` подтверждает лабораторный результат
-  или регистрацию внешнего документа и не является решением ОТК; `VERIFIED`
-  зарезервирован для будущей проверки ОТК.
-- **Post-9C (Tasks 9D — 9K) — planned / not implemented.** Разбивка после Task 9C
-  задана каноном Session 008 (см. следующий раздел). Логика импорта результатов НК
+  или регистрацию внешнего документа и не является решением ОТК. В реализации
+  Task 9C `VERIFIED` был исторически зарезервирован для предполагавшейся проверки
+  ОТК; физический резерв сохраняется, а его судьба определяется отдельным Post-9C
+  compatibility audit по ADR-019.
+- **Post-9C compatibility audit и Tasks 9D — 9M — planned / not implemented.** Разбивка
+  будущей реализации задана каноном Session 009 / ADR-019 (см. следующий раздел).
+  Реализованные права `OTK_INSPECTOR` в Tasks 9A — 9C и резерв статуса `VERIFIED`
+  сохраняются как физические факты и корректируются совместимо отдельной задачей,
+  без переписывания истории и потери существующих назначений и аудита. Логика импорта результатов НК
   **отсутствует** и в объём Session 008 не входит.
 
 ---
 
-## Следующий этап — Решения по качеству, дефекты, ремонт и документы (Session 008)
+## Следующий этап — Решения по качеству, дефекты, ремонт, внешняя приёмка и документы (Session 009)
 
-> **Предусловие:** к Task 9D переходят **только после** принятия
-> [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Architecture Session 008]]
-> и [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]].
-> На Session 008 **код, миграции и тесты не создавались**; детальные ТЗ Tasks
-> 9D — 9K в этом документе **не раскрываются**.
+> **Предусловие:** к Task 9D переходят **только после** отдельного Post-9C
+> compatibility audit и с учётом [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 009|Architecture Session 009]]
+> / [[docs/project/DECISIONS#ADR-019. External Quality Acceptance and Welding Responsibility Canon|ADR-019]].
+> Session 009 и ADR-019 не изменяли код, миграции и тесты; детальные ТЗ будущих
+> Tasks 9D — 9M в этом документе **не раскрываются**.
 
-Канон: Session 008 (блоки 008-01 — 008-05) · ADR-017. Session 008 **замещает**
-предварительную (Session-007) разбивку Tasks 9D — 9G более детальной
-последовательностью **9D — 9K**. Контур:
-`Inspection Result → Quality Finding → Engineering Evaluation → Defect →
-Quality Decision → Repair → Reinspection → Defect Closure`.
+Канон: Session 009 (решения 009-01 — 009-08) · ADR-019. Он частично замещает
+конфликтующие прогнозные положения ADR-015/ADR-017, не изменяя реализованную модель
+исполнения ADR-016 и канон печатных форм ADR-018. Контур будущей реализации:
+`Inspection Result → Quality Finding → Engineering Evaluation → подтверждение Defect
+и Chief Welder Decision → Cause and Responsibility → Repair → Reinspection → External Acceptance
+→ Joint Quality Closure`.
+
+Подтверждение Defect и Chief Welder Decision / `TechnicalHold` могут оформляться
+согласованно по результатам Engineering Evaluation; канон не требует, чтобы любой
+Defect всегда хронологически предшествовал решению или наоборот.
+
+### Post-9C compatibility audit — planned / not implemented
+
+До Task 9D отдельный implementation scope должен:
+
+- составить карту всех реализованных прав `OTK_INSPECTOR` в Tasks 9A — 9C;
+- целево перенести активные полномочия на проектно уполномоченных сотрудников ОГС
+  и `DecisionDelegation`;
+- принять совместимое решение о судьбе зарезервированного статуса `VERIFIED`;
+- мигрировать роли без потери существующих назначений и аудита.
+
+Документационный этап схемы не меняет. Физические изменения compatibility audit
+выполняются позднее отдельным implementation plan до начала Task 9D.
 
 | Task | Содержание |
 |------|-----------|
 | **9D — Quality Finding and Engineering Evaluation** | `Quality Finding`, инженерная оценка Finding, разделение `Inspection Result ≠ Finding ≠ Defect` |
-| **9E — Quality Decision Workflow** | решения ОГС/ОТК, разрешение разногласий главным сварщиком, override/отмена итога, версии и обоснование |
-| **9F — Defect Core** | сущность `Defect`, жизненный цикл, подтверждение ОГС/ОТК, связь `Finding ↔ Defect` (многие-ко-многим) |
-| **9G — Defect Cause, Severity and Localization** | причина и коренная причина, критичность, локализация, корректирующие действия, повторяемость, причинная связь с `WeldOperation` |
-| **9H — Repair Core and Repair Planning** | `Repair`, план ремонта, версии, лимиты и зоны ремонтов |
-| **9I — Repair Execution and Verification** | выполнение, остановки/возобновление, отклонения, подтверждения ОГС/ОТК, заключение по ремонту |
-| **9J — Reinspection Integration** | повторный контроль, привязка к `Repair`, итог, автоматическое закрытие `Defect` |
+| **9E — Chief Welder Decision and Technical Hold** | решения ОГС, внутренние блокировки, версии решений и `DecisionDelegation` |
+| **9F — Defect Core** | `Defect` после технической оценки ОГС, lifecycle и связь `Finding ↔ Defect` |
+| **9G — Cause, Severity and Responsibility** | причины и коренная причина, критичность, локализация и отдельная `ResponsibilityAssessment` через фактическую `WeldOperation` |
+| **9H — Repair Planning and External Coordination** | план Repair, версии, лимиты и проектное правило предварительного внешнего согласования |
+| **9I — Repair Execution** | выполнение Repair, отклонения и техническая проверка ОГС |
+| **9J — Reinspection Integration** | повторный контроль, актуальность результатов и закрытие Defect по внутренним условиям |
 | **9K — Quality Documents and Registry** | `Quality Document`, версии, владение, подписи, комплектность, реестр, экспорт |
+| **9L — External Acceptance** | внешний орган, `ExternalInspectorSnapshot`, решения по методу/Joint, регистрация ОГС и внутренняя проверка |
+| **9M — Joint Quality Closure Integration** | проектные правила обязательности, readiness и совместная проверка `TechnicalHold` и актуального внешнего итога |
+
+Добавление Tasks 9L/9M — изменение roadmap, а не реализация. Печатные формы остаются
+отдельным открытым блоком в части, не покрытой Task 9K.
 
 **Блок 008-06 «Печатные формы»** завершён (2026-07-16) и зафиксирован в
 [[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018 — Electronic Documents and Printed Forms Canon]]
@@ -967,9 +1005,10 @@ Evaluation) зависит от **ADR-018**: инженерная оценка �
 конкретные **редакции Official Document** (Document Revision), а не на изменяемые
 данные.
 
-**Статус реализации (2026-07-16):** Tasks **9D — 9K — planned / not implemented**;
-Session 008 фиксирует только архитектурный канон (ADR-017 — блоки 008-01 — 008-05;
-ADR-018 — блок 008-06).
+**Статус реализации (2026-07-16):** Post-9C compatibility audit и Tasks
+**9D — 9M — planned / not implemented**. Session 009 / ADR-019 фиксирует только
+архитектурный канон; Tasks 9A — 9C остаются реализованными и принятыми, ADR-018
+остаётся каноном электронных документов и печатных форм.
 
 ---
 
@@ -1016,13 +1055,15 @@ ADR-018 — блок 008-06).
 - [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Session 007]] (контроль качества и НК)
 - [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015]] (принят — канон контроля/НК; Task 9C завершает ядро выполнения методов и лабораторных заключений)
 - [[docs/project/DECISIONS#ADR-016. Quality Execution Model (Task 9C)|ADR-016]] (принят — модель выполнения контроля, Task 9C)
-- [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Session 008]] · [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]] (принят — канон решений по качеству, дефектов, ремонта и документов; Tasks 9D — 9K planned / not implemented)
+- [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Session 008]] · [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]] (принят; конфликтующие прогнозные положения post-9C частично замещены ADR-019)
 - [[docs/project/ARCHITECTURE_SESSIONS#Блок 008-06 — Электронные документы и печатные формы (Electronic Documents and Printed Forms)|Session 008-06]] · [[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018]] (принят — канон электронных документов и печатных форм; Task 9D ссылается на редакции Official Document)
+- [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 009|Session 009]] · [[docs/project/DECISIONS#ADR-019. External Quality Acceptance and Welding Responsibility Canon|ADR-019]] (принят — канон ответственности за качество и внешней приёмки; compatibility audit и Tasks 9D — 9M planned / not implemented)
 - [[docs/ARCHITECTURE#5.3. Физическая модель БД и API Production/Joints MVP (Session 004)|ARCHITECTURE §5.3]]
 
-*Версия плана: 2026-07-15 (Tasks 8A–8F и 9A–9C реализованы и приняты; Task 9C
+*Версия плана: 2026-07-16 (Tasks 8A–8F и 9A–9C реализованы и приняты; Task 9C
 завершает ядро выполнения назначенных методов контроля и регистрации лабораторных
-заключений. Session 008 / ADR-017 задаёт разбивку post-9C на Tasks 9D–9K —
-planned / not implemented; блок 008-06 «Печатные формы» завершён — ADR-018). Задач:
-17 реализованных (1–4, 5A, 5B, 6, 7, 8A–8F, 9A, 9B, 9C) + 8 запланированных (9D–9K).
+заключений. Session 009 / ADR-019 задаёт compatibility audit и разбивку post-9C
+на Tasks 9D–9M — planned / not implemented; блок 008-06 «Печатные формы» завершён —
+ADR-018). Задач: 17 реализованных (1–4, 5A, 5B, 6, 7, 8A–8F, 9A, 9B, 9C) +
+1 compatibility audit + 10 запланированных (9D–9M).
 Ветка: feature/engineering-joints-mvp.*

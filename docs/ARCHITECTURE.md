@@ -85,7 +85,7 @@ Backend делится на следующие модули:
 | `workforce` | **DEPRECATED** — legacy-таблицы `РАБОТНИКИ`, `СВАРЩИКИ` | переходный |
 | `admissions` | внутренние допуски, допуски заказчика (целевой; часть в `welding`) | ОГС |
 | `production` | задания, назначенные участники, подготовка, факт сварки | **СМР** |
-| `quality` | приёмка, статус качества, дефекты, ремонты (ОТК); протоколы НК (НК) | **ОТК** + **НК** |
+| `quality` | лаборатория НК — выполнение контроля и технический результат; инженер ОГС — Engineering Evaluation и подготовка решения; `CHIEF_WELDER` или сотрудник с действующим `DecisionDelegation` — подтверждение Defect и итоговое техническое решение; внешний орган приёмки — официальный итог; в MVP ОГС регистрирует внешнее решение | **НК** + **ОГС** + **внешний орган приёмки** |
 | `mto` | поставки, партии, плавки, сертификаты, учёт материалов | **МТО** |
 | `documents` | комплект ИД, элементы, связи с фактами; файлы — вложения | **ПТО** |
 | `reporting` | реестры, сводки, выгрузки Excel/PDF | — |
@@ -227,7 +227,10 @@ Project
 | СМР / FOREMAN | СМР — производственный контур; факт сварки подтверждает роль FOREMAN (ADR-008, 003-A) |
 | Материалы | `Material` → `MaterialGroup`; связь с `WelderAdmission.allowed_material_groups` |
 
-Цепочка ответственности: **ОК → ОГС → СМР → ПТО → ОТК/НК → Закрытие**.
+Цепочка ответственности: **ОК → ОГС → СМР → ПТО → НК → ОГС → внешняя приёмка → Закрытие**.
+Техническая готовность ОГС и актуальный внешний итог — параллельные условия
+закрытия: необходимость внешней приёмки задаёт правило проекта, а действующий
+`TechnicalHold` блокирует закрытие независимо от итога внешней приёмки (ADR-019).
 
 ### 5.2. Каноническое lifecycle-ядро Joint (Session 003, продолжение)
 
@@ -472,8 +475,11 @@ HeatTreatmentOperation  → Joint
 **Статус:** канон принят; **реализованы Tasks 9A — 9C**. Task 9C завершает ядро
 выполнения назначенных методов контроля и регистрации лабораторных заключений
 (Inspection, Method Assignment, Method Execution, результаты, редакции,
-Laboratory Conclusion, внешняя лаборатория, аудит, API). Tasks **9D — 9G** —
-planned / not implemented (решения ОГС/ОТК, дефекты, evidence/файлы, журналы).
+Laboratory Conclusion, внешняя лаборатория, аудит, API). Отдельный Post-9C
+compatibility audit и Tasks **9D — 9M** — planned / not implemented; audit
+обязателен перед Task 9D
+(Engineering Evaluation инженера ОГС, подтверждение Defect и итоговое решение
+`CHIEF_WELDER`/делегата, отдельная внешняя приёмка, evidence/файлы, журналы).
 Отложена только детальная реализация импорта результатов НК — до Architecture
 Session 008.
 
@@ -492,8 +498,10 @@ Session 008.
 > `Inspection` (partial unique index `WHERE status = 'ASSIGNED'`). Дальнейшие слои
 > контроля — по Tasks 9C — 9G: Task 9C (ядро выполнения и лабораторных заключений)
 > реализован; Tasks **9D — 9G** planned / not implemented. Права записи назначения:
-> `OTK_INSPECTOR`,
-> `NDT_SPECIALIST`, `CHIEF_WELDER` (ОГС общесистемного права не получает).
+> `OTK_INSPECTOR`, `NDT_SPECIALIST`, `CHIEF_WELDER` (ОГС общесистемного права не
+> получает). Это **реализованный legacy-канон Tasks 9A — 9B**: `OTK_INSPECTOR`
+> выводится из активной внутренней цепочки качества и требует совместимой миграции
+> прав при реализации ADR-019, без резкого удаления существующей роли.
 
 > **Реализованная физическая модель (Task 9C).** Схема `quality` расширена
 > (миграции `20260714_17_method_executions`, `20260714_18_labconc_extras`):
@@ -528,8 +536,9 @@ Session 008.
 > `DRAFT → IN_PROGRESS → PERFORMED → RESULT_RECORDED → LAB_CONFIRMED`
 > (+ `CANCELLED`, исторический `SUPERSEDED`). `LAB_CONFIRMED` — подтверждение
 > лабораторного результата либо внутренняя регистрация внешнего документа; это **не**
-> решение ОТК. `VERIFIED` зарезервирован за будущей проверкой ОТК и в Task 9C **не
-> вводится**.
+> внешняя приёмка. `VERIFIED` в Task 9C **не вводится**; его окончательный смысл
+> определяется при совместимой реализации ADR-019 и не считается будущей внутренней
+> проверкой ОТК.
 >
 > Lifecycle `LaboratoryConclusion`:
 > `DRAFT → PREPARED → LAB_APPROVED → ISSUED` (+ `CANCELLED`, `SUPERSEDED`).
@@ -558,8 +567,8 @@ Inspection  (DRAFT → REQUESTED → ASSIGNED → IN_PROGRESS → COMPLETED → 
   │           ├── InspectionCoverage       (зона частичного контроля)
   │           └── InspectionEvidence       (снимки, УЗК, фото ВИК, схемы)
   ├── LaboratoryConclusion (официальное заключение; DRAFT → PREPARED → LAB_APPROVED → ISSUED)
-  ├── InspectionDecision (решение ОГС: RESULT / INSPECTION)
-  └── Defect             (индикация → подтверждение ОТК → решение ОГС)
+  ├── InspectionDecision (подготовка инженером ОГС; итог — CHIEF_WELDER/делегат)
+  └── Defect             (индикация → Engineering Evaluation → подтверждение CHIEF_WELDER/делегатом)
   ↓
 Joint.inspection_state (вычисляемо)
   ↓
@@ -571,13 +580,13 @@ Joint.inspection_state (вычисляемо)
 | Правило | Суть |
 | --- | --- |
 | Inspection | Заявка/мероприятие для одного `Joint` либо утверждённой `InspectionSample`; инициатор — ОГС |
-| Разделение результата и решения | Технический результат лаборатории (`MethodExecutionResultItem`) и технологическое решение ОГС (`InspectionDecision`) — **раздельны**; `LAB_CONFIRMED` подтверждает лабораторный результат и **не** является решением ОТК; будущая проверка ОТК зарезервирована как `VERIFIED` |
+| Разделение результата и решения | Технический результат лаборатории (`MethodExecutionResultItem`) и техническое решение (`InspectionDecision`) — **раздельны**; инженер ОГС готовит оценку и проект решения, итог утверждает `CHIEF_WELDER` или сотрудник с действующим `DecisionDelegation`; `LAB_CONFIRMED` подтверждает лабораторный результат и **не** является внешней приёмкой; `VERIFIED` в Task 9C не введён, его окончательный смысл определяется при совместимой реализации ADR-019 |
 | Назначение и выполнение | `InspectionMethodAssignment` → несколько `MethodExecution` (первичное, повтор, доп. зона, повторная попытка); назначение и выполнение — разные сущности |
 | Методы | `VT`/`RT`/`UT`/`PT`/`MT`; ВИК — в общем контуре `Inspection`; коды методов неизменяемы |
 | Требуемый ↔ назначенный | Требуемый контроль на `Joint` и назначенный в `InspectionMethodAssignment` разделены; отклонение — только с обоснованием ОГС; задним числом не пересчитывается |
 | Заключения и материалы | `LaboratoryConclusion` ссылается на конкретные редакции одного или нескольких подтверждённых `MethodExecution`; `InspectionEvidence` — первичные материалы |
-| Дефект | Лаборатория фиксирует индикацию; ОТК подтверждает/классифицирует; ОГС решает; полный ремонтный lifecycle — отдельный контур |
-| Лаборатория НК | `NdtLaboratoryProfile` через `project_companies` role `ndt_lab`; `Company` остаётся юрлицом |
+| Дефект | Лаборатория фиксирует индикацию; инженер ОГС выполняет Engineering Evaluation и готовит решение; Defect подтверждает/классифицирует и итоговое техническое решение принимает только `CHIEF_WELDER` или сотрудник с действующим `DecisionDelegation`; полный ремонтный lifecycle — отдельный контур |
+| Лаборатория НК | Существующая `projects.companies` через действующую связь `project_companies` с ролью `NDT_LAB` того же проекта; отдельный `NdtLaboratoryProfile` в Task 9B **не вводился** |
 | Состояние Joint | Вычисляемое `inspection_state` (`NOT_REQUIRED`/`PENDING`/`IN_PROGRESS`/`PASSED`/`FAILED`/`REPAIR_REQUIRED`/`REINSPECTION_REQUIRED`); `PASSED` — только после принятых результатов по всем обязательным методам |
 | Связь с ТО | Обязательный контроль после термообработки — явная связь `Inspection ↔ HeatTreatmentOperation` (ADR-014) |
 | Повторный контроль | Без ремонта — внутри того же `Inspection`; после ремонта/переварки — новый `Inspection` |
@@ -585,11 +594,13 @@ Joint.inspection_state (вычисляемо)
 | Файлы | Метаданные + checksum в PostgreSQL, файлы — в объектном хранилище; подписанные ссылки; rate limit → `429` + `Retry-After` |
 | Журнал | Представление из канонических сущностей (XLSX/PDF/CSV/JSON); снимки закрытых периодов неизменяемы |
 
-Роли (существующий канон, новых role_code нет): ОГС/`WELDING_ENGINEER`
-(`OGS_ENGINEER`) — создание, методы, лаборатория, решения; ОТК (`OTK_INSPECTOR`) —
-проверка результатов, подтверждение дефектов, контрольная часть; лаборатория НК —
-выполнение, результаты, отчёты, материалы; `CHIEF_WELDER` — критические исключения;
-СМР — готовность; ПТО — требования и получение отчётов/журналов.
+Роли: ОГС/`WELDING_ENGINEER` (`OGS_ENGINEER`) — создание, методы, Engineering
+Evaluation и подготовка решения; лаборатория НК — выполнение, результаты, отчёты,
+материалы; `CHIEF_WELDER` или сотрудник с действующим `DecisionDelegation` —
+подтверждение Defect и итоговое техническое решение; внешний орган —
+официальный итог приёмки, регистрируемый ОГС в MVP; СМР — готовность; ПТО —
+требования и получение отчётов/журналов. Права `OTK_INSPECTOR`, уже реализованные в
+Tasks 9A — 9C, остаются legacy-каноном до совместимой миграции по ADR-019.
 
 **Согласованность:** готовность и актуальность результатов опираются на актуальную
 завершённую `WeldOperation` (ADR-012); `reweld` порождает новый `Inspection`;
@@ -609,12 +620,19 @@ API лаборатории) зафиксирован **только как ин�
 Канон: [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]] ·
 [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Architecture Session 008]].
 **Статус:** канон принят (блоки 008-01 — 008-05, ADR-017); **код, миграции и тесты не
-создавались**; реализация — Tasks **9D — 9K** (planned / not implemented). Блок
+создавались**; актуальная реализация — compatibility audit, затем Tasks **9D — 9M**
+(planned / not implemented). Блок
 **008-06 «Печатные формы»** завершён 2026-07-16 и зафиксирован в **ADR-018**
-(Electronic Documents and Printed Forms Canon).
+(Electronic Documents and Printed Forms Canon). Ролевые положения ADR-017 частично
+замещены ADR-019; исторический текст решения не переписывается.
 
 Session 008 определяет **процесс после получения результата контроля** — надстройку
 над техническим слоем ADR-015/016:
+
+> Ниже сохранён структурный канон ADR-017. Формулировки о совместной оценке
+> ОГС/ОТК, подтверждении Defect ОТК, согласовании Repair ОТК и закрытии после
+> подтверждений ОТК **частично замещены ADR-019** и не являются активным ролевым
+> каноном.
 
 ```text
 Inspection Result → Quality Finding → Engineering Evaluation → Defect →
@@ -658,6 +676,43 @@ Printed Forms Canon); генераторы документов и конкре�
 публичный API проверки подлинности, frontend, backend, миграции, импорт документов и
 результатов НК, реализация уведомлений и фактическая реализация
 Defect/Repair/Reinspection остаются вне объёма.
+
+### 5.9. Внешняя приёмка и ответственность за качество (ADR-019)
+
+Канон: [[docs/project/DECISIONS#ADR-019. External Quality Acceptance and Welding Responsibility Canon|ADR-019]].
+ADR-019 частично замещает ролевые положения ADR-015 и ADR-017, сохраняя модель
+исполнения Tasks 9A — 9C и принцип **Result ≠ Finding ≠ Defect**.
+
+```text
+Laboratory Result → Engineering Evaluation → подтверждение Defect и Chief Welder Decision
+                                                    ↘ External Acceptance Decision
+```
+
+- Инженер ОГС выполняет `EngineeringEvaluation` и готовит решение; Defect
+  подтверждает только `CHIEF_WELDER` или сотрудник с действующим
+  `DecisionDelegation`. Лаборатория и внешний орган не создают подтверждённый
+  Defect автоматически.
+- `ChiefWelderDecision` и `ExternalAcceptanceDecision` — отдельные решения.
+- Repair согласуется внешним органом только тогда, когда этого требует
+  версионируемое правило проекта или договор.
+- Reinspection не закрывает Defect без внутреннего решения и, когда это требуется,
+  актуальной внешней приёмки.
+- `OTK_INSPECTOR` — реализованный legacy-канон Tasks 9A — 9C, требующий совместимой
+  миграции; внешний инспектор не является пользователем с этой ролью.
+
+Условия закрытия Joint:
+
+| Условие | Результат проверки закрытия |
+| --- | --- |
+| Внешняя приёмка обязательна по правилу проекта | Требуется актуальный итог `ГОДЕН` |
+| Действует `TechnicalHold` | Закрытие всегда блокируется |
+| Получен `ГОДЕН`, но действует `TechnicalHold` | Закрытие блокируется; `ГОДЕН` не снимает hold |
+| Получен `НЕ ГОДЕН` | Закрытие всегда блокируется независимо от внутренней оценки |
+| Внешняя приёмка не требуется | Качество закрывает главный сварщик или делегат после контроля, устранения Defect и снятия блокировок |
+
+Следующий этап: отдельный **Post-9C compatibility audit**, затем Tasks **9D — 9M**;
+**9L — External Acceptance**, **9M — Joint Quality Closure Integration**. Код,
+миграции и API ADR-019 пока не реализуют.
 
 ## 6. Ключевые правила модели данных
 
@@ -801,14 +856,16 @@ erDiagram
 | Инженерия, стык | `engineering.joints`, `engineering_documents` | Реализовано (Tasks 4–7, ADR-010/011) |
 | Сварочные операции | `production.weld_operations` | Спроектировано (ADR-012, Session 005); Tasks 8A — 8F |
 | Ремонт, термообработка | `production.repair_operations`, `heat_treatment_operations` | Спроектировано (ADR-009), не реализовано; локальный ремонт вне Task 8 |
-| Контроль, дефекты | `quality.inspections`, `quality.defects` | Спроектировано (ADR-009), не реализовано |
+| Контроль | `quality.inspections` | Реализовано (Task 9A, миграция `20260713_15_inspection_core`) |
+| Дефекты | `quality.defects` | Planned / not implemented; compatibility audit, затем Tasks 9D — 9M по ADR-019 |
 | Файлы | `documents.document_files` | Спроектировано (ADR-009), не реализовано |
 | Периодика КСС | `periodic_kss.*` | Проектирование (backlog) |
 | Исполнительная документация | PTO executive documents | Проектирование (backlog) |
 | Закрытие стыка | joint closure | Проектирование (backlog) |
 | Импорт Excel | — | Отложено (ADR-009, 004-26) |
 
-Производственная цепочка MVP: **ОК → ОГС → СМР → ПТО → ОТК/НК → Закрытие**.
+Производственная цепочка MVP: **ОК → ОГС → СМР → ПТО → НК → ОГС → внешняя приёмка → Закрытие**;
+техническое и внешнее условия закрытия проверяются независимо по ADR-019.
 
 ### Исключено из активного MVP (backlog / future modules)
 
@@ -1078,8 +1135,10 @@ frontend/
 | Технология сварки, WPS, PQR, допуски, клейма | ОГС | `welding.*`, WPS/PQR |
 | Факт выполнения, назначения | СМР | `production` — факт, участники |
 | Рабочая и исполнительная документация | ПТО | РД, комплект ИД (не технология) |
-| Статус качества, приёмка, дефекты | ОТК | `quality` — acceptance |
-| Протоколы и результаты НК | НК | `quality` — ndt |
+| Выполнение контроля и технический результат | Лаборатория НК | `quality` — execution/result |
+| Engineering Evaluation и подготовка решения | Инженер ОГС | `quality` — evaluation/draft decision |
+| Подтверждение Defect и итоговое техническое решение | `CHIEF_WELDER` или сотрудник с действующим `DecisionDelegation` | `quality` — final technical decision |
+| Официальный итог приёмки | Внешний орган приёмки; регистрация в MVP — ОГС | `quality` — external acceptance |
 | Поставки, партии, сертификаты | МТО | `mto.*` |
 | Стык (центральный объект, инженерная модель) | `engineering` | `joints`, `engineering_documents`, `lines`, материалы, ревизии |
 | События жизненного цикла стыка | `production`, `quality`, `documents` | WeldOperation, Inspection, NDTInspection, RepairOperation, ИД |
@@ -1192,6 +1251,7 @@ backend или оставить отдельным слоём до миграц�
 
 - [[docs/00_PROJECT_CONTEXT|Контекст проекта]] — назначение, жизненный цикл, 7 модулей
 - [[docs/project/DECISIONS|Журнал решений (ADR)]] — [[docs/project/DECISIONS#ADR-001. Модель организаций и проектов|ADR-001]] · [[docs/project/ADR-002-double-welder-accounting|ADR-002: двойной учёт сварщика]] · [[docs/project/DECISIONS#ADR-003. Исключение модуля нормирования из активного MVP|ADR-003: нормирование в backlog]] · [[docs/project/ADR-007-joint-lifecycle-and-engineering-model|ADR-007: жизненный цикл стыка]] · [[docs/project/DECISIONS#ADR-008. Каноническая модель предметной области WeldPassport (Session 003)|ADR-008: каноническая модель предметной области]] · [[docs/project/DECISIONS#ADR-009. Production/Joints MVP — физическая модель БД, события и API|ADR-009: физическая модель БД и API]] · [[docs/project/DECISIONS#ADR-010. Joint MVP — расширенная модель, двойное согласование, история ревизий и bulk-импорт|ADR-010: Joint MVP]] · [[docs/project/DECISIONS#ADR-011. Жизненный цикл Joint, согласования, блокировки и контроль областей|ADR-011: lifecycle Joint]] · [[docs/project/DECISIONS#ADR-012. WeldOperation как неизменяемый производственный факт сварки|ADR-012: WeldOperation]] · [[docs/project/DECISIONS#ADR-013. Импорт XLSX и разрешение конфликтов (Task 8E)|ADR-013: импорт XLSX]] · [[docs/project/DECISIONS#ADR-014. Heat Treatment Integration (Task 8F)|ADR-014: термическая обработка]] · [[docs/project/DECISIONS#ADR-015. Inspection and NDT Workflow Canon (Session 007)|ADR-015: контроль и НК]] · [[docs/project/DECISIONS#ADR-016. Quality Execution Model (Task 9C)|ADR-016: модель выполнения контроля]] · [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017: решения по качеству, дефекты, ремонт, документы]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 004|Session 004]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 005|Session 005]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 006|Session 006]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Session 007]] · [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008|Session 008]]
+- Дополнение к журналу ADR: [[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018: электронные документы и печатные формы]] · [[docs/project/DECISIONS#ADR-019. External Quality Acceptance and Welding Responsibility Canon|ADR-019: внешняя приёмка и ответственность за качество]]
 - [[03_База_данных/Модель_организаций_и_проектов|Модель организаций и проектов]] · [[03_База_данных/WeldPassport_Реестр_сущностей_БД_v0.1|Реестр сущностей БД]]
 - [[05_Роли_и_права/00_Ролевая_цепочка_ответственности|Ролевая цепочка ответственности]] · [[02_Процессы/WeldPassport_Процессы_v0.1|Процессы v0.1]]
 - [[10_Проектирование_WeldPassport/03_Работники_и_сварщики/01_Модель_данных_Работники_и_сварщики_v0.1|Модель данных: работники и сварщики]] · [[10_Проектирование_WeldPassport/03_Работники_и_сварщики/02_План_реализации_Работники_и_сварщики_v0.1|План реализации]]
