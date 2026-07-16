@@ -197,11 +197,21 @@ archived     — чат сохранён как история, активных
 
 ### 5. НК, ОТК и качество
 
-Статус: `new`
+Статус: `processed`
 
 Назначение:
 
 Обсуждение контроля качества, видов НК, результатов контроля, лабораторий, дефектов, ремонта и повторного контроля.
+
+Разобранное обсуждение: «ОТК и ответственность сварщика».
+
+Рабочий источник: ChatGPT conversation id `6a585886-7cf8-83eb-a774-40a677e3d546`.
+Переписка сохранена только для трассировки и не является каноническим источником.
+
+Результат разбора: подготовлена спецификация, принято решение ADR-019 и завершена
+Architecture Session 009. Зафиксировано ключевое изменение фактической модели:
+внутреннего ОТК подрядчика нет, технические решения принадлежат ОГС, а итог внешней
+приёмки регистрирует в системе уполномоченный сотрудник ОГС.
 
 Ключевые темы:
 
@@ -220,9 +230,14 @@ archived     — чат сохранён как история, активных
 
 Связанные файлы:
 
-- `docs/ARCHITECTURE.md`
-- `docs/project/ROADMAP.md`
-- будущий файл `docs/modules/ndt.md`
+- [[docs/superpowers/specs/2026-07-16-adr-019-external-quality-acceptance-responsibility-design|Спецификация модели ответственности за качество и внешней приёмки]]
+- [[docs/project/DECISIONS#ADR-019. External Quality Acceptance and Welding Responsibility Canon|ADR-019 — External Quality Acceptance and Welding Responsibility Canon]]
+- [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 009|Architecture Session 009 — ответственность за качество и внешняя приёмка]]
+- [[docs/ARCHITECTURE|Архитектура WeldPassport]]
+- [[docs/project/PROJECT_SUMMARY|Сводка проекта]]
+- [[docs/project/ROADMAP|Дорожная карта]]
+- [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP|План реализации Engineering / Joints MVP]]
+- [[docs/project/UBIQUITOUS_LANGUAGE|Ubiquitous Language]]
 
 ---
 
