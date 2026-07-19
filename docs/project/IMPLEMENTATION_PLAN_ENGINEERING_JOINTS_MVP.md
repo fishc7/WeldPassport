@@ -998,7 +998,7 @@ CustomerQualityDecision → Closure`. Утверждённая разбивка 
 | Подзадача | Содержание |
 |-----------|-----------|
 | **9D-1 — QualityFinding Core** | `QualityFinding`, `FindingLocation`, `FindingEvidence`, `FindingCorrection`, `FindingAssignment`, нумерация `<PROJECT_CODE>-QF-<SEQUENCE>`, register, acknowledge, базовый lifecycle |
-| **9D-2 — Engineering Evaluation** | `EngineeringEvaluation`, версии, approval, классификация, `confirmed_severity`, `impact_scope`, `RequirementReference`, document applicability |
+| **9D-2 — Engineering Evaluation** | `EngineeringEvaluation`, ревизии, approval, `evaluation_outcome` (что установлено) + `recommended_disposition` (необязывающая рекомендация ОГС), `confirmed_severity`, `impact_scope`, `RequirementReference`, document applicability. Углублённый канон ядра — [[docs/project/DECISIONS#ADR-021. EngineeringEvaluation Core Canon (Task 9D-2)\|ADR-021]] (ревизионность, источники, критерии, `EngineeringException`). Решение **9D-2-C01**: `decision_type` разделён на `evaluation_outcome` + `recommended_disposition`; официальное исполняемое решение по finding — только `FindingDisposition` (9D-4), рекомендация оценки статус finding не меняет |
 | **9D-3 — Defect Technical Model** | `Defect`, `DefectType`, `DefectMeasurement`, `DefectAcceptanceAssessment`, вычисляемый lifecycle, разделение `DefectLocation`/`RepairExcavationZone`/`RepairWeldZone` |
 | **9D-4 — Finding Disposition and Holds** | `FindingDisposition`, corrective action authorization, `ProductionHold`, `ProductionHoldRelease`, вычисление quality state `Joint` |
 | **9D-5 — Customer Quality Decision** | `CustomerQualityDecision`, внешний участник, внутренний регистратор, evidence, version history |
