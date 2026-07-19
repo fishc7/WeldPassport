@@ -161,6 +161,58 @@ SOURCE_ROLES: tuple[str, ...] = (
     "REJECTED_EVIDENCE",
 )
 
+# ── Literal-типы для Pydantic-схем (9D-2D). Значения синхронны кортежам выше ──────
+EvaluationOutcome = Literal[
+    "ACCEPTABLE",
+    "NONCONFORMING",
+    "CONDITIONALLY_ACCEPTABLE",
+    "INSUFFICIENT_DATA",
+    "NOT_APPLICABLE",
+]
+EvaluationClassification = Literal[
+    "CONFIRMED_DEFECT",
+    "NOT_CONFIRMED",
+    "TECHNOLOGICAL_DEVIATION",
+    "DOCUMENTATION_NONCONFORMITY",
+    "INSPECTION_PROCESS_NONCONFORMITY",
+    "MATERIAL_TRACEABILITY_NONCONFORMITY",
+    "PERSONNEL_QUALIFICATION_NONCONFORMITY",
+    "REQUIRES_ADDITIONAL_EVIDENCE",
+    "OUT_OF_SCOPE",
+]
+RecommendedDisposition = Literal[
+    "NONE",
+    "ACCEPT_AS_IS",
+    "REPAIR",
+    "REWORK",
+    "ADDITIONAL_INSPECTION",
+    "REJECT",
+]
+Severity = Literal["NOT_APPLICABLE", "MINOR", "MAJOR", "CRITICAL"]
+ImpactScope = Literal[
+    "NO_OPERATIONAL_IMPACT",
+    "DOCUMENT_HANDOVER_BLOCK",
+    "INSPECTION_ACCEPTANCE_BLOCK",
+    "FURTHER_PROCESSING_BLOCK",
+    "TECHNICAL_ACCEPTANCE_BLOCK",
+    "FULL_JOINT_BLOCK",
+]
+ConfidenceLevel = Literal["HIGH", "MEDIUM", "LOW"]
+CriterionResult = Literal[
+    "COMPLIES",
+    "DOES_NOT_COMPLY",
+    "CONDITIONALLY_COMPLIES",
+    "NOT_APPLICABLE",
+    "INSUFFICIENT_DATA",
+]
+SourceRole = Literal[
+    "PRIMARY_EVIDENCE",
+    "SUPPORTING_EVIDENCE",
+    "ACCEPTANCE_CRITERIA",
+    "CONTEXT",
+    "REJECTED_EVIDENCE",
+]
+
 # ── Типы событий журнала (append-only). 9D-2A эмитит CREATED/UPDATED ─────────────
 EVENT_EVALUATION_CREATED = "EVALUATION_CREATED"
 EVENT_EVALUATION_UPDATED = "EVALUATION_UPDATED"
@@ -187,9 +239,33 @@ EVALUATION_EVENT_TYPES: tuple[str, ...] = (
 # ── Роли (канонические role_code проекта; новых не вводим). Используются с 9D-2D ─
 # Подготовка (`prepare`) — WELDING_ENGINEER ↔ OGS_ENGINEER; фиксация/ввод в действие —
 # CHIEF_WELDER (ADR-021 §2.4). В 9D-2A RBAC не применяется.
+#
+# EVALUATION_PREPARE_ROLES покрывает весь контур WELDING_ENGINEER: создание оценки,
+# правку DRAFT (ревизия/источники/критерии/исключения), `prepare`, `reverify-sources`,
+# `create-revision`, `request-review-confirmation`. EVALUATION_FIX_ROLES — контур
+# CHIEF_WELDER: `return`, `fix`, `set-effective`, `confirm-review`. `withdraw` доступен
+# обеим ролям (Spec §5).
 EVALUATION_PREPARE_ROLES: frozenset[str] = frozenset({iw.ROLE_OGS_ENGINEER})
 EVALUATION_FIX_ROLES: frozenset[str] = frozenset({iw.ROLE_CHIEF_WELDER})
+EVALUATION_WITHDRAW_ROLES: frozenset[str] = frozenset(
+    {iw.ROLE_OGS_ENGINEER, iw.ROLE_CHIEF_WELDER}
+)
 EVALUATION_READ_ROLES: frozenset[str] = iw.INSPECTION_READ_ROLES
+
+# ── Группы статусов для команд lifecycle (9D-2D; service владеет переходами) ─────
+# Незакрытая (открытая) ревизия — новую DRAFT-ревизию создавать нельзя (Spec §5).
+EVALUATION_OPEN_STATUSES: frozenset[str] = frozenset(
+    {EVAL_DRAFT, EVAL_PREPARED, EVAL_PENDING_APPROVAL}
+)
+# Откуда допустима фиксация (`fix`). PENDING_APPROVAL — только контракт 9D-3: перехода
+# В него из 9D-2 нет, но фиксация ИЗ него разрешена (Spec §5, §14).
+EVALUATION_FIXABLE_FROM: frozenset[str] = frozenset(
+    {EVAL_PREPARED, EVAL_PENDING_APPROVAL}
+)
+# Откуда допустим отзыв (`withdraw`): не DRAFT (в DRAFT — удаление/правка) и не EFFECTIVE.
+EVALUATION_WITHDRAWABLE_FROM: frozenset[str] = frozenset(
+    {EVAL_PREPARED, EVAL_PENDING_APPROVAL, EVAL_FIXED}
+)
 
 # ── Машинные коды доменных ошибок (HTTP-семантика 9D-1: 403/404/409/422) ─────────
 EVAL_NOT_FOUND = "EVAL_NOT_FOUND"
@@ -228,6 +304,40 @@ EVAL_RESIDUAL_RISK_REQUIRED = "EVAL_RESIDUAL_RISK_REQUIRED"
 EVAL_CONDITIONS_REQUIRED = "EVAL_CONDITIONS_REQUIRED"
 EVAL_REVIEW_DUE_REQUIRED = "EVAL_REVIEW_DUE_REQUIRED"
 EVAL_CLASSIFICATION_OUTCOME_MISMATCH = "EVAL_CLASSIFICATION_OUTCOME_MISMATCH"
+# ── Lifecycle / RBAC / команды (Task 9D-2D) ─────────────────────────────────────
+EVAL_ROLE_DENIED = "EVAL_ROLE_DENIED"
+EVAL_INVALID_TRANSITION = "EVAL_INVALID_TRANSITION"
+EVAL_FINDING_STATE_INVALID = "EVAL_FINDING_STATE_INVALID"
+EVAL_SAME_ACTOR_PREPARE_FIX = "EVAL_SAME_ACTOR_PREPARE_FIX"
+EVAL_ALREADY_EFFECTIVE = "EVAL_ALREADY_EFFECTIVE"
+EVAL_REVIEW_NOT_REQUESTED = "EVAL_REVIEW_NOT_REQUESTED"
+EVAL_REVIEW_CONTENT_CHANGED = "EVAL_REVIEW_CONTENT_CHANGED"
+EVAL_SAME_ACTOR_REVIEW = "EVAL_SAME_ACTOR_REVIEW"
+
+# HTTP-семантика доменных кодов (9D-1: 403/404/409/422). Явно перечислены только
+# коды не-422; остальное (комплектность/матрица/источники/структура) → 422 по умолчанию.
+_ERROR_HTTP_STATUS: dict[str, int] = {
+    EVAL_ROLE_DENIED: 403,
+    EVAL_NOT_FOUND: 404,
+    EVAL_FINDING_NOT_FOUND: 404,
+    EVAL_SOURCE_NOT_FOUND: 404,
+    EVAL_CRITERION_NOT_FOUND: 404,
+    EVAL_EXCEPTION_NOT_FOUND: 404,
+    EVAL_VERSION_CONFLICT: 409,
+    EVAL_REVISION_NOT_DRAFT: 409,
+    EVAL_ALREADY_EXISTS: 409,
+    EVAL_INVALID_TRANSITION: 409,
+    EVAL_FINDING_STATE_INVALID: 409,
+    EVAL_SAME_ACTOR_PREPARE_FIX: 409,
+    EVAL_ALREADY_EFFECTIVE: 409,
+    EVAL_REVIEW_CONTENT_CHANGED: 409,
+    EVAL_SAME_ACTOR_REVIEW: 409,
+}
+
+
+def http_status_for(code: str) -> int:
+    """HTTP-статус доменного кода (422 по умолчанию — проверки/структура)."""
+    return _ERROR_HTTP_STATUS.get(code, 422)
 
 
 class EvaluationError(Exception):
