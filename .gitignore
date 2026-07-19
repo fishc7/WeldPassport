@@ -40,6 +40,7 @@ _Входящее/
 
 # Temporary artifacts
 tools/
+.superpowers/
 09_Разработка/scripts/_*.txt
 
 # Task 8E — локальное файловое хранилище импорта (dev/тесты, LocalFileStorage)
