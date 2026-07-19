@@ -6,6 +6,9 @@ from app.engineering.import_api import router as engineering_import_router
 from app.hr.api import router as hr_router
 from app.projects.api import router as projects_router
 from app.quality.api import router as quality_router
+from app.quality.engineering_evaluation_api import (
+    router as engineering_evaluation_router,
+)
 from app.quality.execution_api import router as quality_execution_router
 from app.quality.quality_finding_api import router as quality_finding_router
 from app.welding.api import router as ogs_router
@@ -27,3 +30,4 @@ app.include_router(engineering_import_router, prefix="/api/v1")
 app.include_router(quality_router, prefix="/api/v1")
 app.include_router(quality_execution_router, prefix="/api/v1")
 app.include_router(quality_finding_router, prefix="/api/v1")
+app.include_router(engineering_evaluation_router, prefix="/api/v1")

@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.quality import engineering_evaluation_hash as eeh
@@ -159,6 +159,60 @@ class EngineeringEvaluationRepository:
             )
         )
         return evaluation, revision
+
+    def create_next_revision(
+        self,
+        evaluation: EngineeringEvaluation,
+        *,
+        revision_reason: str,
+        previous_revision_id: UUID | None,
+        actor_worker_id: int,
+        actor_role: str | None = None,
+    ) -> EngineeringEvaluationRevision:
+        """Персистит следующую DRAFT-ревизию пересмотра (lifecycle решает сервис).
+
+        Номер `revision_no` монотонно растёт в пределах оценки (`MAX + 1`, гарантия —
+        `UNIQUE(evaluation_id, revision_no)`). `revision_reason` обязателен со второй
+        ревизии (CHECK). Указатель `current_revision_id` переводится на новую ревизию;
+        `effective_revision_id` не трогается (действующая остаётся до `set-effective`).
+        Событие `EVALUATION_CREATED` на уровне новой ревизии.
+        """
+        max_no = (
+            self.db.query(func.max(EngineeringEvaluationRevision.revision_no))
+            .filter(EngineeringEvaluationRevision.evaluation_id == evaluation.id)
+            .scalar()
+            or 0
+        )
+        revision = EngineeringEvaluationRevision(
+            evaluation_id=evaluation.id,
+            revision_no=max_no + 1,
+            previous_revision_id=previous_revision_id,
+            status=eew.EVAL_DRAFT,
+            revision_reason=revision_reason,
+            created_by_worker_id=actor_worker_id,
+            updated_by_worker_id=actor_worker_id,
+        )
+        self.db.add(revision)
+        self.db.flush()
+
+        evaluation.current_revision_id = revision.id
+        evaluation.updated_by_worker_id = actor_worker_id
+        evaluation.version += 1
+        self.db.flush()
+
+        self.add_event(
+            EngineeringEvaluationEvent(
+                evaluation_id=evaluation.id,
+                revision_id=revision.id,
+                event_type=eew.EVENT_EVALUATION_CREATED,
+                to_status=eew.EVAL_DRAFT,
+                actor_worker_id=actor_worker_id,
+                actor_role=actor_role,
+                revision_version=revision.version,
+                event_metadata={"revision_no": revision.revision_no},
+            )
+        )
+        return revision
 
     # ── Чтение ─────────────────────────────────────────────────────────────────
 
@@ -663,6 +717,17 @@ class EngineeringEvaluationRepository:
             sources=sources,
             source_issues=source_issues,
         )
+
+    def source_freshness_issues(
+        self, revision: EngineeringEvaluationRevision
+    ) -> list[eev.Violation]:
+        """Публичная read-only сверка свежести источников ревизии (для `fix`, §7.3).
+
+        Возвращает нарушения свежести/доступности неревизионных источников без записи
+        `verified_at`. Используется командой `fix-revision`, где содержание уже
+        неизменяемо, но источник мог устареть между `prepare` и `fix`.
+        """
+        return self._source_freshness_issues(self.list_sources(revision.id))
 
     def _source_freshness_issues(
         self, sources: list[EngineeringEvaluationSource]
