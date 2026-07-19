@@ -126,8 +126,9 @@ FindingOriginType = Literal[
 
 # ── Первичный риск (ADR-019, решение 3) ────────────────────────────────────────
 # initial_risk назначается ДО оценки (приоритет/SLA/эскалация). Подтверждённая
-# критичность (confirmed_severity) устанавливается только APPROVED
-# EngineeringEvaluation (блок 9D-2) и в ядро 9D-1 не входит.
+# критичность (confirmed_severity) устанавливается только EFFECTIVE
+# EngineeringEvaluationRevision (блок 9D-2, ADR-021 / решение 9D-2-C03; ранний forward
+# reference «APPROVED EngineeringEvaluation» устарел) и в ядро 9D-1 не входит.
 FINDING_INITIAL_RISKS: tuple[str, ...] = (
     "LOW",
     "MEDIUM",

@@ -2568,6 +2568,17 @@ Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 
 > блокам 9D-1 … 9D-8 — в
 > [[docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP#Соответствие старых Tasks 9E — 9K блокам 9D-1 … 9D-8 (решение 008-07-BO)|Implementation Plan]].
 
+> **Терминология действующей оценки (обновление 2026-07-19, ADR-021 / 9D-2-C03·C05).** В тексте
+> ADR-019 ниже встречается ранний термин «`APPROVED` EngineeringEvaluation». Он **сохранён как
+> архитектурный след**; действующая формулировка —
+> «`EFFECTIVE` `EngineeringEvaluationRevision`»
+> (см. [[docs/project/DECISIONS#ADR-021. EngineeringEvaluation Core Canon (Task 9D-2)|ADR-021]],
+> решения 9D-2-C03 и 9D-2-C05). Все упоминания «`APPROVED` (EngineeringEvaluation)» ниже читать
+> как действующую `EFFECTIVE`-ревизию оценки. Это **не** относится к собственному статусу
+> `APPROVED` сущности `FindingDisposition` (её lifecycle не меняется). Действующая lifecycle-модель
+> оценки — `DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED` (9D-2-C06); диаграмма
+> `… → PENDING_APPROVAL → APPROVED → SUPERSEDED` ниже сохранена как исторический след ADR-019.
+
 ### Контекст
 
 ADR-015/016 зафиксировали `Inspection Result` как технический факт, ADR-017 — контур
@@ -3101,6 +3112,79 @@ ADR-021 задаёт её внутреннее ядро под Task 9D-2)
 >
 > Каноническая формулировка — в §2.5 и §2.6.
 
+> **Решения 9D-2-C02 … C07 (2026-07-19).**
+>
+> **9D-2-C02 — классификация в ревизии.** `confirmed_severity`
+> (`NOT_APPLICABLE`/`MINOR`/`MAJOR`/`CRITICAL`) и `impact_scope`
+> (`NO_OPERATIONAL_IMPACT`/`DOCUMENT_HANDOVER_BLOCK`/`INSPECTION_ACCEPTANCE_BLOCK`/
+> `FURTHER_PROCESSING_BLOCK`/`TECHNICAL_ACCEPTANCE_BLOCK`/`FULL_JOINT_BLOCK`) хранятся в
+> `EngineeringEvaluationRevision` и относятся к конкретной ревизии; редактируются только в
+> `DRAFT`, после `PREPARED` неизменяемы. Новая ревизия может изменить классификацию. Поля
+> `QualityFinding` ими не переписываются; актуальные значения читаются только из
+> `EFFECTIVE`-ревизии. Перечни `confirmed_severity`/`impact_scope` — канон ADR-019
+> (решения 3 и 10); новые enum не вводятся.
+>
+> **9D-2-C03 — терминология действующей оценки.** Термин «`APPROVED` EngineeringEvaluation»
+> признан **устаревшим forward reference**. Каноническая замена — **`EFFECTIVE`
+> EngineeringEvaluationRevision**. Новый статус `APPROVED` не вводится: `FIXED` = «зафиксировано»,
+> `EFFECTIVE` = «действует». Устаревший комментарий/forward reference в коде 9D-1 исправляется
+> без изменения поведения.
+>
+> **9D-2-C04 — lifecycle finding не трогается.** Task 9D-2 **не меняет** `QualityFinding.status`.
+> После `EFFECTIVE`-оценки finding остаётся `UNDER_EVALUATION`. Переход
+> `UNDER_EVALUATION → DISPOSITION_PENDING` принадлежит `FindingDisposition` (Task 9D-4).
+> `recommended_disposition` не создаёт `FindingDisposition` автоматически.
+>
+> **9D-2-C05 — терминологическая консолидация.** Термин «`APPROVED` EngineeringEvaluation»
+> (ранний forward reference ADR-019) заменяется на **`EFFECTIVE` `EngineeringEvaluationRevision`**
+> во всех действующих нормативных формулировках (`ARCHITECTURE.md`, `ARCHITECTURE_SESSIONS.md`,
+> `UBIQUITOUS_LANGUAGE.md`). В ADR-019 ранний термин **сохраняется как архитектурный след** с
+> явной отсылкой к 9D-2-C03/C05 (текст ADR-019 не переписывается). Статус `APPROVED` у
+> `FindingDisposition` (её собственный lifecycle `… → APPROVED → IN_EXECUTION`) — **иное
+> понятие** и не затрагивается.
+>
+> **9D-2-C06 — консолидация lifecycle EngineeringEvaluation.** Живые lifecycle-диаграммы
+> `EngineeringEvaluationRevision` в `ARCHITECTURE.md` и `ARCHITECTURE_SESSIONS.md` приводятся к
+> модели ADR-021:
+>
+> ```text
+> DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED
+>       (при обязательном согласовании: FIXED → PENDING_APPROVAL → EFFECTIVE)
+>       (+ PREPARED → DRAFT возврат; PREPARED/FIXED/PENDING_APPROVAL → WITHDRAWN)
+> ```
+>
+> Статус `APPROVED` для `EngineeringEvaluation` **не используется**. Статус `APPROVED` у
+> `FindingDisposition` **не меняется**. ADR-019 остаётся историческим следом с редиректом на
+> ADR-021 / 9D-2-C03·C05·C06 (текст ADR-019 не переписывается).
+>
+> **9D-2-C07 — classification в ревизии.** Инженерная классификация `classification` хранится
+> в `EngineeringEvaluationRevision`, обязательна перед `PREPARED`, изменяема только в `DRAFT`,
+> актуальна только из `EFFECTIVE`-ревизии; поля `QualityFinding` не изменяются. Точный enum —
+> канон ADR-019 («Evaluation Classification»):
+>
+> ```text
+> CONFIRMED_DEFECT · NOT_CONFIRMED · TECHNOLOGICAL_DEVIATION · DOCUMENTATION_NONCONFORMITY ·
+> INSPECTION_PROCESS_NONCONFORMITY · MATERIAL_TRACEABILITY_NONCONFORMITY ·
+> PERSONNEL_QUALIFICATION_NONCONFORMITY · REQUIRES_ADDITIONAL_EVIDENCE · OUT_OF_SCOPE
+> ```
+>
+> Обязательная согласованность `classification → evaluation_outcome` (иные комбинации →
+> `EVAL_CLASSIFICATION_OUTCOME_MISMATCH`):
+>
+> ```text
+> CONFIRMED_DEFECT                       → NONCONFORMING | CONDITIONALLY_ACCEPTABLE
+> NOT_CONFIRMED                          → ACCEPTABLE
+> TECHNOLOGICAL_DEVIATION                → NONCONFORMING | CONDITIONALLY_ACCEPTABLE
+> DOCUMENTATION_NONCONFORMITY            → NONCONFORMING | CONDITIONALLY_ACCEPTABLE
+> INSPECTION_PROCESS_NONCONFORMITY       → NONCONFORMING | CONDITIONALLY_ACCEPTABLE
+> MATERIAL_TRACEABILITY_NONCONFORMITY    → NONCONFORMING | CONDITIONALLY_ACCEPTABLE
+> PERSONNEL_QUALIFICATION_NONCONFORMITY  → NONCONFORMING | CONDITIONALLY_ACCEPTABLE
+> REQUIRES_ADDITIONAL_EVIDENCE           → INSUFFICIENT_DATA
+> OUT_OF_SCOPE                           → NOT_APPLICABLE
+> ```
+>
+> `CONFIRMED_DEFECT` не порождает `Defect` в Task 9D-2 (автосоздание `Defect` — вне scope).
+
 ### 1. Контекст
 
 `QualityFinding` фиксирует инженерно значимое выявленное несоответствие, отклонение,
@@ -3127,7 +3211,8 @@ ADR-021 задаёт её внутреннее ядро под Task 9D-2)
 
 **2.3. Граница изменяемости.** Ревизия изменяема только в статусе `DRAFT`. После передачи
 на фиксацию неизменяемыми становятся: инженерный исход (`evaluation_outcome`) и
-рекомендованный маршрут (`recommended_disposition`); инженерное обоснование; источники;
+рекомендованный маршрут (`recommended_disposition`); инженерная классификация
+(`classification`, `confirmed_severity`, `impact_scope`); инженерное обоснование; источники;
 критерии; инженерные исключения; уровень уверенности; остаточный риск; условия применения;
 срок пересмотра; структурированные директивы (если входят в реализацию). Возврат на
 доработку до окончательной фиксации не создаёт новую ревизию: текущая рабочая ревизия
@@ -3336,11 +3421,21 @@ REVIEW_OVERDUE       REVIEW_CONFIRMED
     `recommended_disposition`; официальное исполняемое решение по finding — только
     отдельная `FindingDisposition` (9D-2-C01). `recommended_disposition` не меняет статус
     finding и не создаёт производственных действий.
+16. `classification`, `confirmed_severity` и `impact_scope` — часть ревизии (9D-2-C02/C07);
+    актуальные значения читаются только из `EFFECTIVE`-ревизии; поля `QualityFinding` ими не
+    переписываются. `classification` согласована с `evaluation_outcome` (9D-2-C07), иначе
+    `EVAL_CLASSIFICATION_OUTCOME_MISMATCH`.
+17. Действующая оценка — `EFFECTIVE` `EngineeringEvaluationRevision`; статус `APPROVED` не
+    вводится (9D-2-C03).
+18. Task 9D-2 не меняет `QualityFinding.status` (9D-2-C04): после `EFFECTIVE`-оценки finding
+    остаётся `UNDER_EVALUATION`; переход в `DISPOSITION_PENDING` — контур `FindingDisposition`
+    (Task 9D-4).
 
 ### 6. Граница Task 9D-2
 
 **Входит:** модели логической оценки и ревизий; lifecycle ревизии; поля исхода и рекомендации
-(`evaluation_outcome`, `recommended_disposition`); источники оценки; проверка ревизионных и неревизионных источников; критерии; `EngineeringException`;
+(`evaluation_outcome`, `recommended_disposition`); инженерная классификация ревизии
+(`classification`, `confirmed_severity`, `impact_scope` — 9D-2-C02/C07); источники оценки; проверка ревизионных и неревизионных источников; критерии; `EngineeringException`;
 уровень уверенности; остаточный риск; срок пересмотра; базовые события и аудит; RBAC; API;
 миграция; тесты; контрактные поля для будущего согласования и исполнения.
 
@@ -3348,7 +3443,10 @@ REVIEW_OVERDUE       REVIEW_CONFIRMED
 согласующих; `ApprovalCondition`; исполнение условий согласования; полный workflow
 `EvaluationDirective`; создание ремонта/переделки/доп. контроля; перенос исполнения между
 директивами; управление версиями политик; `PolicyImpactAssessment`; кампании массовой
-переоценки; автоматическое закрытие производственных workflow; файлы, печатные формы и импорт.
+переоценки; автоматическое закрытие производственных workflow; изменение
+`QualityFinding.status` (в т.ч. переход `UNDER_EVALUATION → DISPOSITION_PENDING` — Task 9D-4);
+вычисление состояния `Joint`/`ProductionHold` по `impact_scope` (Task 9D-4); файлы, печатные
+формы и импорт.
 
 ### 7. Последующие контуры
 

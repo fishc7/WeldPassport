@@ -698,12 +698,12 @@ CustomerQualityDecision → Closure
 | Правило | Суть |
 | --- | --- |
 | QualityFinding | Принадлежит одному `Joint`; UUID + номер `<PROJECT_CODE>-QF-<SEQUENCE>`; `origin_type`, `initial_risk`, неизменяемое исходное наблюдение; location/evidence/correction/assignment history; точные ссылки на источник контроля; `DRAFT` удаляем, `REGISTERED` → только `CANCELLED` с основанием |
-| Risk ≠ Severity | `initial_risk` (`LOW`/`MEDIUM`/`HIGH`/`CRITICAL`/`UNKNOWN`) — до оценки, для приоритета/SLA/эскалации; `confirmed_severity` (`NOT_APPLICABLE`/`MINOR`/`MAJOR`/`CRITICAL`) — только по `APPROVED` evaluation |
-| EngineeringEvaluation | Версионная сущность; готовит `WELDING_ENGINEER`, утверждает `CHIEF_WELDER`; `APPROVED` неизменяема, новая версия → предыдущая `SUPERSEDED`, одновременно одна `APPROVED`; классификации `CONFIRMED_DEFECT`/`NOT_CONFIRMED`/`TECHNOLOGICAL_DEVIATION`/…; определяет `impact_scope` |
+| Risk ≠ Severity | `initial_risk` (`LOW`/`MEDIUM`/`HIGH`/`CRITICAL`/`UNKNOWN`) — до оценки, для приоритета/SLA/эскалации; `confirmed_severity` (`NOT_APPLICABLE`/`MINOR`/`MAJOR`/`CRITICAL`) — только из действующей `EFFECTIVE` `EngineeringEvaluationRevision` |
+| EngineeringEvaluation | Ревизионная сущность; готовит `WELDING_ENGINEER`, фиксирует/вводит в действие `CHIEF_WELDER`; после фиксации содержание неизменяемо, одновременно действует одна `EFFECTIVE` `EngineeringEvaluationRevision`, новая ревизия → предыдущая `SUPERSEDED` (термин `APPROVED` заменён на `EFFECTIVE`, 9D-2-C03/C05); классификации `CONFIRMED_DEFECT`/`NOT_CONFIRMED`/`TECHNOLOGICAL_DEVIATION`/…; определяет `impact_scope` |
 | RequirementReference и applicability | Структурированная `RequirementReference` (документ, редакция, пункт, снимок текста, применимость); `Document Applicability` (`REFERENCE_ONLY`/`UNDER_REVIEW`/`APPLICABLE`/`APPLICABLE_WITH_LIMITATIONS`/`SUPERSEDED`/`NOT_APPLICABLE`) — обязательным основанием служат только `APPLICABLE`/`APPLICABLE_WITH_LIMITATIONS`; загруженный «для ознакомления» документ правил не активирует |
 | Defect | Отдельная подтверждённая запись после `CONFIRMED_DEFECT`; `DefectType` — управляемый справочник (не enum); вычисляемый lifecycle; `DefectMeasurement` от источника контроля (ОГС не переписывает измерения лаборатории); геометрия разделена: `DefectLocation` / `RepairExcavationZone` / `RepairWeldZone` |
 | DefectAcceptanceAssessment | Техническая приемлемость (`ACCEPTABLE`/`UNACCEPTABLE`/`CONDITIONALLY_ACCEPTABLE`/`INSUFFICIENT_DATA`/`NOT_APPLICABLE`) **≠** `FindingDisposition`; противоречивые комбинации блокируются |
-| FindingDisposition | «Что необходимо сделать»; создаётся только по `APPROVED` evaluation; типы `NO_ACTION_REQUIRED`/`ADDITIONAL_INSPECTION`/`DOCUMENT_CORRECTION`/`PROCESS_REVIEW`/`ACCEPT_AS_IS`/`REPAIR`/`REWELD`/`CUT_OUT_AND_REPLACE`/`REJECT_JOINT`/`RETURN_FOR_ADDITIONAL_EVALUATION`; критические утверждает `CHIEF_WELDER` |
+| FindingDisposition | «Что необходимо сделать»; создаётся только по действующей `EFFECTIVE` `EngineeringEvaluationRevision`; типы `NO_ACTION_REQUIRED`/`ADDITIONAL_INSPECTION`/`DOCUMENT_CORRECTION`/`PROCESS_REVIEW`/`ACCEPT_AS_IS`/`REPAIR`/`REWELD`/`CUT_OUT_AND_REPLACE`/`REJECT_JOINT`/`RETURN_FOR_ADDITIONAL_EVALUATION`; критические утверждает `CHIEF_WELDER` |
 | Corrective action | Отдельное действие `authorize_corrective_action_start` до старта repair/reweld/cut-out; для `REPAIR`/`REWELD`/`CUT_OUT_AND_REPLACE` предварительно — утверждённый `ReinspectionRequirement`; исполнение через `CorrectiveActionLink`, а не по текстовой отметке |
 | CustomerQualityDecision | Внешнее решение (внешний участник + внутренний регистратор + обязательное доказательство), не внутренняя оценка ОГС; версионно и неизменяемо |
 | Quality State Joint | Отдельно `technical_quality_state`/`documentation_state`/`customer_acceptance_state`/`handover_readiness`/`production_hold`; агрегация по активным finding (наиболее строгое); API возвращает блокирующие finding |
@@ -717,7 +717,7 @@ QualityFinding: DRAFT → REGISTERED → UNDER_EVALUATION → DISPOSITION_PENDIN
    → ACTION_REQUIRED → ACTION_IN_PROGRESS → REINSPECTION_PENDING → READY_FOR_CLOSURE → CLOSED
    (ветка: DISPOSITION_PENDING → CUSTOMER_DECISION_PENDING → READY_FOR_CLOSURE;
     + DRAFT → deleted; REGISTERED → CANCELLED)
-EngineeringEvaluation: DRAFT → PENDING_APPROVAL → APPROVED → SUPERSEDED (+ RETURNED → DRAFT; CANCELLED)
+EngineeringEvaluationRevision: DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED (согл.: FIXED → PENDING_APPROVAL → EFFECTIVE; + PREPARED → DRAFT возврат; PREPARED/FIXED/PENDING_APPROVAL → WITHDRAWN) — ADR-021/9D-2-C06
 FindingDisposition:   DRAFT → PENDING_APPROVAL → APPROVED → IN_EXECUTION → COMPLETED (+ RETURNED; SUPERSEDED)
 ProductionHold:       ACTIVE → CONFIRMED → PARTIALLY_RELEASED → RELEASED (+ SUPERSEDED; INVALIDATED)
 ```
