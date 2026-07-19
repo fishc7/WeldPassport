@@ -3112,7 +3112,7 @@ ADR-021 задаёт её внутреннее ядро под Task 9D-2)
 >
 > Каноническая формулировка — в §2.5 и §2.6.
 
-> **Решения 9D-2-C02 … C07 (2026-07-19).**
+> **Решения 9D-2-C02 … C10 (2026-07-19).**
 >
 > **9D-2-C02 — классификация в ревизии.** `confirmed_severity`
 > (`NOT_APPLICABLE`/`MINOR`/`MAJOR`/`CRITICAL`) и `impact_scope`
@@ -3184,6 +3184,28 @@ ADR-021 задаёт её внутреннее ядро под Task 9D-2)
 > ```
 >
 > `CONFIRMED_DEFECT` не порождает `Defect` в Task 9D-2 (автосоздание `Defect` — вне scope).
+>
+> **9D-2-C08 — единая структурная миграция.** В блоке **9D-2A** одна миграция создаёт **7**
+> канонических таблиц: `engineering_evaluations`, `engineering_evaluation_revisions`,
+> `engineering_evaluation_sources`, `engineering_evaluation_criteria`, `engineering_exceptions`,
+> `engineering_evaluation_events`, `engineering_evaluation_sequences`. Таблицы `sources`,
+> `criteria`, `exceptions` создаются **структурно**; их бизнес-поведение (сверка источников,
+> критерии, исключения, матрица) остаётся в **9D-2B/2C**. Плановых `ALTER TABLE` для уже
+> известных полей не используется.
+>
+> **9D-2-C09 — возврат.** `RETURNED_FOR_REVISION` **не является статусом**. Канонический набор
+> статусов ревизии — **семь**: `DRAFT`, `PREPARED`, `FIXED`, `PENDING_APPROVAL`, `EFFECTIVE`,
+> `SUPERSEDED`, `WITHDRAWN`. Возврат моделируется переходом `PREPARED → DRAFT`, оформляется
+> событием `EVALUATION_RETURNED`; **причина возврата обязательна**. Новая ревизия при возврате
+> не создаётся.
+>
+> **9D-2-C10 — полная структура Revision сразу.** `EngineeringEvaluationRevision` создаётся
+> **полной** уже в 9D-2A: `evaluation_outcome`, `classification`, `recommended_disposition`,
+> `confirmed_severity`, `impact_scope`, `rationale`, `confidence_level`, `confidence_note`,
+> `residual_risk`, `application_conditions`, `review_due_at`, `revision_reason`,
+> `supersedes_impact`, `required_approval_route`. Поля **nullable в `DRAFT`**; enum-CHECK
+> действует при значении `NOT NULL`; обязательность и матрица комплектности применяются на
+> `prepare` (позже). `rationale` **не** является безусловным DB `NOT NULL`.
 
 ### 1. Контекст
 
@@ -3381,7 +3403,8 @@ NOT_APPLICABLE            → оценка неприменима; маршру�
 DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED
 ```
 
-Дополнительные состояния: `RETURNED_FOR_REVISION`, `WITHDRAWN`, `PENDING_APPROVAL`. Точный
+Дополнительные состояния: `WITHDRAWN`, `PENDING_APPROVAL` (возврат `PREPARED → DRAFT` —
+событие `EVALUATION_RETURNED`, причина обязательна; `RETURNED_FOR_REVISION` не статус, 9D-2-C09). Точный
 набор статусов уточняется в Implementation Spec при сохранении инвариантов: редактируется
 только `DRAFT`; после `PREPARED` содержание неизменяемо; `WITHDRAWN` — конечный статус;
 `SUPERSEDED` — только после вступления новой ревизии в силу; одновременно `EFFECTIVE` — одна

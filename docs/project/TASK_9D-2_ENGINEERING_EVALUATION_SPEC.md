@@ -16,6 +16,17 @@
 > `FindingDisposition`. Единственный источник официального исполняемого решения по
 > finding — отдельная сущность `FindingDisposition` (Task 9D-4).
 
+### Решения консолидации 9D-2 (C01–C10)
+
+Применены решения ADR-021 9D-2-C01 … C10. Профильные для этого spec:
+
+- **C08** — единая структурная миграция 9D-2A: **7 таблиц** создаются сразу
+  (`sources`/`criteria`/`exceptions` — структурно, поведение в 9D-2B/2C); плановых `ALTER` нет.
+- **C09** — возврат: `RETURNED_FOR_REVISION` **не статус**; набор статусов — семь; возврат
+  `PREPARED → DRAFT` событием `EVALUATION_RETURNED` (причина обязательна).
+- **C10** — полная схема `Revision` сразу; поля nullable в `DRAFT`; enum-CHECK при `NOT NULL`;
+  обязательность на `prepare`; `rationale` не безусловный DB `NOT NULL`.
+
 ---
 
 ## 1. Границы Task 9D-2
@@ -98,7 +109,7 @@
 | `recommended_disposition` | text CHECK | **необязывающая рекомендация** (§4.2) |
 | `confirmed_severity` | text CHECK | подтверждённая критичность (§4.6, C02); обязателен на `prepare` |
 | `impact_scope` | text CHECK | влияние на дальнейший маршрут (§4.7, C02); обязателен на `prepare` |
-| `rationale` | text NOT NULL, trim>0 | обязательное инженерное обоснование |
+| `rationale` | text **NULL** | инженерное обоснование; в `DRAFT` nullable, непустой обязателен на `prepare` (C10) |
 | `confidence_level` | text null CHECK | `HIGH/MEDIUM/LOW`, обязателен по §7.4 |
 | `confidence_note` | text null | обязателен при `LOW` |
 | `residual_risk` | text null | обязателен по §7.5 |
@@ -106,6 +117,7 @@
 | `review_due_at` | timestamptz null | обязателен по §7.6 |
 | `revision_reason` | text null | причина пересмотра (обязательна при `revision_no > 1`) |
 | `supersedes_impact` | text null | влияние на ранее созданные/выполненные действия при пересмотре |
+| `required_approval_route` | text null | контрактное поле маршрута согласования ревизии (исполнение — 9D-3; C10) |
 | `prepared_by_worker_id` / `prepared_at` | | переход DRAFT→PREPARED (`WELDING_ENGINEER`) |
 | `fixed_by_worker_id` / `fixed_at` | | переход PREPARED/PENDING_APPROVAL→FIXED (`CHIEF_WELDER`) |
 | `withdrawn_by_worker_id` / `withdrawn_at` / `withdrawal_reason` | | конечный `WITHDRAWN` |
@@ -117,6 +129,16 @@ CHECK-инварианты уровня строки:
 - `status <> 'WITHDRAWN' OR (withdrawn_at IS NOT NULL AND withdrawn_by_worker_id IS NOT NULL AND length(trim(withdrawal_reason))>0)`;
 - `confidence_level IS NULL OR confidence_level IN (...)`;
 - `confidence_level <> 'LOW' OR length(trim(confidence_note))>0`.
+
+> **Nullable DRAFT / обязательность на prepare (C08/C10).** Все скалярные поля классификации,
+> исхода и judgement (`evaluation_outcome`, `classification`, `recommended_disposition`,
+> `confirmed_severity`, `impact_scope`, `rationale`, `confidence_level`, `confidence_note`,
+> `residual_risk`, `application_conditions`, `review_due_at`, `revision_reason`,
+> `supersedes_impact`, `required_approval_route`) создаются **сразу в 9D-2A** и **nullable в
+> `DRAFT`**. enum-CHECK применяется только при значении `NOT NULL`. Обязательность, согласованность
+> (§4.8, §8) и матрица комплектности проверяются на `prepare` (9D-2C), а не CHECK-ограничением БД.
+> `rationale` **не** является безусловным DB `NOT NULL`. Плановых `ALTER TABLE` для этих известных
+> полей нет (C08).
 
 Полная проверка комплектности (§8) — на сервисе, т.к. зависит от дочерних записей.
 
@@ -284,14 +306,17 @@ Task 9D-2 (автосоздание `Defect` — вне scope). Матрица �
 DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED
 ```
 
-Дополнительные: `RETURNED_FOR_REVISION`, `WITHDRAWN`, `PENDING_APPROVAL`.
+Дополнительные: `WITHDRAWN`, `PENDING_APPROVAL`. Возврат `PREPARED → DRAFT` — событием
+`EVALUATION_RETURNED` (причина обязательна); `RETURNED_FOR_REVISION` статусом **не** является (C09).
+Канонический набор статусов — семь: `DRAFT`, `PREPARED`, `FIXED`, `PENDING_APPROVAL`, `EFFECTIVE`,
+`SUPERSEDED`, `WITHDRAWN`.
 
 | Переход | Команда | Роль | Условия |
 |---|---|---|---|
 | — → DRAFT | `create-revision` | `WELDING_ENGINEER` | нет незакрытой (не-FIXED/EFFECTIVE) ревизии, кроме случая после WITHDRAWN |
 | DRAFT → DRAFT | `update-revision` | `WELDING_ENGINEER` | ревизия в DRAFT |
 | DRAFT → PREPARED | `prepare-revision` | `WELDING_ENGINEER` | проверка комплектности §8 + сверка источников §7.3 |
-| PREPARED → RETURNED_FOR_REVISION → DRAFT | `return-revision` | `CHIEF_WELDER` | возврат **не** создаёт новую ревизию (§6); та же ревизия в DRAFT, факт — событием |
+| PREPARED → DRAFT (возврат) | `return-revision` | `CHIEF_WELDER` | событие `EVALUATION_RETURNED`, **причина обязательна**; новая ревизия не создаётся (§6); `RETURNED_FOR_REVISION` не статус (C09) |
 | PREPARED → PENDING_APPROVAL | (контракт 9D-3) | — | если требуется внешнее согласование; в 9D-2 только статус+событие |
 | PREPARED/PENDING_APPROVAL → FIXED | `fix-revision` | `CHIEF_WELDER` | повторная сверка источников §7.3; подготовка и фиксация — **разными** акторами |
 | FIXED → EFFECTIVE | `set-effective` | `CHIEF_WELDER` | если согласование не требуется — сразу после фиксации; ретроактивно запрещено |
@@ -509,7 +534,11 @@ HTTP: 403 (`ROLE_DENIED`); 404 (`NOT_FOUND`); 409 (`VERSION_CONFLICT`,
 Одна Alembic-ревизия `engineering_evaluation_core`. **Номер/префикс ревизии заранее не
 фиксируется** — определяется во время реализации через `alembic heads`: должен быть ровно
 один текущий head, он и становится `down_revision`. Если heads несколько — сначала свести к
-одному, только потом создавать ревизию. Содержимое: 6 таблиц схемы `quality`, все
+одному, только потом создавать ревизию. Содержимое: **7 таблиц** схемы `quality`
+(`engineering_evaluations`, `engineering_evaluation_revisions`, `engineering_evaluation_sources`,
+`engineering_evaluation_criteria`, `engineering_exceptions`, `engineering_evaluation_events`,
+`engineering_evaluation_sequences`) — `sources`/`criteria`/`exceptions` создаются структурно,
+бизнес-поведение в 9D-2B/2C; плановых `ALTER TABLE` для уже известных полей нет (C08). Все
 CHECK/UNIQUE/индексы
 (`finding_id` unique; `(evaluation_id, revision_no)` unique; индексы по `project_id`,
 `finding_id`, `status`, `evaluation_id`, `created_at`). Downgrade — drop в обратном порядке
