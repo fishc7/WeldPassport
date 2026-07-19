@@ -46,6 +46,9 @@ from app.quality.models import (
     MethodExecutionStandard,
     QualityAuditEvent,
     QualityExternalPerson,
+    QualityFinding,
+    QualityFindingEvent,
+    QualityFindingSequence,
 )
 from app.shared.db import SessionLocal, get_db
 from app.welding.models import Welder, WelderAdmission
@@ -203,6 +206,24 @@ def _purge_test_data(db: Session) -> None:
     ]
     if not worker_ids:
         return
+
+    # QualityFinding (Task 9D-1) удаляем раньше всего: FK quality.quality_findings
+    # → inspections / method_executions / weld_operations / joints / projects c
+    # RESTRICT. Journal → findings c RESTRICT. Finding помечены created_by_worker_id
+    # тестовых workers; finding_sequences чистятся по project_id ниже.
+    finding_ids = [
+        row[0]
+        for row in db.query(QualityFinding.id)
+        .filter(QualityFinding.created_by_worker_id.in_(worker_ids))
+        .all()
+    ]
+    if finding_ids:
+        db.query(QualityFindingEvent).filter(
+            QualityFindingEvent.finding_id.in_(finding_ids)
+        ).delete(synchronize_session=False)
+        db.query(QualityFinding).filter(
+            QualityFinding.id.in_(finding_ids)
+        ).delete(synchronize_session=False)
 
     # Выполнение метода и заключения (Task 9C) удаляем раньше всего: их таблицы
     # ссылаются на назначения (RESTRICT), стыки/проекты/компании (RESTRICT) и
@@ -399,6 +420,9 @@ def _purge_test_data(db: Session) -> None:
         ).delete(synchronize_session=False)
         db.query(InspectionSequence).filter(
             InspectionSequence.project_id.in_(project_ids)
+        ).delete(synchronize_session=False)
+        db.query(QualityFindingSequence).filter(
+            QualityFindingSequence.project_id.in_(project_ids)
         ).delete(synchronize_session=False)
 
     # Инженерные документы/ревизии удаляем раньше линий и проектов:
