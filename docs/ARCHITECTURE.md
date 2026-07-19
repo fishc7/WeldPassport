@@ -672,8 +672,12 @@ Defect/Repair/Reinspection остаются вне объёма.
 
 Канон: [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019]] ·
 [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008-07 — Quality Finding and Engineering Evaluation|Architecture Session 008-07]].
-**Статус:** канон принят; **код, модели, миграции, API и тесты не создавались**;
-реализация **Task 9D не начата** (planned / not implemented).
+**Статус:** канон принят. Реализация Task 9D — **частичная (partially implemented)**:
+**Task 9D-1 QualityFinding Core реализован** (модель `QualityFinding` + счётчик номера
+`<PROJECT_CODE>-QF-<SEQUENCE>` + журнал, базовый lifecycle `DRAFT → REGISTERED →
+UNDER_EVALUATION` + отмена/удаление DRAFT, репозиторий, сервис-команды, схемы, API,
+RBAC, миграция, тесты). **`EngineeringEvaluation` и блоки 9D-2 … 9D-6 не реализованы**
+(planned / not implemented). Канон, lifecycle, роли и границы задач ниже не меняются.
 
 Session 008-07 углубляет участок `Quality Finding → Closure` канона Session 008
 (ADR-017) и разделяет ранее единое `Quality Decision` на **три** отдельных решения:

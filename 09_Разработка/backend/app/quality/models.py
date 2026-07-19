@@ -405,6 +405,15 @@ from app.quality.execution_models import (  # noqa: E402
     QualityExternalPerson,
 )
 
+# ── Task 9D-1: реэкспорт моделей ядра QualityFinding ────────────────────────────
+# Модели finding вынесены в отдельный модуль (quality_finding_models) из-за объёма,
+# но доступны через привычный неймспейс app.quality.models (conftest, Alembic, тесты).
+from app.quality.quality_finding_models import (  # noqa: E402
+    QualityFinding,
+    QualityFindingEvent,
+    QualityFindingSequence,
+)
+
 __all__ = [
     "QUALITY_SCHEMA",
     "Inspection",
@@ -420,4 +429,7 @@ __all__ = [
     "LaboratoryAccreditation",
     "QualityExternalPerson",
     "QualityAuditEvent",
+    "QualityFinding",
+    "QualityFindingSequence",
+    "QualityFindingEvent",
 ]

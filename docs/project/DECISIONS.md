@@ -2525,8 +2525,15 @@ docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Task 9D зависи
 
 Статус: **ACCEPTED — принято** — закрывает Architecture Session **008-07 «Quality
 Finding and Engineering Evaluation»** (углублённая проработка Task 9D). Канон
-утверждён; **код, модели, миграции, API и тесты на этой сессии не создавались**.
-Реализация Task 9D **не начата** (planned / not implemented).
+утверждён на сессии без создания кода/моделей/миграций/API/тестов.
+
+Статус реализации: **PARTIALLY IMPLEMENTED — реализовано частично.** Реализованный
+блок — **Task 9D-1 QualityFinding Core** (модель `QualityFinding`, нумерация
+`<PROJECT_CODE>-QF-<SEQUENCE>`, журнал, базовый lifecycle `DRAFT → REGISTERED →
+UNDER_EVALUATION` + отмена/удаление DRAFT, репозиторий, сервис, схемы, API, RBAC,
+миграция, тесты). Следующий блок — **Task 9D-2 EngineeringEvaluation**; блоки
+9D-2 … 9D-6 не реализованы. Правка статуса реализации не меняет архитектурный канон,
+lifecycle, роли, сущности и границы задач, зафиксированные ниже.
 
 Architecture Session: [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008-07 — Quality Finding and Engineering Evaluation|Session 008-07]]
 
