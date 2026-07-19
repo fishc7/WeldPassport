@@ -34,6 +34,34 @@
 В модуле 9D-2 не должно быть ни одного вызова, изменяющего сущности вне `EngineeringEvaluation*`.
 `FindingDisposition` читает `recommended_disposition` как вход — но это контур 9D-4, не эта задача.
 
+## Инварианты 9D-2-C02 … C07 (обязательны при реализации)
+
+- **C02 — классификация в ревизии.** `confirmed_severity` и `impact_scope` — поля
+  `EngineeringEvaluationRevision`, обязательны на `prepare`, редактируются только в `DRAFT`, после
+  `PREPARED` неизменяемы. Новая ревизия может изменить классификацию. Актуальные значения читаются
+  **только из `EFFECTIVE`-ревизии**; поля `QualityFinding` ими **не переписываются**. Enum — канон
+  ADR-019 (ниже), новые не вводить.
+- **C03 — терминология.** Действующая оценка — **`EFFECTIVE` `EngineeringEvaluationRevision`**;
+  статус `APPROVED` **не вводить** (`FIXED` = «зафиксировано», `EFFECTIVE` = «действует»).
+  **Обязательно** исправить устаревший forward reference в комментарии
+  `app/quality/quality_finding_workflow.py` (≈стр. 129): «APPROVED EngineeringEvaluation» →
+  «EFFECTIVE EngineeringEvaluationRevision». Это **правка комментария**, поведение 9D-1 не меняется.
+- **C04 — lifecycle finding.** Task 9D-2 **не меняет** `QualityFinding.status`. После
+  `EFFECTIVE`-оценки finding остаётся `UNDER_EVALUATION`. **Запрещено** переводить finding в
+  `DISPOSITION_PENDING` из 9D-2 — это контур `FindingDisposition` (Task 9D-4).
+  `recommended_disposition` не создаёт `FindingDisposition`; `impact_scope` не создаёт
+  `ProductionHold` и не вычисляет состояние `Joint` (тоже 9D-4).
+- **C06 — lifecycle оценки.** `EngineeringEvaluationRevision`:
+  `DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED` (при обязательном согласовании
+  `FIXED → PENDING_APPROVAL → EFFECTIVE`; возврат `PREPARED → DRAFT`; `WITHDRAWN` из
+  `PREPARED`/`FIXED`/`PENDING_APPROVAL`). Статус `APPROVED` для `EngineeringEvaluation` **не
+  вводить** (это термин ADR-019). Статус `APPROVED` у `FindingDisposition` не трогать.
+- **C07 — classification.** Поле `classification` в `EngineeringEvaluationRevision` (enum ниже),
+  обязательно на `prepare`, изменяемо только в `DRAFT`, актуально из `EFFECTIVE`-ревизии, поля
+  `QualityFinding` не меняет. **Обязательная согласованность `classification → evaluation_outcome`**
+  (матрица ниже), иначе `EVAL_CLASSIFICATION_OUTCOME_MISMATCH`. `CONFIRMED_DEFECT` **не** создаёт
+  `Defect` в 9D-2.
+
 ## Что создать
 
 Модуль `09_Разработка/backend/app/quality/`:
@@ -57,6 +85,26 @@ recommended_disposition:  NONE · ACCEPT_AS_IS · REPAIR · REWORK · ADDITIONAL
 criterion.comparison_result: COMPLIES · DOES_NOT_COMPLY · CONDITIONALLY_COMPLIES · NOT_APPLICABLE · INSUFFICIENT_DATA
 source_role:              PRIMARY_EVIDENCE · SUPPORTING_EVIDENCE · ACCEPTANCE_CRITERIA · CONTEXT · REJECTED_EVIDENCE
 confidence_level:         HIGH · MEDIUM · LOW
+confirmed_severity:       NOT_APPLICABLE · MINOR · MAJOR · CRITICAL                 (канон ADR-019, реш. 3)
+impact_scope:             NO_OPERATIONAL_IMPACT · DOCUMENT_HANDOVER_BLOCK · INSPECTION_ACCEPTANCE_BLOCK ·
+                          FURTHER_PROCESSING_BLOCK · TECHNICAL_ACCEPTANCE_BLOCK · FULL_JOINT_BLOCK   (канон ADR-019, реш. 10)
+classification:           CONFIRMED_DEFECT · NOT_CONFIRMED · TECHNOLOGICAL_DEVIATION · DOCUMENTATION_NONCONFORMITY ·
+                          INSPECTION_PROCESS_NONCONFORMITY · MATERIAL_TRACEABILITY_NONCONFORMITY ·
+                          PERSONNEL_QUALIFICATION_NONCONFORMITY · REQUIRES_ADDITIONAL_EVIDENCE · OUT_OF_SCOPE   (канон ADR-019 «Evaluation Classification»)
+```
+
+Матрица согласованности `classification → evaluation_outcome` (C07; иные → `EVAL_CLASSIFICATION_OUTCOME_MISMATCH`):
+
+```text
+CONFIRMED_DEFECT                       → NONCONFORMING | CONDITIONALLY_ACCEPTABLE
+NOT_CONFIRMED                          → ACCEPTABLE
+TECHNOLOGICAL_DEVIATION                → NONCONFORMING | CONDITIONALLY_ACCEPTABLE
+DOCUMENTATION_NONCONFORMITY            → NONCONFORMING | CONDITIONALLY_ACCEPTABLE
+INSPECTION_PROCESS_NONCONFORMITY       → NONCONFORMING | CONDITIONALLY_ACCEPTABLE
+MATERIAL_TRACEABILITY_NONCONFORMITY    → NONCONFORMING | CONDITIONALLY_ACCEPTABLE
+PERSONNEL_QUALIFICATION_NONCONFORMITY  → NONCONFORMING | CONDITIONALLY_ACCEPTABLE
+REQUIRES_ADDITIONAL_EVIDENCE           → INSUFFICIENT_DATA
+OUT_OF_SCOPE                           → NOT_APPLICABLE
 ```
 
 Запрещено: `decision_type`, `ACCEPTABLE_AS_IS`, `NON_CONFORMING`, `REJECTABLE`, `INDETERMINATE`.
@@ -132,11 +180,16 @@ confidence_level:         HIGH · MEDIUM · LOW
 
 1. Все 6 моделей, схемы, репозиторий, сервис, API, миграция, тесты созданы.
 2. `alembic upgrade head` проходит; таблицы 9D-1 не затронуты.
-3. `pytest backend/tests/test_engineering_evaluation_api.py` зелёный, включая тест-инвариант
-   9D-2-C01 (после `set-effective`: `QualityFinding.status` не изменён, объекты исполнения и
-   `FindingDisposition` не созданы).
-4. Линтер чист; канон ADR-021 и Spec не редактировались кодом.
-5. Коммит: `feat(quality): implement EngineeringEvaluation core (Task 9D-2)` — **только по явной
+3. `pytest backend/tests/test_engineering_evaluation_api.py` зелёный, включая тесты-инварианты
+   **C01/C04** (после `set-effective`: `QualityFinding.status` остаётся `UNDER_EVALUATION`, в
+   `DISPOSITION_PENDING` не переходит, объекты исполнения и `FindingDisposition` не созданы) и
+   **C02** (обязательность/согласованность/неизменяемость `confirmed_severity`, `impact_scope`;
+   чтение из `EFFECTIVE`-ревизии).
+4. **C03**: исправлен устаревший комментарий в `app/quality/quality_finding_workflow.py`
+   (APPROVED → EFFECTIVE EngineeringEvaluationRevision); это единственная допустимая правка
+   backend-кода 9D-1, поведение не меняется.
+5. Линтер чист; канон ADR-021 и Spec не редактировались кодом; существующие 1057 тестов не падают.
+6. Коммит: `feat(quality): implement EngineeringEvaluation core (Task 9D-2)` — **только по явной
    команде владельца**, отдельной веткой `feature/…`; push не выполнять без запроса.
 
 ## Зафиксированные решения (ранее открытые вопросы)

@@ -94,7 +94,10 @@
 | `previous_revision_id` | uuid null FK self | связь с предыдущей ревизией (инвариант 4/6) |
 | `status` | text CHECK | lifecycle §5 |
 | `evaluation_outcome` | text CHECK | **что установлено** (§4.1) |
+| `classification` | text CHECK | инженерная классификация (§4.8, C07); обязателен на `prepare`; согласован с `evaluation_outcome` |
 | `recommended_disposition` | text CHECK | **необязывающая рекомендация** (§4.2) |
+| `confirmed_severity` | text CHECK | подтверждённая критичность (§4.6, C02); обязателен на `prepare` |
+| `impact_scope` | text CHECK | влияние на дальнейший маршрут (§4.7, C02); обязателен на `prepare` |
 | `rationale` | text NOT NULL, trim>0 | обязательное инженерное обоснование |
 | `confidence_level` | text null CHECK | `HIGH/MEDIUM/LOW`, обязателен по §7.4 |
 | `confidence_note` | text null | обязателен при `LOW` |
@@ -226,6 +229,53 @@ PRIMARY_EVIDENCE · SUPPORTING_EVIDENCE · ACCEPTANCE_CRITERIA · CONTEXT · REJ
 HIGH · MEDIUM · LOW
 ```
 
+### 4.6. confirmed_severity — подтверждённая критичность (канон ADR-019, решение 3; C02)
+
+```text
+NOT_APPLICABLE · MINOR · MAJOR · CRITICAL
+```
+
+Отличается от `initial_risk` (`LOW`/`MEDIUM`/`HIGH`/`CRITICAL`/`UNKNOWN`) в `QualityFinding`:
+`initial_risk` назначается **до** оценки (приоритет/SLA), `confirmed_severity` — результат
+оценки, только в ревизии. Новые значения не вводятся.
+
+### 4.7. impact_scope — влияние оценки (канон ADR-019, решение 10; C02)
+
+```text
+NO_OPERATIONAL_IMPACT · DOCUMENT_HANDOVER_BLOCK · INSPECTION_ACCEPTANCE_BLOCK
+FURTHER_PROCESSING_BLOCK · TECHNICAL_ACCEPTANCE_BLOCK · FULL_JOINT_BLOCK
+```
+
+`impact_scope` — **данные** ревизии. Вычисление состояния `Joint`/`ProductionHold` по нему —
+контур Task 9D-4, **не** 9D-2.
+
+### 4.8. classification — инженерная классификация (канон ADR-019 «Evaluation Classification»; C07)
+
+```text
+CONFIRMED_DEFECT · NOT_CONFIRMED · TECHNOLOGICAL_DEVIATION · DOCUMENTATION_NONCONFORMITY
+INSPECTION_PROCESS_NONCONFORMITY · MATERIAL_TRACEABILITY_NONCONFORMITY
+PERSONNEL_QUALIFICATION_NONCONFORMITY · REQUIRES_ADDITIONAL_EVIDENCE · OUT_OF_SCOPE
+```
+
+Обязательная согласованность `classification → evaluation_outcome` (иные комбинации →
+`EVAL_CLASSIFICATION_OUTCOME_MISMATCH`):
+
+| `classification` | Допустимый `evaluation_outcome` |
+|---|---|
+| `CONFIRMED_DEFECT` | `NONCONFORMING` \| `CONDITIONALLY_ACCEPTABLE` |
+| `NOT_CONFIRMED` | `ACCEPTABLE` |
+| `TECHNOLOGICAL_DEVIATION` | `NONCONFORMING` \| `CONDITIONALLY_ACCEPTABLE` |
+| `DOCUMENTATION_NONCONFORMITY` | `NONCONFORMING` \| `CONDITIONALLY_ACCEPTABLE` |
+| `INSPECTION_PROCESS_NONCONFORMITY` | `NONCONFORMING` \| `CONDITIONALLY_ACCEPTABLE` |
+| `MATERIAL_TRACEABILITY_NONCONFORMITY` | `NONCONFORMING` \| `CONDITIONALLY_ACCEPTABLE` |
+| `PERSONNEL_QUALIFICATION_NONCONFORMITY` | `NONCONFORMING` \| `CONDITIONALLY_ACCEPTABLE` |
+| `REQUIRES_ADDITIONAL_EVIDENCE` | `INSUFFICIENT_DATA` |
+| `OUT_OF_SCOPE` | `NOT_APPLICABLE` |
+
+`classification` — новые значения не вводятся. `CONFIRMED_DEFECT` **не** порождает `Defect` в
+Task 9D-2 (автосоздание `Defect` — вне scope). Матрица согласуется с C02: `NOT_CONFIRMED`/
+`OUT_OF_SCOPE` → исход без дефекта → `confirmed_severity = NOT_APPLICABLE`.
+
 ---
 
 ## 5. Lifecycle ревизии
@@ -310,14 +360,22 @@ DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED
   подтверждение недопустимо, требуется **новая ревизия** (`EVAL_REVIEW_CONTENT_CHANGED`).
   Наступивший и не подтверждённый срок фиксируется событием `REVIEW_OVERDUE`, но оценку
   автоматически не отменяет.
+- **7.9. Классификация ревизии (C02/C07).** `classification` (§4.8), `confirmed_severity` (§4.6)
+  и `impact_scope` (§4.7) обязательны на `prepare`, редактируются только в `DRAFT`, после
+  `PREPARED` неизменяемы. Новая ревизия может изменить классификацию. **Актуальная классификация
+  finding — значения из `EFFECTIVE`-ревизии**; поля `QualityFinding` ими не переписываются.
+  `classification` обязана соответствовать `evaluation_outcome` по матрице §4.8 (иначе
+  `EVAL_CLASSIFICATION_OUTCOME_MISMATCH`). Согласованность severity/impact с исходом — §8.
 
 ---
 
 ## 8. Validation matrix (пересобрана под 9D-2-C01)
 
 Проверка выполняется на `prepare-revision`. Минимальная комплектность (всегда):
-структурированный `evaluation_outcome`; `recommended_disposition` (когда исход предполагает
-маршрут); `rationale`; ≥1 источник; ≥1 критерий; `applicability_comment` для каждого
+структурированный `evaluation_outcome`; `classification` (§4.8); `recommended_disposition` (когда
+исход предполагает маршрут); `confirmed_severity` (§4.6); `impact_scope` (§4.7); `rationale`;
+≥1 источник;
+≥1 критерий; `applicability_comment` для каждого
 `NOT_APPLICABLE`-критерия; доступность источников; актуальность
 ссылок/хэшей (§7.3); обязательные `applicability_note`; необходимые исключения; `confidence_level`
 (§7.4); `residual_risk` (§7.5); `application_conditions` (§7.5b); `review_due_at` (§7.6).
@@ -358,6 +416,18 @@ DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED
    `review_due_at = да`: `residual_risk` обязателен по §7.5, `review_due_at` — по §7.6, по
    фактическим условиям. Окончательный `REJECT` из-за отсутствия обязательных доказательств не
    требует `review_due_at`.
+9. **Согласованность классификации (C02).** `confirmed_severity` и `impact_scope` обязательны
+   (`EVAL_SEVERITY_REQUIRED` / `EVAL_IMPACT_SCOPE_REQUIRED`). При `evaluation_outcome ∈
+   {ACCEPTABLE, NOT_APPLICABLE}` — `confirmed_severity = NOT_APPLICABLE` и `impact_scope =
+   NO_OPERATIONAL_IMPACT`; при `NONCONFORMING` / `CONDITIONALLY_ACCEPTABLE` — `confirmed_severity
+   ∈ {MINOR, MAJOR, CRITICAL}`. При `INSUFFICIENT_DATA` жёсткого ограничения нет (обоснованное
+   значение, в т.ч. `NOT_APPLICABLE`). Нарушение → `EVAL_CLASSIFICATION_OUTCOME_MISMATCH`.
+10. **Согласованность classification (C07).** `classification` обязателен
+    (`EVAL_CLASSIFICATION_REQUIRED`) и соответствует `evaluation_outcome` по матрице §4.8; иначе
+    `EVAL_CLASSIFICATION_OUTCOME_MISMATCH`. В частности: `CONFIRMED_DEFECT` ⇒ `NONCONFORMING` /
+    `CONDITIONALLY_ACCEPTABLE`; `NOT_CONFIRMED` ⇒ `ACCEPTABLE`; `REQUIRES_ADDITIONAL_EVIDENCE` ⇒
+    `INSUFFICIENT_DATA`; `OUT_OF_SCOPE` ⇒ `NOT_APPLICABLE`. `CONFIRMED_DEFECT` не создаёт `Defect`
+    в 9D-2.
 
 > **Инвариант влияния (9D-2-C01).** Ни `prepare`, ни `fix`, ни `set-effective`, ни любое
 > значение `recommended_disposition` **не** меняют `QualityFinding.status`, **не** создают
@@ -365,6 +435,11 @@ DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED
 > `FindingDisposition`. Влияние на finding — только через контур `FindingDisposition` (9D-4),
 > который может читать `recommended_disposition` как вход. В 9D-2 запрещены любые вызовы,
 > изменяющие сущности вне контура `EngineeringEvaluation*`.
+
+> **Инвариант lifecycle finding (9D-2-C04).** После `EFFECTIVE`-оценки `QualityFinding` остаётся
+> в статусе `UNDER_EVALUATION`. Переход `UNDER_EVALUATION → DISPOSITION_PENDING` принадлежит
+> `FindingDisposition` (Task 9D-4) и в 9D-2 **не выполняется**. `impact_scope` — только данные
+> ревизии; вычисление состояния `Joint`/`ProductionHold` по нему — тоже Task 9D-4.
 
 ---
 
@@ -416,6 +491,8 @@ EVAL_REVISION_NOT_DRAFT · EVAL_INVALID_TRANSITION · EVAL_PREPARE_INCOMPLETE
 EVAL_OUTCOME_CRITERIA_MISMATCH · EVAL_ACCEPT_WITHOUT_EXCEPTION · EVAL_EXCEPTION_CRITERION_INVALID
 EVAL_DISPOSITION_NOT_ALLOWED · EVAL_CONFIDENCE_REQUIRED · EVAL_RESIDUAL_RISK_REQUIRED
 EVAL_CONDITIONS_REQUIRED · EVAL_APPLICABILITY_COMMENT_REQUIRED · EVAL_REVIEW_DUE_REQUIRED
+EVAL_SEVERITY_REQUIRED · EVAL_IMPACT_SCOPE_REQUIRED · EVAL_CLASSIFICATION_REQUIRED
+EVAL_CLASSIFICATION_OUTCOME_MISMATCH
 EVAL_SOURCE_STALE · EVAL_SOURCE_UNAVAILABLE
 EVAL_SOURCE_REVISION_REQUIRED · EVAL_SAME_ACTOR_PREPARE_FIX · EVAL_ALREADY_EFFECTIVE
 EVAL_REVIEW_CONTENT_CHANGED · EVAL_SAME_ACTOR_REVIEW
@@ -466,8 +543,20 @@ CHECK/UNIQUE/индексы
 - review-workflow (§7.8): `request-review-confirmation` (`WELDING_ENGINEER`) → `confirm-review`
   (`CHIEF_WELDER`); тот же актор для обоих → `EVAL_SAME_ACTOR_REVIEW`; подтверждение при
   изменившемся содержании → `EVAL_REVIEW_CONTENT_CHANGED`; `REVIEW_OVERDUE` не отменяет оценку;
-- **инвариант 9D-2-C01**: после `set-effective` `QualityFinding.status` не изменился, объекты
-  исполнения не созданы, `FindingDisposition` не появился;
+- **C02 (severity/impact)**: `confirmed_severity`/`impact_scope` обязательны на `prepare`
+  (`EVAL_SEVERITY_REQUIRED`/`EVAL_IMPACT_SCOPE_REQUIRED`); согласованность с исходом
+  (`ACCEPTABLE`→`NOT_APPLICABLE`+`NO_OPERATIONAL_IMPACT`; `NONCONFORMING`→`MINOR/MAJOR/CRITICAL`;
+  иначе `EVAL_CLASSIFICATION_OUTCOME_MISMATCH`); неизменяемость после `PREPARED`; новая ревизия
+  меняет классификацию; актуальные значения читаются из `EFFECTIVE`-ревизии, поля
+  `QualityFinding` не переписаны;
+- **C07 (classification)**: обязателен на `prepare` (`EVAL_CLASSIFICATION_REQUIRED`); матрица §4.8
+  валид/невалид по каждой строке — `CONFIRMED_DEFECT`+`ACCEPTABLE` → `EVAL_CLASSIFICATION_OUTCOME_MISMATCH`,
+  `NOT_CONFIRMED`+`NONCONFORMING` → mismatch, `REQUIRES_ADDITIONAL_EVIDENCE`+`INSUFFICIENT_DATA` → ok,
+  `OUT_OF_SCOPE`+`NOT_APPLICABLE` → ok; изменяемо только в `DRAFT`; читается из `EFFECTIVE`-ревизии;
+  `CONFIRMED_DEFECT` **не** создаёт `Defect`; `QualityFinding` не изменён;
+- **C04 (lifecycle finding)** = **инвариант 9D-2-C01**: после `set-effective` `QualityFinding.status`
+  остаётся `UNDER_EVALUATION`, в `DISPOSITION_PENDING` не переходит, объекты исполнения не созданы,
+  `FindingDisposition` не появился, `ProductionHold` по `impact_scope` не создан;
 - события: тип, `revision_id`, actor/role в журнале по каждой команде.
 
 ---

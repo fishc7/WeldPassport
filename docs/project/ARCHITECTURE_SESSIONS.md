@@ -2273,12 +2273,12 @@ backend; импорт результатов НК; `ResponsibilityAssessment`, `
 |---|---------|
 | 1 | `QualityFinding` — зарегистрированный факт для рассмотрения; **не** = Defect, **не** = негодность Joint, **не** = решение ОГС; исходное наблюдение неизменяемо; `DRAFT` удаляем, `REGISTERED` → `CANCELLED` только с основанием |
 | 2 | `origin_type` — канонический справочник происхождения (не заменяет инженерную классификацию) |
-| 3 | Разделены `initial_risk` (до оценки) и `confirmed_severity` (только по `APPROVED` evaluation) |
+| 3 | Разделены `initial_risk` (до оценки) и `confirmed_severity` (только из действующей `EFFECTIVE` `EngineeringEvaluationRevision`) |
 | 4 | `FindingLocation`: несколько зон — только при однородности, одном значении, одной оценке и одном disposition |
 | 5 | Многоуровневая source linkage; ссылка на точный `InspectionResultItem` предпочтительнее |
 | 6 | Управляемое автосоздание finding по версионируемому правилу с dedup key; положительный повторный контроль не закрывает finding автоматически |
-| 7 | `EngineeringEvaluation` — версионная сущность; готовит `WELDING_ENGINEER`, утверждает `CHIEF_WELDER`; `APPROVED` неизменяема; новая версия → предыдущая `SUPERSEDED`; классификации `CONFIRMED_DEFECT`/`NOT_CONFIRMED`/… |
-| 8 | `Defect` создаётся только после `APPROVED` evaluation с `CONFIRMED_DEFECT`; `DefectType` — управляемый справочник, не enum; lifecycle вычисляемый |
+| 7 | `EngineeringEvaluation` — ревизионная сущность; готовит `WELDING_ENGINEER`, фиксирует/вводит в действие `CHIEF_WELDER`; после фиксации неизменяема, действует одна `EFFECTIVE`-ревизия; новая ревизия → предыдущая `SUPERSEDED`; классификации `CONFIRMED_DEFECT`/`NOT_CONFIRMED`/… (термин `APPROVED` → `EFFECTIVE`, 9D-2-C03/C05) |
+| 8 | `Defect` создаётся только после действующей `EFFECTIVE` `EngineeringEvaluationRevision` с `CONFIRMED_DEFECT`; `DefectType` — управляемый справочник, не enum; lifecycle вычисляемый |
 | 9 | `DefectAcceptanceAssessment` (`ACCEPTABLE`/`UNACCEPTABLE`/`CONDITIONALLY_ACCEPTABLE`/`INSUFFICIENT_DATA`/`NOT_APPLICABLE`) ≠ `FindingDisposition`; противоречивые комбинации блокируются |
 | 10 | `FindingDisposition` («что сделать») отделён от evaluation («что установлено»); критические типы утверждает `CHIEF_WELDER` |
 | 11 | Отдельное действие `authorize_corrective_action_start` до начала repair/reweld/cut-out |
@@ -2298,9 +2298,10 @@ DRAFT → REGISTERED → UNDER_EVALUATION → DISPOSITION_PENDING → ACTION_REQ
       (ветка: DISPOSITION_PENDING → CUSTOMER_DECISION_PENDING → READY_FOR_CLOSURE)
       (+ DRAFT → deleted; REGISTERED → CANCELLED; CLOSED/CANCELLED конечны)
 
-EngineeringEvaluation:
-DRAFT → PENDING_APPROVAL → APPROVED → SUPERSEDED
-      (+ PENDING_APPROVAL → RETURNED → DRAFT; DRAFT/RETURNED → CANCELLED)
+EngineeringEvaluationRevision:
+DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED
+      (согласование: FIXED → PENDING_APPROVAL → EFFECTIVE)
+      (+ PREPARED → DRAFT возврат; PREPARED/FIXED/PENDING_APPROVAL → WITHDRAWN; ADR-021/9D-2-C06)
 
 FindingDisposition:
 DRAFT → PENDING_APPROVAL → APPROVED → IN_EXECUTION → COMPLETED

@@ -2936,7 +2936,10 @@ ADR-019
 `NOT_CONFIRMED`, `TECHNOLOGICAL_DEVIATION`, `DOCUMENTATION_NONCONFORMITY`,
 `INSPECTION_PROCESS_NONCONFORMITY`, `MATERIAL_TRACEABILITY_NONCONFORMITY`,
 `PERSONNEL_QUALIFICATION_NONCONFORMITY`, `REQUIRES_ADDITIONAL_EVIDENCE`, `OUT_OF_SCOPE`.
-Только `CONFIRMED_DEFECT` порождает [[#Defect|Defect]].
+Только `CONFIRMED_DEFECT` порождает [[#Defect|Defect]] (в Task 9D-2 `Defect` не создаётся).
+Хранится в `EngineeringEvaluationRevision`, обязательна перед `PREPARED`, актуальна из
+`EFFECTIVE`-ревизии; согласована с `evaluation_outcome` (ADR-021 / 9D-2-C07, иначе
+`EVAL_CLASSIFICATION_OUTCOME_MISMATCH`).
 
 ### Не является
 
@@ -3120,7 +3123,7 @@ ADR-019
 установлено?»). Типы: `NO_ACTION_REQUIRED`, `ADDITIONAL_INSPECTION`,
 `DOCUMENT_CORRECTION`, `PROCESS_REVIEW`, `ACCEPT_AS_IS`, `REPAIR`, `REWELD`,
 `CUT_OUT_AND_REPLACE`, `REJECT_JOINT`, `RETURN_FOR_ADDITIONAL_EVALUATION`. Создаётся
-только по актуальной `APPROVED` evaluation. Критические типы утверждает `CHIEF_WELDER`;
+только по действующей `EFFECTIVE` `EngineeringEvaluationRevision`. Критические типы утверждает `CHIEF_WELDER`;
 `ACCEPT_AS_IS` требует внутреннего обоснования ОГС и, при необходимости, внешнего
 решения ([[#Customer Quality Decision|Customer Quality Decision]]). Lifecycle:
 `DRAFT → PENDING_APPROVAL → APPROVED → IN_EXECUTION → COMPLETED` (+ `RETURNED`,
@@ -3271,7 +3274,7 @@ ADR-019
 ### Определение
 
 Вычисляемая системой готовность [[#Quality Finding|Quality Finding]] к закрытию
-(`READY_FOR_CLOSURE`): актуальная `APPROVED` evaluation; допустимый актуальный
+(`READY_FOR_CLOSURE`): действующая `EFFECTIVE` `EngineeringEvaluationRevision`; допустимый актуальный
 disposition; завершённые обязательные действия; выполненные
 [[#Reinspection Requirement|Reinspection Requirement]]; зарегистрированное обязательное
 внешнее решение; снятые/допустимо заменённые [[#Production Hold|Production Hold]];
