@@ -34,7 +34,7 @@
 В модуле 9D-2 не должно быть ни одного вызова, изменяющего сущности вне `EngineeringEvaluation*`.
 `FindingDisposition` читает `recommended_disposition` как вход — но это контур 9D-4, не эта задача.
 
-## Инварианты 9D-2-C02 … C07 (обязательны при реализации)
+## Инварианты 9D-2-C02 … C10 (обязательны при реализации)
 
 - **C02 — классификация в ревизии.** `confirmed_severity` и `impact_scope` — поля
   `EngineeringEvaluationRevision`, обязательны на `prepare`, редактируются только в `DRAFT`, после
@@ -61,13 +61,23 @@
   `QualityFinding` не меняет. **Обязательная согласованность `classification → evaluation_outcome`**
   (матрица ниже), иначе `EVAL_CLASSIFICATION_OUTCOME_MISMATCH`. `CONFIRMED_DEFECT` **не** создаёт
   `Defect` в 9D-2.
+- **C08 — единая структурная миграция.** 9D-2A создаёт **7** таблиц одной миграцией; `sources`/
+  `criteria`/`exceptions` — структурно (поведение 9D-2B/2C). Плановых `ALTER TABLE` для уже
+  известных полей **не** использовать.
+- **C09 — возврат.** `RETURNED_FOR_REVISION` **не** добавлять как статус. lifecycle CHECK — ровно
+  семь: `DRAFT`, `PREPARED`, `FIXED`, `PENDING_APPROVAL`, `EFFECTIVE`, `SUPERSEDED`, `WITHDRAWN`.
+  Возврат = `PREPARED → DRAFT` + событие `EVALUATION_RETURNED`, причина обязательна.
+- **C10 — полная схема Revision сразу.** Все скалярные поля ревизии (классификация/исход/judgement
+  + `required_approval_route`) создаются в 9D-2A, **nullable в `DRAFT`**; enum-CHECK при `NOT NULL`;
+  обязательность/матрица — на `prepare`. `rationale` **не** делать безусловным DB `NOT NULL`.
 
 ## Что создать
 
 Модуль `09_Разработка/backend/app/quality/`:
 - `engineering_evaluation_workflow.py` — константы (статусы, enum, роли, коды ошибок) и
   pure-функции проверок (без БД);
-- `engineering_evaluation_models.py` — 6 ORM-таблиц схемы `quality` (Spec §3);
+- `engineering_evaluation_models.py` — **7** ORM-таблиц схемы `quality` (Spec §3; C08:
+  `evaluations`, `revisions`, `sources`, `criteria`, `exceptions`, `events`, `sequences`);
 - `engineering_evaluation_schemas.py` — Pydantic-команды/DTO;
 - `engineering_evaluation_repository.py` — доступ к данным;
 - `engineering_evaluation_services.py` — команды lifecycle + validation matrix + сверка источников;
@@ -142,8 +152,9 @@ OUT_OF_SCOPE                           → NOT_APPLICABLE
 
 ## Lifecycle и роли (Spec §5)
 
-`DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED` (+ `RETURNED_FOR_REVISION`, `WITHDRAWN`,
-`PENDING_APPROVAL`). Подготовка (`prepare`) — роль `WELDING_ENGINEER` (`OGS_ENGINEER`);
+`DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED` (+ `WITHDRAWN`, `PENDING_APPROVAL`; возврат
+`PREPARED → DRAFT` событием `EVALUATION_RETURNED`, причина обязательна; `RETURNED_FOR_REVISION`
+**не статус** — C09; набор статусов ровно семь). Подготовка (`prepare`) — роль `WELDING_ENGINEER` (`OGS_ENGINEER`);
 фиксация (`fix`)/возврат/`set-effective` — `CHIEF_WELDER`. Подготовка и фиксация — **разными**
 акторами (`EVAL_SAME_ACTOR_PREPARE_FIX`). Редактируется только `DRAFT`; после `PREPARED`
 содержание неизменяемо; `return` не создаёт новую ревизию; `WITHDRAWN` конечный; одновременно
@@ -178,7 +189,7 @@ OUT_OF_SCOPE                           → NOT_APPLICABLE
 
 ## Definition of Done
 
-1. Все 6 моделей, схемы, репозиторий, сервис, API, миграция, тесты созданы.
+1. Все **7** моделей, схемы, репозиторий, сервис, API, миграция, тесты созданы.
 2. `alembic upgrade head` проходит; таблицы 9D-1 не затронуты.
 3. `pytest backend/tests/test_engineering_evaluation_api.py` зелёный, включая тесты-инварианты
    **C01/C04** (после `set-effective`: `QualityFinding.status` остаётся `UNDER_EVALUATION`, в
