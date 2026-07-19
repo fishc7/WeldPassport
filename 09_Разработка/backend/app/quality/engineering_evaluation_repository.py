@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.quality import engineering_evaluation_hash as eeh
+from app.quality import engineering_evaluation_validation as eev
 from app.quality import engineering_evaluation_workflow as eew
 from app.quality.engineering_evaluation_models import (
     EngineeringEvaluation,
@@ -26,6 +27,7 @@ from app.quality.engineering_evaluation_models import (
     EngineeringEvaluationEvent,
     EngineeringEvaluationRevision,
     EngineeringEvaluationSource,
+    EngineeringException,
     QUALITY_SCHEMA,
     SEQUENCES_TABLE,
 )
@@ -517,6 +519,173 @@ class EngineeringEvaluationRepository:
                 },
             )
         )
+
+    # ── Исключения: add / remove (Task 9D-2C; событие EVALUATION_UPDATED) ──────
+
+    def get_exception(self, exception_id: UUID) -> EngineeringException | None:
+        return (
+            self.db.query(EngineeringException)
+            .filter(EngineeringException.id == exception_id)
+            .first()
+        )
+
+    def list_exceptions(self, revision_id: UUID) -> list[EngineeringException]:
+        return (
+            self.db.query(EngineeringException)
+            .filter(EngineeringException.revision_id == revision_id)
+            .order_by(EngineeringException.created_at)
+            .all()
+        )
+
+    def add_exception(
+        self,
+        revision: EngineeringEvaluationRevision,
+        *,
+        criterion_id: UUID,
+        basis: str,
+        justification: str,
+        residual_risk: str,
+        conditions: str | None = None,
+        required_approval_route: str | None = None,
+        actor_worker_id: int,
+        actor_role: str | None = None,
+    ) -> EngineeringException:
+        """Добавляет исключение к отклонённому критерию DRAFT-ревизии.
+
+        Критерий должен принадлежать ревизии и иметь отклонённый результат
+        (`DOES_NOT_COMPLY`/`CONDITIONALLY_COMPLIES`, C15), иначе
+        `EVAL_EXCEPTION_CRITERION_INVALID`. Дубль на критерий — предварительная
+        проверка (C17), `UNIQUE` — страховка. Событие `EVALUATION_UPDATED` (metadata
+        entity=EngineeringException, operation=ADD).
+        """
+        self._require_draft(revision)
+        criterion = self.get_criterion(criterion_id)
+        if criterion is None or criterion.revision_id != revision.id:
+            raise eew.EvaluationError(
+                eew.EVAL_CRITERION_NOT_FOUND, "Критерий не найден в ревизии"
+            )
+        if criterion.comparison_result not in eew.DEVIATED_CRITERION_RESULTS:
+            raise eew.EvaluationError(
+                eew.EVAL_EXCEPTION_CRITERION_INVALID,
+                "Исключение допустимо только для отклонённого критерия",
+            )
+        existing = (
+            self.db.query(EngineeringException)
+            .filter(
+                EngineeringException.revision_id == revision.id,
+                EngineeringException.criterion_id == criterion_id,
+            )
+            .first()
+        )
+        if existing is not None:
+            raise eew.EvaluationError(
+                eew.EVAL_EXCEPTION_DUPLICATE,
+                "Для критерия уже есть исключение",
+            )
+        exception = EngineeringException(
+            revision_id=revision.id,
+            criterion_id=criterion_id,
+            basis=basis,
+            justification=justification,
+            residual_risk=residual_risk,
+            conditions=conditions,
+            required_approval_route=required_approval_route,
+            created_by_worker_id=actor_worker_id,
+        )
+        self.db.add(exception)
+        self.db.flush()
+        self._exception_event(
+            revision, exception.id, "ADD", actor_worker_id, actor_role
+        )
+        return exception
+
+    def remove_exception(
+        self,
+        exception: EngineeringException,
+        *,
+        actor_worker_id: int,
+        actor_role: str | None = None,
+    ) -> None:
+        """Удаляет исключение из DRAFT-ревизии. Событие `EVALUATION_UPDATED` (REMOVE)."""
+        revision = self.get_revision(exception.revision_id)
+        assert revision is not None
+        self._require_draft(revision)
+        exception_id = exception.id
+        self.db.delete(exception)
+        self.db.flush()
+        self._exception_event(
+            revision, exception_id, "REMOVE", actor_worker_id, actor_role
+        )
+
+    def _exception_event(
+        self,
+        revision: EngineeringEvaluationRevision,
+        exception_id: UUID,
+        operation: str,
+        actor_worker_id: int,
+        actor_role: str | None,
+    ) -> None:
+        self.add_event(
+            EngineeringEvaluationEvent(
+                evaluation_id=revision.evaluation_id,
+                revision_id=revision.id,
+                event_type=eew.EVENT_EVALUATION_UPDATED,
+                actor_worker_id=actor_worker_id,
+                actor_role=actor_role,
+                revision_version=revision.version,
+                event_metadata={
+                    "entity": "EngineeringException",
+                    "operation": operation,
+                    "exception_id": str(exception_id),
+                },
+            )
+        )
+
+    # ── Проверка комплектности (Task 9D-2C; read-only, C12) ────────────────────
+
+    def validate_revision(
+        self, revision: EngineeringEvaluationRevision
+    ) -> eev.ValidationResult:
+        """Read-only проверка готовности ревизии к PREPARED (без записи/переходов).
+
+        Собирает критерии/исключения/источники, вычисляет свежесть неревизионных
+        источников (чтение, без обновления `verified_at`) и применяет validation
+        matrix. Переход статуса и запись выполняет 9D-2D, не этот метод.
+        """
+        criteria = self.list_criteria(revision.id)
+        exceptions = self.list_exceptions(revision.id)
+        sources = self.list_sources(revision.id)
+        source_issues = self._source_freshness_issues(sources)
+        return eev.check_prepare_completeness(
+            revision,
+            criteria=criteria,
+            exceptions=exceptions,
+            sources=sources,
+            source_issues=source_issues,
+        )
+
+    def _source_freshness_issues(
+        self, sources: list[EngineeringEvaluationSource]
+    ) -> list[eev.Violation]:
+        """Свежесть неревизионных источников (read-only): пересчёт хэша и сравнение."""
+        issues: list[eev.Violation] = []
+        for s in sources:
+            if s.source_revision_id is not None:
+                continue  # ревизионные источники здесь не хэшируются
+            try:
+                current_hash, _ = eeh.compute_source_hash(
+                    self.db,
+                    source_entity_type=s.source_entity_type,
+                    source_entity_id=s.source_entity_id,
+                )
+            except eew.EvaluationError as exc:
+                issues.append(eev.Violation(exc.code, detail=str(s.id)))
+                continue
+            if current_hash != s.source_hash:
+                issues.append(
+                    eev.Violation(eew.EVAL_SOURCE_STALE, detail=str(s.id))
+                )
+        return issues
 
     # ── Журнал (append-only) ───────────────────────────────────────────────────
 
