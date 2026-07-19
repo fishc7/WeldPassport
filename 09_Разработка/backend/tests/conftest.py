@@ -38,6 +38,13 @@ from app.quality.models import (
     InspectionMethodAssignment,
     InspectionSequence,
     LaboratoryAccreditation,
+    EngineeringEvaluation,
+    EngineeringEvaluationCriterion,
+    EngineeringEvaluationEvent,
+    EngineeringEvaluationRevision,
+    EngineeringEvaluationSequence,
+    EngineeringEvaluationSource,
+    EngineeringException,
     LaboratoryConclusion,
     LaboratoryConclusionExecution,
     MethodExecution,
@@ -206,6 +213,30 @@ def _purge_test_data(db: Session) -> None:
     ]
     if not worker_ids:
         return
+
+    # EngineeringEvaluation (Task 9D-2A) удаляем ДО finding: FK
+    # engineering_evaluations.finding_id → quality_findings RESTRICT. Порядок дети →
+    # родители: events → exceptions → criteria → sources → revisions → evaluations.
+    # sequences чистятся по project_id ниже. Указатели current/effective_revision_id —
+    # без FK, спец-обнуление не нужно.
+    db.query(EngineeringEvaluationEvent).filter(
+        EngineeringEvaluationEvent.actor_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(EngineeringException).filter(
+        EngineeringException.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(EngineeringEvaluationCriterion).filter(
+        EngineeringEvaluationCriterion.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(EngineeringEvaluationSource).filter(
+        EngineeringEvaluationSource.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(EngineeringEvaluationRevision).filter(
+        EngineeringEvaluationRevision.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
+    db.query(EngineeringEvaluation).filter(
+        EngineeringEvaluation.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
 
     # QualityFinding (Task 9D-1) удаляем раньше всего: FK quality.quality_findings
     # → inspections / method_executions / weld_operations / joints / projects c
@@ -423,6 +454,9 @@ def _purge_test_data(db: Session) -> None:
         ).delete(synchronize_session=False)
         db.query(QualityFindingSequence).filter(
             QualityFindingSequence.project_id.in_(project_ids)
+        ).delete(synchronize_session=False)
+        db.query(EngineeringEvaluationSequence).filter(
+            EngineeringEvaluationSequence.project_id.in_(project_ids)
         ).delete(synchronize_session=False)
 
     # Инженерные документы/ревизии удаляем раньше линий и проектов:

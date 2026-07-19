@@ -414,6 +414,19 @@ from app.quality.quality_finding_models import (  # noqa: E402
     QualityFindingSequence,
 )
 
+# ── Task 9D-2A: реэкспорт моделей ядра EngineeringEvaluation ────────────────────
+# Вынесены в отдельный модуль (engineering_evaluation_models); доступны через
+# app.quality.models для conftest, Alembic (metadata) и тестов.
+from app.quality.engineering_evaluation_models import (  # noqa: E402
+    EngineeringEvaluation,
+    EngineeringEvaluationCriterion,
+    EngineeringEvaluationEvent,
+    EngineeringEvaluationRevision,
+    EngineeringEvaluationSequence,
+    EngineeringEvaluationSource,
+    EngineeringException,
+)
+
 __all__ = [
     "QUALITY_SCHEMA",
     "Inspection",
@@ -432,4 +445,11 @@ __all__ = [
     "QualityFinding",
     "QualityFindingSequence",
     "QualityFindingEvent",
+    "EngineeringEvaluation",
+    "EngineeringEvaluationRevision",
+    "EngineeringEvaluationSource",
+    "EngineeringEvaluationCriterion",
+    "EngineeringException",
+    "EngineeringEvaluationEvent",
+    "EngineeringEvaluationSequence",
 ]
