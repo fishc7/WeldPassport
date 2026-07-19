@@ -11,20 +11,46 @@ optimistic locking и событием `EVALUATION_UPDATED`, добавлени�
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.quality import engineering_evaluation_hash as eeh
 from app.quality import engineering_evaluation_workflow as eew
 from app.quality.engineering_evaluation_models import (
     EngineeringEvaluation,
+    EngineeringEvaluationCriterion,
     EngineeringEvaluationEvent,
     EngineeringEvaluationRevision,
+    EngineeringEvaluationSource,
     QUALITY_SCHEMA,
     SEQUENCES_TABLE,
 )
+
+# Поля критерия, редактируемые через update_criterion (в DRAFT).
+_EDITABLE_CRITERION_FIELDS: frozenset[str] = frozenset(
+    {
+        "requirement_ref",
+        "clause",
+        "parameter",
+        "actual_value",
+        "actual_num",
+        "allowed_value",
+        "allowed_num_min",
+        "allowed_num_max",
+        "unit",
+        "comparison_result",
+        "applicability_comment",
+        "engineer_comment",
+    }
+)
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 # Поля DRAFT-ревизии, редактируемые через update_revision (содержание оценки, C10).
 _EDITABLE_REVISION_FIELDS: frozenset[str] = frozenset(
@@ -217,6 +243,280 @@ class EngineeringEvaluationRepository:
             )
         )
         return revision
+
+    # ── Источники: add / remove / reverify (Task 9D-2B) ───────────────────────
+
+    def _require_draft(self, revision: EngineeringEvaluationRevision) -> None:
+        """Изменение источников/критериев разрешено только в DRAFT.
+
+        После PREPARED/FIXED/EFFECTIVE содержимое ревизии неизменяемо; новое
+        содержание после фиксации оформляется новой ревизией (§6, 9D-2B-C).
+        """
+        if not eew.is_editable_status(revision.status):
+            raise eew.EvaluationError(
+                eew.EVAL_REVISION_NOT_DRAFT,
+                "Источники/критерии изменяются только в DRAFT",
+            )
+
+    def get_source(self, source_id: UUID) -> EngineeringEvaluationSource | None:
+        return (
+            self.db.query(EngineeringEvaluationSource)
+            .filter(EngineeringEvaluationSource.id == source_id)
+            .first()
+        )
+
+    def list_sources(self, revision_id: UUID) -> list[EngineeringEvaluationSource]:
+        return (
+            self.db.query(EngineeringEvaluationSource)
+            .filter(EngineeringEvaluationSource.revision_id == revision_id)
+            .order_by(EngineeringEvaluationSource.created_at)
+            .all()
+        )
+
+    def add_source(
+        self,
+        revision: EngineeringEvaluationRevision,
+        *,
+        source_role: str,
+        source_entity_type: str,
+        source_entity_id: UUID,
+        source_revision_id: UUID | None = None,
+        applicability_note: str | None = None,
+        actor_worker_id: int,
+        actor_role: str | None = None,
+    ) -> EngineeringEvaluationSource:
+        """Добавляет источник к DRAFT-ревизии.
+
+        Ревизионный источник (`source_revision_id` задан) — хэш не вычисляется.
+        Неревизионный — вычисляется `source_hash` + `hash_schema_version` по профилю
+        (`EVAL_SOURCE_PROFILE_UNKNOWN` / `EVAL_SOURCE_UNAVAILABLE`). `verified_at`
+        фиксируется при добавлении. Событие `SOURCE_ADDED`.
+        """
+        self._require_draft(revision)
+        source_hash: str | None = None
+        hash_schema_version: str | None = None
+        if source_revision_id is None:
+            source_hash, hash_schema_version = eeh.compute_source_hash(
+                self.db,
+                source_entity_type=source_entity_type,
+                source_entity_id=source_entity_id,
+            )
+        source = EngineeringEvaluationSource(
+            revision_id=revision.id,
+            source_role=source_role,
+            source_entity_type=source_entity_type,
+            source_entity_id=source_entity_id,
+            source_revision_id=source_revision_id,
+            source_hash=source_hash,
+            hash_schema_version=hash_schema_version,
+            verified_at=_now(),
+            applicability_note=applicability_note,
+            created_by_worker_id=actor_worker_id,
+        )
+        self.db.add(source)
+        self.db.flush()
+        self._source_event(
+            revision, source, eew.EVENT_SOURCE_ADDED, actor_worker_id, actor_role
+        )
+        return source
+
+    def remove_source(
+        self,
+        source: EngineeringEvaluationSource,
+        *,
+        actor_worker_id: int,
+        actor_role: str | None = None,
+    ) -> None:
+        """Удаляет источник из DRAFT-ревизии (только с событием `SOURCE_REMOVED`)."""
+        revision = self.get_revision(source.revision_id)
+        assert revision is not None
+        self._require_draft(revision)
+        self._source_event(
+            revision, source, eew.EVENT_SOURCE_REMOVED, actor_worker_id, actor_role
+        )
+        self.db.delete(source)
+        self.db.flush()
+
+    def reverify_source(
+        self,
+        source: EngineeringEvaluationSource,
+        *,
+        actor_worker_id: int,
+        actor_role: str | None = None,
+    ) -> EngineeringEvaluationSource:
+        """Повторно сверяет источник (без автоподмены хэша, ADR-021 §2.11).
+
+        Неревизионный: пересчитывает текущий хэш и сравнивает с сохранённым;
+        расхождение → `EVAL_SOURCE_STALE`, недоступность → `EVAL_SOURCE_UNAVAILABLE`;
+        совпадение → обновляет `verified_at`. Событие `SOURCE_REVERIFIED`.
+        """
+        revision = self.get_revision(source.revision_id)
+        assert revision is not None
+        self._require_draft(revision)
+        if source.source_revision_id is None:
+            current_hash, _ = eeh.compute_source_hash(
+                self.db,
+                source_entity_type=source.source_entity_type,
+                source_entity_id=source.source_entity_id,
+            )
+            if current_hash != source.source_hash:
+                raise eew.EvaluationError(
+                    eew.EVAL_SOURCE_STALE,
+                    "Источник изменился с момента фиксации хэша",
+                )
+        source.verified_at = _now()
+        self.db.flush()
+        self._source_event(
+            revision, source, eew.EVENT_SOURCE_REVERIFIED, actor_worker_id, actor_role
+        )
+        return source
+
+    def _source_event(
+        self,
+        revision: EngineeringEvaluationRevision,
+        source: EngineeringEvaluationSource,
+        event_type: str,
+        actor_worker_id: int,
+        actor_role: str | None,
+    ) -> None:
+        self.add_event(
+            EngineeringEvaluationEvent(
+                evaluation_id=revision.evaluation_id,
+                revision_id=revision.id,
+                event_type=event_type,
+                actor_worker_id=actor_worker_id,
+                actor_role=actor_role,
+                revision_version=revision.version,
+                event_metadata={
+                    "source_id": str(source.id),
+                    "source_entity_type": source.source_entity_type,
+                    "source_role": source.source_role,
+                },
+            )
+        )
+
+    # ── Критерии: add / update / remove (Task 9D-2B; событие EVALUATION_UPDATED) ─
+
+    def get_criterion(
+        self, criterion_id: UUID
+    ) -> EngineeringEvaluationCriterion | None:
+        return (
+            self.db.query(EngineeringEvaluationCriterion)
+            .filter(EngineeringEvaluationCriterion.id == criterion_id)
+            .first()
+        )
+
+    def list_criteria(
+        self, revision_id: UUID
+    ) -> list[EngineeringEvaluationCriterion]:
+        return (
+            self.db.query(EngineeringEvaluationCriterion)
+            .filter(EngineeringEvaluationCriterion.revision_id == revision_id)
+            .order_by(EngineeringEvaluationCriterion.created_at)
+            .all()
+        )
+
+    def add_criterion(
+        self,
+        revision: EngineeringEvaluationRevision,
+        *,
+        requirement_ref: str,
+        parameter: str,
+        comparison_result: str,
+        actor_worker_id: int,
+        actor_role: str | None = None,
+        **optional: Any,
+    ) -> EngineeringEvaluationCriterion:
+        """Добавляет критерий к DRAFT-ревизии. Событие `EVALUATION_UPDATED` (C01)."""
+        self._require_draft(revision)
+        unknown = set(optional) - _EDITABLE_CRITERION_FIELDS
+        if unknown:
+            raise eew.EvaluationError(
+                eew.EVAL_REVISION_NOT_DRAFT,
+                f"Недопустимые поля критерия: {sorted(unknown)}",
+            )
+        criterion = EngineeringEvaluationCriterion(
+            revision_id=revision.id,
+            requirement_ref=requirement_ref,
+            parameter=parameter,
+            comparison_result=comparison_result,
+            created_by_worker_id=actor_worker_id,
+            **optional,
+        )
+        self.db.add(criterion)
+        self.db.flush()
+        self._criterion_event(
+            revision, criterion.id, "ADD", actor_worker_id, actor_role
+        )
+        return criterion
+
+    def update_criterion(
+        self,
+        criterion: EngineeringEvaluationCriterion,
+        *,
+        actor_worker_id: int,
+        fields: dict[str, Any],
+        actor_role: str | None = None,
+    ) -> EngineeringEvaluationCriterion:
+        """Правит критерий DRAFT-ревизии. Событие `EVALUATION_UPDATED` (C01)."""
+        revision = self.get_revision(criterion.revision_id)
+        assert revision is not None
+        self._require_draft(revision)
+        unknown = set(fields) - _EDITABLE_CRITERION_FIELDS
+        if unknown:
+            raise eew.EvaluationError(
+                eew.EVAL_REVISION_NOT_DRAFT,
+                f"Недопустимые поля критерия: {sorted(unknown)}",
+            )
+        for key, value in fields.items():
+            setattr(criterion, key, value)
+        self.db.flush()
+        self._criterion_event(
+            revision, criterion.id, "UPDATE", actor_worker_id, actor_role
+        )
+        return criterion
+
+    def remove_criterion(
+        self,
+        criterion: EngineeringEvaluationCriterion,
+        *,
+        actor_worker_id: int,
+        actor_role: str | None = None,
+    ) -> None:
+        """Удаляет критерий DRAFT-ревизии. Событие `EVALUATION_UPDATED` (C01)."""
+        revision = self.get_revision(criterion.revision_id)
+        assert revision is not None
+        self._require_draft(revision)
+        criterion_id = criterion.id
+        self.db.delete(criterion)
+        self.db.flush()
+        self._criterion_event(
+            revision, criterion_id, "REMOVE", actor_worker_id, actor_role
+        )
+
+    def _criterion_event(
+        self,
+        revision: EngineeringEvaluationRevision,
+        criterion_id: UUID,
+        operation: str,
+        actor_worker_id: int,
+        actor_role: str | None,
+    ) -> None:
+        self.add_event(
+            EngineeringEvaluationEvent(
+                evaluation_id=revision.evaluation_id,
+                revision_id=revision.id,
+                event_type=eew.EVENT_EVALUATION_UPDATED,
+                actor_worker_id=actor_worker_id,
+                actor_role=actor_role,
+                revision_version=revision.version,
+                event_metadata={
+                    "entity": "EngineeringEvaluationCriterion",
+                    "operation": operation,
+                    "criterion_id": str(criterion_id),
+                },
+            )
+        )
 
     # ── Журнал (append-only) ───────────────────────────────────────────────────
 
