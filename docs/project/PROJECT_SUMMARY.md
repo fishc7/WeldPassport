@@ -356,6 +356,7 @@ docs/project/PROJECT_SUMMARY.md
 тестов, миграций и документации и хранит отдельные подтверждения владельца.
 
 Project Control Center не является производственным модулем и не использует
-производственные таблицы WeldPassport. Статус — дизайн утверждён, реализация не
-начата. Канон: [[docs/project/DECISIONS#ADR-020. Отдельный Project Control Center для контроля реализации|ADR-020]];
+производственные таблицы WeldPassport. Первый рабочий срез реализован отдельно в
+`09_Разработка/project_control/`; штатное подключение PostgreSQL и автоматические
+снимки остаются следующим рубежом. Канон: [[docs/project/DECISIONS#ADR-020. Отдельный Project Control Center для контроля реализации|ADR-020]];
 детальный дизайн: [[docs/superpowers/specs/2026-07-19-project-control-center-design|проектное предложение]].
