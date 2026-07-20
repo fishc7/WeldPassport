@@ -33,6 +33,10 @@ from app.hr.models import Worker, WorkerRole
 from app.main import app
 from app.projects.models import Company, Line, Project, ProjectCompany
 from app.quality.models import (
+    Defect,
+    DefectEvent,
+    DefectRoot,
+    DefectSequence,
     Inspection,
     InspectionEvent,
     InspectionMethodAssignment,
@@ -213,6 +217,31 @@ def _purge_test_data(db: Session) -> None:
     ]
     if not worker_ids:
         return
+
+    # Defect (Task 9D-3A) удаляем ДО EngineeringEvaluation: FK
+    # defect_roots.engineering_evaluation_id → engineering_evaluations RESTRICT и
+    # defect_roots.joint_id → joints RESTRICT. Порядок дети → родители: events →
+    # defects (self-FK supersedes_defect_id RESTRICT — обнуляем) → roots.
+    # defect_sequences (joint_id CASCADE) уходят со стыками ниже, но чистим явно.
+    defect_ids = [
+        row[0]
+        for row in db.query(Defect.id)
+        .filter(Defect.created_by_worker_id.in_(worker_ids))
+        .all()
+    ]
+    if defect_ids:
+        db.query(DefectEvent).filter(
+            DefectEvent.defect_id.in_(defect_ids)
+        ).delete(synchronize_session=False)
+        db.query(Defect).filter(Defect.id.in_(defect_ids)).update(
+            {Defect.supersedes_defect_id: None}, synchronize_session=False
+        )
+        db.query(Defect).filter(Defect.id.in_(defect_ids)).delete(
+            synchronize_session=False
+        )
+    db.query(DefectRoot).filter(
+        DefectRoot.created_by_worker_id.in_(worker_ids)
+    ).delete(synchronize_session=False)
 
     # EngineeringEvaluation (Task 9D-2A) удаляем ДО finding: FK
     # engineering_evaluations.finding_id → quality_findings RESTRICT. Порядок дети →
@@ -433,6 +462,11 @@ def _purge_test_data(db: Session) -> None:
         )
         db.query(JointDocumentRevision).filter(
             JointDocumentRevision.joint_id.in_(joint_ids)
+        ).delete(synchronize_session=False)
+        # Defect per-joint счётчики (Task 9D-3A): joint_id CASCADE, но чистим явно
+        # (как прочие *_sequences), чтобы не полагаться только на каскад.
+        db.query(DefectSequence).filter(
+            DefectSequence.joint_id.in_(joint_ids)
         ).delete(synchronize_session=False)
         db.query(Joint).filter(Joint.id.in_(joint_ids)).update(
             {Joint.superseded_by_joint_id: None}, synchronize_session=False

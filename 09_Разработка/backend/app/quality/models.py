@@ -427,6 +427,18 @@ from app.quality.engineering_evaluation_models import (  # noqa: E402
     EngineeringException,
 )
 
+# ── Task 9D-3A: реэкспорт моделей технической модели Defect ─────────────────────
+# Вынесены в отдельный модуль (defect_models); доступны через app.quality.models для
+# conftest, Alembic (metadata) и тестов.
+from app.quality.defect_models import (  # noqa: E402
+    Defect,
+    DefectEvent,
+    DefectLocationType,
+    DefectRoot,
+    DefectSequence,
+    DefectType,
+)
+
 __all__ = [
     "QUALITY_SCHEMA",
     "Inspection",
@@ -452,4 +464,10 @@ __all__ = [
     "EngineeringException",
     "EngineeringEvaluationEvent",
     "EngineeringEvaluationSequence",
+    "DefectRoot",
+    "Defect",
+    "DefectType",
+    "DefectLocationType",
+    "DefectSequence",
+    "DefectEvent",
 ]
