@@ -11,17 +11,51 @@ from __future__ import annotations
 from datetime import date
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.engineering.models import DocumentRevision, EngineeringDocument, Joint
-from app.hr.models import Worker
+from app.hr.models import Worker, WorkerRole
 from app.projects.models import Line, Project
-from app.quality.defect_models import Defect, DefectEvent, DefectRoot
-from app.quality.models import EngineeringEvaluation, QualityFinding
+from app.quality.defect_models import (
+    Defect,
+    DefectEvent,
+    DefectLocationType,
+    DefectRoot,
+    DefectType,
+)
+from app.quality.models import (
+    EngineeringEvaluation,
+    EngineeringEvaluationRevision,
+    QualityFinding,
+)
 
 from .conftest import TEST_COMPANY_ID
 
 TODAY = date.today()
+
+
+def seeded_type_id(db: Session, code: str = "CRACK"):
+    return db.execute(
+        select(DefectType.id).where(DefectType.code == code)
+    ).scalar_one()
+
+
+def seeded_location_id(db: Session, code: str = "WELD_METAL"):
+    return db.execute(
+        select(DefectLocationType.id).where(DefectLocationType.code == code)
+    ).scalar_one()
+
+
+def valid_active_fields(db: Session, **over) -> dict:
+    """Минимальный валидный набор технических полей для ACTIVE (тип CRACK: requires_*=false)."""
+    fields = {
+        "defect_type_id": seeded_type_id(db),
+        "location_type_id": seeded_location_id(db),
+        "indication_location": "SURFACE",
+    }
+    fields.update(over)
+    return fields
 
 
 class DefectCtx:
@@ -71,6 +105,12 @@ class DefectCtx:
         db.commit()
         db.refresh(self.revision)
 
+        # Роли с GLOBAL-scope (покрывают любой стык).
+        self.ogs = self._role_worker(f"{code}O", "OGS_ENGINEER")
+        self.chief = self._role_worker(f"{code}C", "CHIEF_WELDER")
+        self.otk = self._role_worker(f"{code}K", "OTK_INSPECTOR")
+        self.norole = self._worker(f"{code}Z")
+
     def _worker(self, suffix: str) -> Worker:
         w = Worker(
             last_name=f"Df{suffix}",
@@ -82,6 +122,19 @@ class DefectCtx:
         self.db.add(w)
         self.db.commit()
         self.db.refresh(w)
+        return w
+
+    def _role_worker(self, suffix: str, role_code: str) -> Worker:
+        w = self._worker(suffix)
+        role = WorkerRole(
+            worker_id=w.id,
+            role_code=role_code,
+            scope_type="GLOBAL",
+            is_active=True,
+            valid_from=TODAY,
+        )
+        self.db.add(role)
+        self.db.commit()
         return w
 
     def new_joint(self, joint_no: str) -> Joint:
@@ -129,6 +182,32 @@ class DefectCtx:
             created_by_worker_id=self.creator.id,
             updated_by_worker_id=self.creator.id,
         )
+        self.db.add(ev)
+        self.db.commit()
+        self.db.refresh(ev)
+        return ev
+
+    def new_confirmed_evaluation(
+        self, joint: Joint, *, classification: str = "CONFIRMED_DEFECT",
+        status: str = "EFFECTIVE",
+    ) -> EngineeringEvaluation:
+        """EngineeringEvaluation с действующей ревизией (по умолчанию EFFECTIVE +
+        CONFIRMED_DEFECT) — валидное основание для регистрации Defect (9D-3B)."""
+        ev = self.new_evaluation(joint)
+        rev = EngineeringEvaluationRevision(
+            evaluation_id=ev.id,
+            revision_no=1,
+            status=status,
+            classification=classification,
+            created_by_worker_id=self.creator.id,
+            updated_by_worker_id=self.creator.id,
+            version=1,
+        )
+        self.db.add(rev)
+        self.db.commit()
+        self.db.refresh(rev)
+        ev.current_revision_id = rev.id
+        ev.effective_revision_id = rev.id
         self.db.add(ev)
         self.db.commit()
         self.db.refresh(ev)
