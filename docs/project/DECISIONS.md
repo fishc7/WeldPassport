@@ -3208,6 +3208,86 @@ ADR-021 задаёт её внутреннее ядро под Task 9D-2)
 > действует при значении `NOT NULL`; обязательность и матрица комплектности применяются на
 > `prepare` (позже). `rationale` **не** является безусловным DB `NOT NULL`.
 
+> **Решения блоков 9D-2B/2C (валидация, источники, исключения; зафиксировано 2026-07-19).**
+> Эти решения приняты при реализации 9D-2C и фиксируются ретроспективно, чтобы канон был
+> непрерывным (C10 → C11 … C17 → C18).
+>
+> **9D-2-C11 — агрегированный `ValidationResult`.** Проверка комплектности `prepare`
+> возвращает **полный список нарушений** (`ValidationResult.violations`), а **не** first-fail:
+> инженер видит все проблемы ревизии сразу. HTTP-обёртка — `EVAL_PREPARE_INCOMPLETE` (422) с
+> массивом кодов в `detail.violations`.
+>
+> **9D-2-C12 — validation checker строго read-only.** Функции `check_prepare_completeness`
+> работают над уже загруженными объектами и **не** обращаются к БД, **не** пишут `verified_at`,
+> **не** меняют хэши/статусы, **не** коммитят. Свежесть источников (нужна БД) вычисляется в
+> repository и передаётся в checker как `source_issues`. Переход статуса выполняет сервис (9D-2D).
+>
+> **9D-2-C13 — `recommended_disposition` обязателен всегда.** Поле обязательно на `prepare`
+> при любом исходе; **`NONE` — валидное значение** (не «пусто»). Отсутствие → `EVAL_DISPOSITION_REQUIRED`;
+> недопустимое по исходу значение → `EVAL_DISPOSITION_NOT_ALLOWED` (матрица §8).
+>
+> **9D-2-C14 — `INSUFFICIENT_DATA` определяется критерием.** Исход `INSUFFICIENT_DATA`
+> обоснован **наличием хотя бы одного критерия с `comparison_result = INSUFFICIENT_DATA`**, а не
+> отдельным флагом ревизии. Несоответствие исхода составу критериев → `EVAL_OUTCOME_CRITERIA_MISMATCH`.
+>
+> **9D-2-C15 — отклонённый (deviated) критерий.** Отклонённым считается критерий с
+> `comparison_result ∈ {DOES_NOT_COMPLY, CONDITIONALLY_COMPLIES}`. Только такой критерий может
+> нести `EngineeringException`; исключение на иной результат → `EVAL_EXCEPTION_CRITERION_INVALID`.
+>
+> **9D-2-C16 — `confidence_level = LOW` требует `confidence_note`.** При низкой уверенности
+> обязательно текстовое обоснование (причины + меры); отсутствие → `EVAL_CONFIDENCE_NOTE_REQUIRED`.
+> Дублируется CHECK-инвариантом строки ревизии.
+>
+> **9D-2-C17 — дубль `EngineeringException`.** Одно исключение на критерий: **repository
+> pre-check** (явная проверка существующего перед вставкой → `EVAL_EXCEPTION_DUPLICATE`) **плюс**
+> DB `UNIQUE(revision_id, criterion_id)` как страховка от гонок.
+
+> **Решения блока 9D-2E (хардненинг; зафиксировано 2026-07-19).** Реализация 9D-2A–2D
+> закрыла ядро, lifecycle, валидацию и API; следующий блок **9D-2E** дорабатывает три
+> контура. Только эти три решения — предмет 9D-2E; внешний approval workflow остаётся 9D-3.
+>
+> **9D-2-C18 — копирование содержимого при `create_revision`.** Новая ревизия-пересмотр
+> **копирует** источники, критерии и исключения предыдущей (`previous_revision_id =`
+> текущая `current_revision_id`) в одной транзакции. Правила копии: каждой копии — **новый
+> `id`** и **новый `revision_id`**; исключения копируются с **`is_draft_copy = true`**
+> (действительность/согласования/подтверждения не наследуются); `exception.criterion_id`
+> **переназначается на копию критерия** (по карте старый→новый `criterion_id`); у источников
+> **`verified_at` сбрасывается в `NULL`** (перед `prepare` требуется повторная сверка),
+> `source_hash`/`hash_schema_version` переносятся как есть. Действующая (`EFFECTIVE`)
+> ревизия **не** переводится в `SUPERSEDED` при создании новой — замещение выполняется
+> **только** на `set_effective` новой ревизии. Пишется **одно** агрегированное событие
+> `EVALUATION_CREATED` с метаданными количества копий (`sources_copied`, `criteria_copied`,
+> `exceptions_copied`, `source_revision_id`, `revision_no`).
+>
+> **9D-2-C19 — `REVIEW_OVERDUE` идемпотентно и по команде.** Событие **не** эмитится на
+> `GET`. Вводится **идемпотентная команда** `check_review_overdue` (эндпойнт
+> `POST …/engineering-evaluation-revisions/{id}/check-review-overdue`). Событие
+> `REVIEW_OVERDUE` создаётся **один раз на просроченный review-цикл**: цикл идентифицируется
+> текущим значением `review_due_at` действующей ревизии; повторный вызов при уже
+> зафиксированном событии этого цикла — **no-op**. После `confirm-review`, обновляющего
+> `review_due_at`, начинается новый цикл (новое событие возможно). Команда **не меняет**
+> `status` ревизии и **не меняет** `QualityFinding`. Сервис-метод спроектирован пригодным
+> для будущего вызова планировщиком (идемпотентность + системный актор).
+>
+> **9D-2-C20 — fingerprint подтверждения пересмотра.** `request-review-confirmation`
+> генерирует **`correlation_id`** и сохраняет в метаданных события `REVIEW_CONFIRMATION_REQUESTED`:
+> **`content_fingerprint`** (хэш содержимого действующей ревизии), **`proposed_review_due_at`**
+> (обязателен) и **`revision_version`**. `confirm-review` **пересчитывает** fingerprint по
+> текущему содержимому; **несовпадение → `EVAL_REVIEW_CONTENT_CHANGED`**. Подтверждение
+> применяет **`proposed_review_due_at` из запроса** (подтверждающий не задаёт срок отдельно);
+> `REVIEW_CONFIRMED` связывается с запросом тем же `correlation_id`. **Повторное подтверждение
+> уже закрытого запроса запрещено** (нет открытого запроса → `EVAL_REVIEW_NOT_REQUESTED`).
+> Инвариант «разные акторы request/confirm» (`EVAL_SAME_ACTOR_REVIEW`) сохраняется.
+>
+> Состав fingerprint (детерминированный `sha256`, алгоритм — Spec §16): **decision — 13 полей**
+> (`evaluation_outcome`, `classification`, `recommended_disposition`, `confirmed_severity`,
+> `impact_scope`, `rationale`, `confidence_level`, `confidence_note`, `residual_risk`,
+> `application_conditions`, `required_approval_route`, `revision_reason`, `supersedes_impact`);
+> **sources — 8 полей** (`id`, `source_role`, `source_entity_type`, `source_entity_id`,
+> `source_revision_id`, `source_hash`, `hash_schema_version`, `applicability_note`); плюс
+> `criteria` и `exceptions` (состав — Spec §16). **Исключены:** `status`/`version`; audit
+> actor/time; `verified_at`; `review_due_at`; `is_draft_copy`; события и review-metadata.
+
 ### 1. Контекст
 
 `QualityFinding` фиксирует инженерно значимое выявленное несоответствие, отклонение,

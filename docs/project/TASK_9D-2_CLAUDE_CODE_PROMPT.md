@@ -214,4 +214,47 @@ OUT_OF_SCOPE                           → NOT_APPLICABLE
   **`QUALITY_FINDING` и `JOINT`**; прочие типы — только после проверки реальных моделей и
   их ревизионности.
 
+### Блок 9D-2B/2C — решения валидации и исключений (C11–C17)
+
+Приняты при реализации 9D-2C (канон — ADR-021, детали — Spec §8). Последовательно C11 → C17:
+
+- **C11. Агрегированный `ValidationResult`** — `prepare` возвращает все нарушения сразу, не first-fail.
+- **C12. Read-only checker** — `check_prepare_completeness` без БД/записи `verified_at`/коммитов;
+  свежесть источников передаётся из repository.
+- **C13. `recommended_disposition` обязателен всегда** — при любом исходе; `NONE` — валидное значение.
+- **C14. `INSUFFICIENT_DATA`** — обоснован наличием критерия `comparison_result=INSUFFICIENT_DATA`.
+- **C15. Deviated criterion** — `comparison_result ∈ {DOES_NOT_COMPLY, CONDITIONALLY_COMPLIES}`
+  (только он несёт `EngineeringException`).
+- **C16. `confidence_level=LOW` → `confidence_note`** обязателен (`EVAL_CONFIDENCE_NOTE_REQUIRED`).
+- **C17. Дубль `EngineeringException`** — repository pre-check + DB `UNIQUE(revision_id, criterion_id)`.
+
+### Блок 9D-2E — решения хардненинга (зафиксировано 2026-07-19)
+
+9D-2A–2D реализованы. Блок **9D-2E** дорабатывает три контура (канон ADR-021 не меняется,
+схема БД не расширяется). Детали алгоритмов — Spec §16; канон — DECISIONS/ADR-021 (C18–C20).
+
+- **C18. Копирование содержимого при `create_revision`** — новая ревизия копирует источники/
+  критерии/исключения предыдущей: новые `id`/`revision_id`; исключения `is_draft_copy=true` c
+  переназначением `criterion_id` на копию критерия; источники с `verified_at=NULL`; действующая
+  ревизия **не** `SUPERSEDED` до `set_effective`; одна транзакция; одно событие `EVALUATION_CREATED`
+  со счётчиками копий.
+- **C19. `REVIEW_OVERDUE` идемпотентно** — не на `GET`, а команда `check-review-overdue`
+  (`POST …/{id}/check-review-overdue`); одно событие на просроченный review-цикл
+  (ключ — текущий `review_due_at`); `status`/`QualityFinding` не меняются; метод пригоден для
+  планировщика.
+- **C20. Fingerprint пересмотра** — `request` создаёт `correlation_id`, сохраняет
+  `content_fingerprint`+`proposed_review_due_at`+`revision_version` в metadata; `confirm`
+  пересчитывает fingerprint (расхождение → `EVAL_REVIEW_CONTENT_CHANGED`), применяет
+  `proposed_review_due_at` из запроса, связывается тем же `correlation_id`; повторное
+  подтверждение закрытого запроса запрещено (`EVAL_REVIEW_NOT_REQUESTED`); `EVAL_SAME_ACTOR_REVIEW`
+  сохраняется.
+  Состав fingerprint (детерминированный `sha256`, алгоритм — Spec §16): **decision — 13 полей**
+  (`evaluation_outcome`, `classification`, `recommended_disposition`, `confirmed_severity`,
+  `impact_scope`, `rationale`, `confidence_level`, `confidence_note`, `residual_risk`,
+  `application_conditions`, `required_approval_route`, `revision_reason`, `supersedes_impact`);
+  **sources — 8 полей** (`id`, `source_role`, `source_entity_type`, `source_entity_id`,
+  `source_revision_id`, `source_hash`, `hash_schema_version`, `applicability_note`); плюс `criteria`
+  и `exceptions` (Spec §16). **Исключены:** `status`/`version`; audit actor/time; `verified_at`;
+  `review_due_at`; `is_draft_copy`; события и review-metadata.
+
 Уточнять у владельца до кода только при новых неоднозначностях (модель/миграции/роли).

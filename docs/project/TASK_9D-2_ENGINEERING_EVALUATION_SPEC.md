@@ -5,8 +5,11 @@
 [[DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019]] ·
 план [[IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP|IMPLEMENTATION_PLAN]] (строка 9D-2).
 
-Статус: **NOT IMPLEMENTED.** Реализован только предыдущий блок 9D-1 (`QualityFinding` Core).
-Этот документ переводит канон ADR-021 в реализуемую структуру и **не** меняет канон.
+Статус: **9D-2A–2D РЕАЛИЗОВАНЫ** (ядро+миграция, источники/критерии, исключения/комплектность,
+lifecycle-сервис/API). Осталось **9D-2E** — хардненинг по решениям **9D-2-C18/C19/C20**
+(копирование содержимого ревизии, идемпотентный `REVIEW_OVERDUE`, fingerprint подтверждения
+пересмотра); см. §16. Этот документ переводит канон ADR-021 в реализуемую структуру и **не**
+меняет канон.
 
 > **Главное правило (9D-2-C01), пронизывает весь spec.**
 > `EngineeringEvaluation` фиксирует **что установлено** (`evaluation_outcome`) и
@@ -26,6 +29,30 @@
   `PREPARED → DRAFT` событием `EVALUATION_RETURNED` (причина обязательна).
 - **C10** — полная схема `Revision` сразу; поля nullable в `DRAFT`; enum-CHECK при `NOT NULL`;
   обязательность на `prepare`; `rationale` не безусловный DB `NOT NULL`.
+
+### Решения 9D-2B/2C (C11–C17) — валидация, источники, исключения
+
+Применены при реализации 9D-2C; подробности — §8, канон — ADR-021. Кратко (последовательность C11 → C17):
+
+- **C11** — `prepare` возвращает **агрегированный** `ValidationResult` (все нарушения), не first-fail.
+- **C12** — validation checker строго **read-only** (без БД/записи `verified_at`/коммитов); свежесть
+  источников передаётся из repository.
+- **C13** — `recommended_disposition` **обязателен всегда**; `NONE` — валидное значение.
+- **C14** — исход `INSUFFICIENT_DATA` определяется **наличием критерия** `comparison_result=INSUFFICIENT_DATA`.
+- **C15** — deviated-критерий = `comparison_result ∈ {DOES_NOT_COMPLY, CONDITIONALLY_COMPLIES}`
+  (только он несёт `EngineeringException`).
+- **C16** — `confidence_level = LOW` требует `confidence_note` (`EVAL_CONFIDENCE_NOTE_REQUIRED`).
+- **C17** — дубль `EngineeringException`: repository pre-check + DB `UNIQUE(revision_id, criterion_id)`.
+
+### Решения 9D-2E (C18–C20) — хардненинг
+
+Реализуются в блоке 9D-2E; алгоритмы — §16, канон — ADR-021.
+
+- **C18** — `create_revision` копирует sources/criteria/exceptions (новые id, `is_draft_copy`,
+  переназначение `criterion_id`, сброс `verified_at`, без supersede до `set_effective`, одно событие).
+- **C19** — `REVIEW_OVERDUE` идемпотентно через команду `check-review-overdue` (раз на цикл, статусы не меняет).
+- **C20** — fingerprint пересмотра (`correlation_id`, `content_fingerprint`, `proposed_review_due_at`;
+  mismatch → `EVAL_REVIEW_CONTENT_CHANGED`).
 
 ---
 
@@ -370,21 +397,29 @@ DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED
   требует**. `INSUFFICIENT_DATA` сам по себе `review_due_at` не навязывает — обязательность
   определяется перечисленными условиями. Наступление срока — событие `REVIEW_OVERDUE`, оценку
   автоматически не отменяет.
-- **7.7.** При новой ревизии исключения могут копироваться только как черновые заготовки
-  (`is_draft_copy = true`); действительность/согласования/подтверждения не наследуются.
+- **7.7.** При новой ревизии (`create_revision`, **9D-2-C18**) источники, критерии и исключения
+  предыдущей ревизии **копируются** в новую DRAFT одной транзакцией: каждой копии — новый `id` и
+  новый `revision_id`; исключения — с `is_draft_copy = true` (действительность/согласования/
+  подтверждения **не** наследуются); `exception.criterion_id` переназначается на копию критерия;
+  у источников `verified_at` сбрасывается в `NULL` (перед `prepare` — повторная сверка). Действующая
+  ревизия **не** переводится в `SUPERSEDED` до `set_effective` новой; пишется одно агрегированное
+  событие `EVALUATION_CREATED` со счётчиками копий.
 - **7.8. Подтверждение пересмотра (двухролевой workflow, без внешнего согласования).**
   Когда наступает `review_due_at`, а инженерное содержание действующей (`EFFECTIVE`) ревизии
   не изменилось, пересмотр оформляется без создания новой ревизии:
   1. `WELDING_ENGINEER` инициирует — команда `request-review-confirmation` (событие
-     `REVIEW_CONFIRMATION_REQUESTED`); при необходимости задаёт новый `review_due_at`;
+     `REVIEW_CONFIRMATION_REQUESTED`); **обязательно** задаёт `proposed_review_due_at` (9D-2-C20);
   2. `CHIEF_WELDER` подтверждает — команда `confirm-review` (событие `REVIEW_CONFIRMED`),
-     новый `review_due_at` вступает в силу.
+     вступает в силу `proposed_review_due_at` **из запроса** (подтверждающий срок отдельно не задаёт).
 
-  Инициатор и подтверждающий — **разные** роли (тот же принцип, что prepare/fix). Внешнего
-  согласования в 9D-2 нет. Если изменились источники/критерии/решение/исключения/риск/условия —
-  подтверждение недопустимо, требуется **новая ревизия** (`EVAL_REVIEW_CONTENT_CHANGED`).
-  Наступивший и не подтверждённый срок фиксируется событием `REVIEW_OVERDUE`, но оценку
-  автоматически не отменяет.
+  Инициатор и подтверждающий — **разные** роли (тот же принцип, что prepare/fix; `EVAL_SAME_ACTOR_REVIEW`).
+  Внешнего согласования в 9D-2 нет. Целостность содержимого проверяется **fingerprint** (9D-2-C20,
+  §16): запрос сохраняет `content_fingerprint`, `revision_version` и `correlation_id`; `confirm`
+  пересчитывает fingerprint — при расхождении подтверждение недопустимо, требуется **новая ревизия**
+  (`EVAL_REVIEW_CONTENT_CHANGED`). Запрос и подтверждение связаны одним `correlation_id`; повторное
+  подтверждение закрытого запроса запрещено (`EVAL_REVIEW_NOT_REQUESTED`). Наступление срока
+  фиксируется **идемпотентной командой** `check-review-overdue` (9D-2-C19, §16) — событием
+  `REVIEW_OVERDUE` один раз на review-цикл; оценка/finding **не** меняются.
 - **7.9. Классификация ревизии (C02/C07).** `classification` (§4.8), `confirmed_severity` (§4.6)
   и `impact_scope` (§4.7) обязательны на `prepare`, редактируются только в `DRAFT`, после
   `PREPARED` неизменяемы. Новая ревизия может изменить классификацию. **Актуальная классификация
@@ -497,7 +532,8 @@ REVIEW_OVERDUE       REVIEW_CONFIRMATION_REQUESTED   REVIEW_CONFIRMED
 | `POST …/{id}/set-effective` | FIXED→EFFECTIVE (+SUPERSEDED предыдущей) | `CHIEF_WELDER` |
 | `POST …/{id}/withdraw` | →WITHDRAWN | `WELDING_ENGINEER`/`CHIEF_WELDER` |
 | `POST …/{id}/request-review-confirmation` | инициировать пересмотр без изменения содержания (§7.8) | `WELDING_ENGINEER` |
-| `POST …/{id}/confirm-review` | REVIEW_CONFIRMED без изменения содержания (§7.8) | `CHIEF_WELDER` |
+| `POST …/{id}/confirm-review` | REVIEW_CONFIRMED, применяет `proposed_review_due_at` запроса (§7.8, C20) | `CHIEF_WELDER` |
+| `POST …/{id}/check-review-overdue` | идемпотентно эмитит `REVIEW_OVERDUE` для просроченного цикла (§7.8, C19) | `WELDING_ENGINEER`/`CHIEF_WELDER` |
 | `GET /quality/findings/{finding_id}/engineering-evaluation` | чтение оценки с ревизиями | READ-роли |
 | `GET …/engineering-evaluation-revisions/{id}` · `…/events` | ревизия/журнал | READ-роли |
 
@@ -520,7 +556,7 @@ EVAL_SEVERITY_REQUIRED · EVAL_IMPACT_SCOPE_REQUIRED · EVAL_CLASSIFICATION_REQU
 EVAL_CLASSIFICATION_OUTCOME_MISMATCH
 EVAL_SOURCE_STALE · EVAL_SOURCE_UNAVAILABLE
 EVAL_SOURCE_REVISION_REQUIRED · EVAL_SAME_ACTOR_PREPARE_FIX · EVAL_ALREADY_EFFECTIVE
-EVAL_REVIEW_CONTENT_CHANGED · EVAL_SAME_ACTOR_REVIEW
+EVAL_REVIEW_CONTENT_CHANGED · EVAL_SAME_ACTOR_REVIEW · EVAL_REVIEW_NOT_REQUESTED
 ```
 
 HTTP: 403 (`ROLE_DENIED`); 404 (`NOT_FOUND`); 409 (`VERSION_CONFLICT`,
@@ -605,3 +641,94 @@ CHECK/UNIQUE/индексы
 Код реализует §3–§11; миграция §12 применяется идемпотентно; тесты §13 зелёные; линтер чист;
 канон ADR-021 не изменялся; в модуле 9D-2 нет ни одного пути, меняющего статус `QualityFinding`
 или создающего объекты исполнения/`FindingDisposition`.
+
+---
+
+## 16. Блок 9D-2E — хардненинг (решения 9D-2-C18/C19/C20)
+
+Реализуется поверх 9D-2A–2D, канон ADR-021 не меняет. Схема БД не расширяется: `is_draft_copy`,
+`correlation_id`, `review_due_at` и JSONB-`metadata` событий уже существуют (плановых `ALTER` нет).
+
+### 16.1. Копирование содержимого ревизии (C18)
+
+`create_revision` копирует источники/критерии/исключения предыдущей ревизии
+(`source_rev = previous_revision_id = current_revision_id`) в новую DRAFT одной транзакцией:
+
+```text
+map = {}                                  # old_criterion_id -> new_criterion_id
+for c in criteria(source_rev):            # порядок по created_at
+    c2 = copy(c); c2.id = new; c2.revision_id = new_rev; persist; map[c.id] = c2.id
+for s in sources(source_rev):
+    s2 = copy(s); s2.id = new; s2.revision_id = new_rev; s2.verified_at = NULL; persist
+for e in exceptions(source_rev):
+    e2 = copy(e); e2.id = new; e2.revision_id = new_rev
+    e2.is_draft_copy = true; e2.criterion_id = map[e.criterion_id]; persist
+emit EVALUATION_CREATED(revision=new_rev, metadata={
+    revision_no, source_revision_id=source_rev,
+    sources_copied, criteria_copied, exceptions_copied })
+```
+
+Инварианты: новые `id`/`revision_id`; исключения — `is_draft_copy=true`, `criterion_id`
+переназначен по `map`; `verified_at` источников сброшен (перед `prepare` — повторная сверка);
+действующая ревизия **не** `SUPERSEDED` (замещение — только на `set_effective`); одно
+агрегированное событие; всё атомарно (единый `repo.save()`, откат при ошибке).
+
+### 16.2. Fingerprint подтверждения пересмотра (C20)
+
+Детерминированный хэш «инженерного содержания» ревизии; переиспользует каноникализацию
+`engineering_evaluation_hash` (Decimal без экспоненты/незначащих нулей, UUID→str, None→null).
+**Не** входят: `review_due_at`, `status`, `version`, любые `*_by_worker_id`/`*_at`, `verified_at`,
+`is_draft_copy`.
+
+```text
+payload = {
+  "decision": [evaluation_outcome, classification, recommended_disposition,      # 13 полей
+               confirmed_severity, impact_scope, rationale, confidence_level,
+               confidence_note, residual_risk, application_conditions,
+               required_approval_route, revision_reason, supersedes_impact],
+  "criteria":  sorted_by_id([ [id, requirement_ref, clause, parameter, actual_value,
+                 cdec(actual_num), allowed_value, cdec(allowed_num_min), cdec(allowed_num_max),
+                 unit, comparison_result, applicability_comment, engineer_comment] ]),
+  "sources":   sorted_by_id([ [id, source_role, source_entity_type, source_entity_id,  # 8 полей
+                 source_revision_id, source_hash, hash_schema_version, applicability_note] ]),
+  "exceptions":sorted_by_id([ [id, criterion_id, basis, justification, residual_risk,
+                 conditions, required_approval_route] ]),
+}
+fingerprint = sha256( json(payload, sort_keys, ensure_ascii=False, sep=(",",":")) ).hexdigest()
+```
+
+**Исключены из fingerprint:** `status`/`version`; audit actor/time (`*_by_worker_id`/`*_at`);
+`verified_at`; `review_due_at`; `is_draft_copy`; события и review-metadata. Изменение любого
+включённого поля (решение, критерии, источники, исключения) → новый fingerprint → при `confirm`
+даёт `EVAL_REVIEW_CONTENT_CHANGED`.
+
+Поток:
+- `request-review-confirmation`: генерирует `correlation_id = uuid4()`; событие
+  `REVIEW_CONFIRMATION_REQUESTED` с `metadata = {correlation_id, content_fingerprint,
+  proposed_review_due_at (обязателен), revision_version}`; версию не bump-ит.
+- `confirm-review`: находит открытый запрос (последний `REVIEW_CONFIRMATION_REQUESTED` без
+  парного `REVIEW_CONFIRMED` по `correlation_id`) → иначе `EVAL_REVIEW_NOT_REQUESTED`; актор ≠
+  инициатор → иначе `EVAL_SAME_ACTOR_REVIEW`; пересчитывает fingerprint по текущему содержимому →
+  расхождение `EVAL_REVIEW_CONTENT_CHANGED`; применяет `proposed_review_due_at` из запроса в
+  `revision.review_due_at`, bump version, событие `REVIEW_CONFIRMED` с тем же `correlation_id`.
+  Повторное подтверждение того же `correlation_id` невозможно (запрос закрыт).
+
+### 16.3. Идемпотентный `REVIEW_OVERDUE` (C19)
+
+Команда `check-review-overdue` (эндпойнт `POST …/{id}/check-review-overdue`); **не** эмитится на
+`GET`. Review-цикл идентифицируется значением `review_due_at` действующей ревизии.
+
+```text
+check_review_overdue(revision, now):
+  if revision.status != EFFECTIVE or effective_revision_id != revision.id: return no-op
+  due = revision.review_due_at
+  if due is None or due >= now: return no-op
+  cycle = iso(due)
+  if exists REVIEW_OVERDUE event(revision) with metadata.review_due_at == cycle: return no-op  # идемпотентно
+  emit REVIEW_OVERDUE(revision, metadata={review_due_at=cycle, revision_version})
+  # НЕ меняем revision.status и НЕ трогаем QualityFinding
+```
+
+Свойства: одно событие на цикл; после `confirm-review` (новый `review_due_at`) — новый цикл,
+возможно новое событие; метод чист/идемпотентен и пригоден для будущего вызова планировщиком
+(системный актор перечисляет просроченные действующие ревизии и вызывает команду).
