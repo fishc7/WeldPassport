@@ -2375,6 +2375,50 @@ ACTIVE → CONFIRMED → PARTIALLY_RELEASED → RELEASED
 
 ---
 
+## Архитектурное согласование Task 9D-3 / ADR-022 (2026-07-20)
+
+Согласована техническая модель `Defect` для блока **Task 9D-3** и зафиксирована как
+**ADR-022 — Defect Technical Model** (статус `Accepted`, 2026-07-20). Сессия
+исключительно документационная: **код, модели, миграции, API и тесты не создавались**;
+следующий этап — Implementation Spec Task 9D-3.
+
+Ключевые положения:
+
+- `Defect` — **самостоятельная техническая запись** подтверждённого дефекта `Joint`;
+  не `QualityFinding`, не `EngineeringEvaluation`, не `FindingDisposition`, не Repair/Reweld,
+  не повторный контроль, не закрытие несоответствия.
+- Регистрация **только** явной командой при `QualityFinding` + `EFFECTIVE`
+  `EngineeringEvaluationRevision` с классификацией `CONFIRMED_DEFECT`; прямое создание из
+  результата НК запрещено; лаборатория/НК `Defect` не создают.
+- Lifecycle `DRAFT → ACTIVE → SUPERSEDED` (+ `CANCELLED`), **без** `REPAIRED`/`REMOVED`/
+  `REWELDED`/`ACCEPTED`/`CLOSED`/`PASSED_REINSPECTION`; исправление — через supersede
+  (новый UUID, общий `defect_root`, одна действующая версия); физического удаления нет.
+- Границы: disposition — контур `FindingDisposition` (9D-4); Repair/Reweld/Reinspection —
+  будущие контуры; ремонт и повторный контроль не изменяют и не заменяют исходный `Defect`.
+
+Номер: `ADR-021` уже занят каноном `EngineeringEvaluation` (Task 9D-2), поэтому техническая
+модель `Defect` зафиксирована под следующим свободным номером **ADR-022**; канон Task 9D-2
+не изменяется. Модель `Defect` уточняет и сужает ранний ремонт-ориентированный lifecycle
+ADR-017 и «вычисляемый lifecycle» ADR-019 (текст ADR-017/ADR-019 не переписывается).
+
+### Связанные ADR
+
+- [[docs/project/DECISIONS#ADR-022. Defect Technical Model (Task 9D-3)|ADR-022 — Defect Technical Model (Task 9D-3)]]
+- Продолжает [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019]] ·
+  опирается на [[docs/project/DECISIONS#ADR-021. EngineeringEvaluation Core Canon (Task 9D-2)|ADR-021]] ·
+  [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]] ·
+  [[docs/project/DECISIONS#ADR-016. Quality Execution Model (Task 9C)|ADR-016]]
+
+### Синхронизированные документы
+
+- `docs/project/DECISIONS.md` (ADR-022)
+- `docs/ARCHITECTURE.md` (§5.10)
+- `docs/project/PROJECT_SUMMARY.md` (Текущий статус архитектуры)
+- `docs/project/UBIQUITOUS_LANGUAGE.md` (термины Defect / Defect Root / Defect Revision / Confirmed Defect / Defect Supersede / Defect Cancellation)
+- `docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md` (Task 9D-3)
+
+---
+
 ## Шаблон новой сессии
 
 ```markdown
@@ -2413,4 +2457,6 @@ Documents and Printed Forms Canon; Session 008-07 завершена 2026-07-16 
 углублённая архитектура Task 9D, Quality Finding and Engineering Evaluation, решения
 008-07-BO/BP/BQ; ADR-017 = PARTIALLY_SUPERSEDED_BY_ADR-019; действующая структура
 качества — Tasks 9D-1 … 9D-8 (историческая 9E — 9K → SUPERSEDED_BY_TASK_9D), реализация
-не начата. Session 007 завершена; Task 9C — ADR-016).*
+не начата. Session 007 завершена; Task 9C — ADR-016. Консолидация Task 9C — 2026-07-15;
+архитектурное согласование Task 9D-3 / ADR-022 — Defect Technical Model — 2026-07-20,
+статус Accepted, реализация не начата).*

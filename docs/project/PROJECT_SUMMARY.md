@@ -99,6 +99,14 @@ WeldPassport — внутренняя система для отдела гла�
   (решение 008-07-BO); историческая разбивка Session 008 на **9E — 9K** —
   `SUPERSEDED_BY_TASK_9D`. Роль `OTK_INSPECTOR` — опциональная проектная роль, fallback —
   `CHIEF_WELDER` (008-07-BP). Модели, миграции и API **не создавались**.
+- **Task 9D — реализация начата (2026-07-20).** Блоки **9D-1** (`QualityFinding` Core) и
+  **9D-2** (`EngineeringEvaluation`, ADR-021; блоки 9D-2A — 9D-2E) — **реализованы**. Блок
+  **9D-3 — Defect Technical Model** зафиксирован как **ADR-022** (Accepted, 2026-07-20):
+  `Defect` — самостоятельная техническая запись, происхождение только из `CONFIRMED_DEFECT`,
+  lifecycle `DRAFT → ACTIVE → SUPERSEDED` (+ `CANCELLED`) без `REPAIRED`/`CLOSED`, исправление
+  через supersede, граница с `FindingDisposition` и Repair/Reweld/Reinspection. **Task 9D-3
+  на стадии подготовки Implementation Spec; реализация `Defect` ещё не начата** (модели,
+  миграции, API и тесты не создавались).
 - **Инженерный контур реализован** (Tasks 1–7):
   `Project → Line → EngineeringDocument → DocumentRevision → Joint` (ADR-010/011).
 - **WeldOperation реализован** — Tasks **8A — 8E** (ADR-012, импорт — ADR-013).

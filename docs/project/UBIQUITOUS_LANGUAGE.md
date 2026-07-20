@@ -1415,6 +1415,18 @@ ADR-006
 > `CHIEF_WELDER`. См. также [[#Defect Type|Defect Type]],
 > [[#Defect Measurement|Defect Measurement]],
 > [[#Defect Acceptance Assessment|Defect Acceptance Assessment]] (Раздел 11).
+>
+> **Уточнение (Task 9D-3, ADR-022).** Техническая модель `Defect` для реализации Task 9D-3 —
+> **самостоятельная техническая запись** с явным жизненным циклом
+> [[#Defect Revision|`DRAFT → ACTIVE → SUPERSEDED`]] (+ `CANCELLED`) **без** статусов
+> `REPAIRED`/`REMOVED`/`REWELDED`/`ACCEPTED`/`CLOSED`/`PASSED_REINSPECTION`. Ремонт-ориентированный
+> lifecycle ADR-017 (`REPAIR_REQUIRED`/`CLOSED_AFTER_REPAIR` и т.п.) в технической модели **не
+> применяется**; ремонт, повторный контроль, приемлемость ([[#Defect Acceptance Assessment|Defect
+> Acceptance Assessment]]), disposition и закрытие относятся к отдельным контурам и в `Defect` не
+> входят. Исправление — только через [[#Defect Supersede|supersede]] (см. [[#Defect Root|Defect Root]],
+> [[#Defect Revision|Defect Revision]]); отмена ошибочной записи — [[#Defect Cancellation|Defect
+> Cancellation]]. Регистрация — только на [[#Confirmed Defect|Confirmed Defect]] (`CONFIRMED_DEFECT`).
+> Полный канон — [[docs/project/DECISIONS#ADR-022. Defect Technical Model (Task 9D-3)|ADR-022]].
 
 ### Определение
 
@@ -3429,7 +3441,99 @@ ADR-019
 
 ---
 
-*Версия словаря: 2026-07-16. Канонических терминов: 59 (+ Session 008: 18 новых
+## Defect Root
+
+**Статус:** Канон (Task 9D-3 / ADR-022; реализация не начата)
+
+### Определение
+
+Стабильный **корневой идентификатор** технического дефекта, общий для всех его версий
+([[#Defect Revision|Defect Revision]]). Сохраняется при [[#Defect Supersede|supersede]] и
+связывает цепочку версий одного [[#Defect|Defect]]. В одной цепочке версий по `defect_root`
+может быть только **одна** действующая (`ACTIVE`) версия. Номер версии не заменяет UUID и не
+заменяет `defect_root`.
+
+### Связанные ADR
+
+ADR-022
+
+---
+
+## Defect Revision
+
+**Статус:** Канон (Task 9D-3 / ADR-022; реализация не начата)
+
+### Определение
+
+Конкретная **версия** технической записи [[#Defect|Defect]]. Каждая версия имеет собственный
+UUID, общий [[#Defect Root|Defect Root]], ссылку на предыдущую версию и причину изменения.
+Жизненный цикл версии — `DRAFT → ACTIVE → SUPERSEDED` (+ `CANCELLED`). После активации
+существенные технические поля версии напрямую не изменяются — новое значение оформляется новой
+версией через [[#Defect Supersede|Defect Supersede]].
+
+### Связанные ADR
+
+ADR-022
+
+---
+
+## Confirmed Defect
+
+**Статус:** Канон (Task 9D-2/9D-3 / ADR-021, ADR-022; реализация Defect не начата)
+
+### Определение
+
+Результат [[#Engineering Evaluation|Engineering Evaluation]] с классификацией `CONFIRMED_DEFECT`
+(в действующей `EFFECTIVE` `EngineeringEvaluationRevision`). Является **единственным основанием**
+регистрации [[#Defect|Defect]]: `Defect` создаётся только явной доменной командой при наличии
+[[#Quality Finding|Quality Finding]] и подтверждённой оценки с `CONFIRMED_DEFECT`. Прямое
+создание `Defect` из результата НК запрещено; лаборатория и исполнитель НК `Defect` не создают
+и не подтверждают.
+
+### Связанные ADR
+
+ADR-019, ADR-021, ADR-022
+
+---
+
+## Defect Supersede
+
+**Статус:** Канон (Task 9D-3 / ADR-022; реализация не начата)
+
+### Определение
+
+Механизм исправления **действующей** ([[#Defect Revision|ACTIVE]]) записи [[#Defect|Defect]]:
+создаётся новая версия (новый UUID, общий [[#Defect Root|Defect Root]], ссылка на предыдущую,
+причина изменения); после активации новой версии предыдущая получает статус `SUPERSEDED`.
+Supersede **не означает устранение дефекта** — исходная запись сохраняется как исторический
+технический факт. Прямое редактирование существенных полей активной записи вместо supersede
+не допускается.
+
+### Связанные ADR
+
+ADR-022
+
+---
+
+## Defect Cancellation
+
+**Статус:** Канон (Task 9D-3 / ADR-022; реализация не начата)
+
+### Определение
+
+Аннулирование **ошибочно созданной** записи [[#Defect|Defect]] через статус `CANCELLED`.
+Применяется, когда запись создана ошибочно; **не означает устранение дефекта** и не является
+ремонтом, повторным контролем или закрытием несоответствия. `CANCELLED` неизменяем, кроме
+разрешённых служебных полей. Физическое удаление `Defect` через бизнес-API запрещено —
+ошибочные записи отменяются только через `CANCELLED`.
+
+### Связанные ADR
+
+ADR-022
+
+---
+
+*Версия словаря: 2026-07-20. Канонических терминов: 64 (+ Session 008: 18 новых
 терминов, `Repair` и `Reinspection` переведены из черновика в канон, `Defect`
 уточнён под ADR-017; + Session 008-06 / ADR-018: 6 новых терминов — Official
 Document, Document Revision, Document Snapshot, Document Source, Document Template,
@@ -3439,4 +3543,6 @@ Responsibility / Pattern / CAPA / Compliance как точки расширен�
 `Engineering Evaluation` уточнены. Решения 008-07-BQ: `Quality Decision` переведён в
 обобщённое бизнес-понятие (не доменная сущность), `Defect Severity` — исторический
 термин, заменён на `Confirmed Severity`; 008-07-BP: `OTK_INSPECTOR` — опциональная
-проектная роль). Черновиков: 28.*
+проектная роль; + Task 9D-3 / ADR-022: 5 новых терминов — Defect Root, Defect Revision,
+Confirmed Defect, Defect Supersede, Defect Cancellation; `Defect` уточнён под техническую
+модель ADR-022, ремонт-ориентированный lifecycle ADR-017 в ней не применяется). Черновиков: 28.*
