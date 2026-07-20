@@ -27,7 +27,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 from app.engineering.models import Joint
 from app.engineering.repository import EngineeringRepo
 from app.projects.repository import ProjectRepo
+from app.quality import engineering_evaluation_hash as eeh
 from app.quality import engineering_evaluation_workflow as eew
 from app.quality.engineering_evaluation_models import (
     EngineeringEvaluation,
@@ -45,6 +46,7 @@ from app.quality.engineering_evaluation_repository import (
     EngineeringEvaluationRepository,
 )
 from app.quality.engineering_evaluation_schemas import (
+    CheckReviewOverdueCommand,
     ConfirmReviewCommand,
     CriterionAddCommand,
     CriterionRead,
@@ -208,6 +210,7 @@ class EngineeringEvaluationService:
         to_status: str | None = None,
         reason: str | None = None,
         metadata: dict | None = None,
+        correlation_id: UUID | None = None,
     ) -> None:
         self._repo.add_event(
             EngineeringEvaluationEvent(
@@ -220,6 +223,7 @@ class EngineeringEvaluationService:
                 actor_role=actor_role,
                 reason=reason,
                 event_metadata=metadata,
+                correlation_id=correlation_id,
                 revision_version=revision.version if revision is not None else None,
             )
         )
@@ -894,18 +898,22 @@ class EngineeringEvaluationService:
                     "Инициировать пересмотр можно только для действующей ревизии",
                 )
             self._check_version(revision, data.expected_version)
-            metadata: dict[str, Any] = {}
-            if data.proposed_review_due_at is not None:
-                metadata["proposed_review_due_at"] = (
-                    data.proposed_review_due_at.isoformat()
-                )
+            # C20: снимок содержимого + связующий correlation_id для confirm.
+            correlation_id = uuid4()
+            metadata: dict[str, Any] = {
+                "correlation_id": str(correlation_id),
+                "content_fingerprint": self._revision_fingerprint(revision),
+                "proposed_review_due_at": data.proposed_review_due_at.isoformat(),
+                "revision_version": revision.version,
+            }
             self._record_event(
                 evaluation.id,
                 revision,
                 "REVIEW_CONFIRMATION_REQUESTED",
                 actor_worker_id,
                 actor_role=actor_role,
-                metadata=metadata or None,
+                metadata=metadata,
+                correlation_id=correlation_id,
             )
             self._repo.save()
         return self._assemble_detail(revision)
@@ -933,19 +941,29 @@ class EngineeringEvaluationService:
                     "Действующее содержание изменилось — требуется новая ревизия",
                 )
             self._check_version(revision, data.expected_version)
-            requester = self._pending_review_requester(evaluation.id, revision.id)
-            if requester is None:
+            request = self._repo.latest_open_review_request(
+                evaluation.id, revision.id
+            )
+            if request is None:
                 raise eew.EvaluationError(
                     eew.EVAL_REVIEW_NOT_REQUESTED,
                     "Нет ожидающего запроса на подтверждение пересмотра",
                 )
-            if requester == actor_worker_id:
+            if request.actor_worker_id == actor_worker_id:
                 raise eew.EvaluationError(
                     eew.EVAL_SAME_ACTOR_REVIEW,
                     "Подтверждение должно выполняться иным актором, чем инициатор",
                 )
-            # Единственная допустимая правка EFFECTIVE-ревизии (§7.8): срок пересмотра.
-            revision.review_due_at = data.review_due_at
+            meta = request.event_metadata or {}
+            # C20: пересчёт fingerprint по текущему содержимому и сверка со снимком.
+            if self._revision_fingerprint(revision) != meta.get("content_fingerprint"):
+                raise eew.EvaluationError(
+                    eew.EVAL_REVIEW_CONTENT_CHANGED,
+                    "Содержимое изменилось с момента запроса — требуется новая ревизия",
+                )
+            # Вступает предложенный в запросе срок (единственная правка EFFECTIVE, §7.8).
+            new_due = datetime.fromisoformat(meta["proposed_review_due_at"])
+            revision.review_due_at = new_due
             revision.updated_by_worker_id = actor_worker_id
             revision.version += 1
             self._record_event(
@@ -954,21 +972,62 @@ class EngineeringEvaluationService:
                 "REVIEW_CONFIRMED",
                 actor_worker_id,
                 actor_role=actor_role,
-                metadata={"review_due_at": data.review_due_at.isoformat()},
+                metadata={
+                    "review_due_at": new_due.isoformat(),
+                    "correlation_id": str(request.correlation_id),
+                },
+                correlation_id=request.correlation_id,
             )
             self._repo.save()
         return self._assemble_detail(revision)
 
-    def _pending_review_requester(
-        self, evaluation_id: UUID, revision_id: UUID
-    ) -> int | None:
-        """Актор последнего REVIEW_CONFIRMATION_REQUESTED без последующего REVIEW_CONFIRMED."""
-        requester: int | None = None
-        for event in self._repo.list_events(evaluation_id):
-            if event.revision_id != revision_id:
-                continue
-            if event.event_type == "REVIEW_CONFIRMATION_REQUESTED":
-                requester = event.actor_worker_id
-            elif event.event_type == "REVIEW_CONFIRMED":
-                requester = None
-        return requester
+    def _revision_fingerprint(
+        self, revision: EngineeringEvaluationRevision
+    ) -> str:
+        """Fingerprint содержимого ревизии (C20): загрузка списков + pure-хэш (§16)."""
+        return eeh.compute_revision_fingerprint(
+            revision,
+            criteria=self._repo.list_criteria(revision.id),
+            sources=self._repo.list_sources(revision.id),
+            exceptions=self._repo.list_exceptions(revision.id),
+        )
+
+    # ── Просрочка пересмотра (§7.8, C19; идемпотентно, пригодно для планировщика) ─
+
+    def check_review_overdue(
+        self,
+        revision_id: UUID,
+        data: CheckReviewOverdueCommand,
+        *,
+        actor_worker_id: int,
+    ) -> RevisionDetailRead:
+        revision, evaluation, joint = self._resolve_editable(
+            revision_id, actor_worker_id
+        )
+        self._require_roles(
+            joint, actor_worker_id, eew.EVALUATION_WITHDRAW_ROLES, "check-review-overdue"
+        )
+        with self._translate():
+            # Только для действующей ревизии; статус/finding НЕ меняются (C19/C04).
+            is_active = (
+                revision.status == eew.EVAL_EFFECTIVE
+                and evaluation.effective_revision_id == revision.id
+            )
+            due = revision.review_due_at
+            if is_active and due is not None and due < _now():
+                cycle = due.isoformat()
+                if not self._repo.has_review_overdue_for_cycle(
+                    evaluation.id, revision.id, cycle
+                ):
+                    self._record_event(
+                        evaluation.id,
+                        revision,
+                        "REVIEW_OVERDUE",
+                        actor_worker_id,
+                        metadata={
+                            "review_due_at": cycle,
+                            "revision_version": revision.version,
+                        },
+                    )
+                    self._repo.save()
+        return self._assemble_detail(revision)

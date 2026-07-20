@@ -239,21 +239,36 @@ class WithdrawCommand(ReasonCommand):
 
 
 class RequestReviewConfirmationCommand(BaseModel):
-    """Инициировать пересмотр действующей оценки без изменения содержания (§7.8)."""
+    """Инициировать пересмотр действующей оценки без изменения содержания (§7.8, C20).
+
+    `proposed_review_due_at` **обязателен**: подтверждающий не задаёт срок отдельно —
+    вступает в силу именно предложенное значение. Запрос фиксирует `content_fingerprint`,
+    `correlation_id` и `revision_version` в metadata события (сервис)."""
 
     model_config = ConfigDict(extra="forbid")
 
     expected_version: int
-    proposed_review_due_at: datetime | None = None
+    proposed_review_due_at: datetime
 
 
 class ConfirmReviewCommand(BaseModel):
-    """Подтвердить пересмотр (§7.8): вступает новый `review_due_at`; иной актор, чем инициатор."""
+    """Подтвердить пересмотр (§7.8, C20): применяет `proposed_review_due_at` из запроса.
+
+    Срок отдельно не передаётся (берётся из активного запроса). Подтверждает иной актор,
+    чем инициатор; fingerprint пересчитывается и сверяется с запросом."""
 
     model_config = ConfigDict(extra="forbid")
 
     expected_version: int
-    review_due_at: datetime
+
+
+class CheckReviewOverdueCommand(BaseModel):
+    """Идемпотентная проверка просрочки пересмотра (§7.8, C19).
+
+    Тело пустое: команда лишь эмитит `REVIEW_OVERDUE` один раз на просроченный review-цикл.
+    Пригодна для вызова планировщиком (системный актор)."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 # ── Выход: DTO чтения ─────────────────────────────────────────────────────────────

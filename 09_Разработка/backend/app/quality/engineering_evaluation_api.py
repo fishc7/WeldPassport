@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.quality.engineering_evaluation_schemas import (
+    CheckReviewOverdueCommand,
     ConfirmReviewCommand,
     CriterionAddCommand,
     CriterionRead,
@@ -314,6 +315,21 @@ def confirm_review(
     uid: int = Depends(get_current_user_id),
 ):
     return svc.confirm_review(revision_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    f"{_REV}/{{revision_id}}/check-review-overdue",
+    response_model=RevisionDetailRead,
+)
+def check_review_overdue(
+    revision_id: UUID,
+    data: CheckReviewOverdueCommand | None = None,
+    svc: EngineeringEvaluationService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.check_review_overdue(
+        revision_id, data or CheckReviewOverdueCommand(), actor_worker_id=uid
+    )
 
 
 # ── События (append-only) ──────────────────────────────────────────────────────

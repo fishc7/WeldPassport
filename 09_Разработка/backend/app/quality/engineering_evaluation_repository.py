@@ -175,7 +175,12 @@ class EngineeringEvaluationRepository:
         `UNIQUE(evaluation_id, revision_no)`). `revision_reason` обязателен со второй
         ревизии (CHECK). Указатель `current_revision_id` переводится на новую ревизию;
         `effective_revision_id` не трогается (действующая остаётся до `set-effective`).
-        Событие `EVALUATION_CREATED` на уровне новой ревизии.
+
+        Содержимое `previous_revision_id` **копируется** (9D-2-C18): источники, критерии,
+        исключения — с новыми `id`/`revision_id`; исключения c `is_draft_copy = true` и
+        `criterion_id`, переназначенным на копию критерия; у источников `verified_at`
+        сбрасывается. Всё — в одной транзакции; одно агрегированное событие
+        `EVALUATION_CREATED` со счётчиками копий.
         """
         max_no = (
             self.db.query(func.max(EngineeringEvaluationRevision.revision_no))
@@ -195,6 +200,10 @@ class EngineeringEvaluationRepository:
         self.db.add(revision)
         self.db.flush()
 
+        counts = self._copy_revision_children(
+            previous_revision_id, revision, actor_worker_id
+        )
+
         evaluation.current_revision_id = revision.id
         evaluation.updated_by_worker_id = actor_worker_id
         evaluation.version += 1
@@ -209,10 +218,139 @@ class EngineeringEvaluationRepository:
                 actor_worker_id=actor_worker_id,
                 actor_role=actor_role,
                 revision_version=revision.version,
-                event_metadata={"revision_no": revision.revision_no},
+                event_metadata={
+                    "revision_no": revision.revision_no,
+                    "source_revision_id": (
+                        str(previous_revision_id)
+                        if previous_revision_id is not None
+                        else None
+                    ),
+                    "criteria_copied": counts["criteria"],
+                    "sources_copied": counts["sources"],
+                    "exceptions_copied": counts["exceptions"],
+                },
             )
         )
         return revision
+
+    def _copy_revision_children(
+        self,
+        source_revision_id: UUID | None,
+        new_revision: EngineeringEvaluationRevision,
+        actor_worker_id: int,
+    ) -> dict[str, int]:
+        """Копирует sources/criteria/exceptions в новую ревизию (9D-2-C18).
+
+        Порядок: критерии → карта `old_id → new_id` → источники → исключения (с
+        переназначением `criterion_id` и `is_draft_copy=true`). Источники получают
+        `verified_at=NULL` (перед `prepare` — повторная сверка). Событий на копии не
+        пишется — их суммирует агрегированное `EVALUATION_CREATED`.
+        """
+        if source_revision_id is None:
+            return {"criteria": 0, "sources": 0, "exceptions": 0}
+
+        criterion_map: dict[UUID, UUID] = {}
+        criteria = self.list_criteria(source_revision_id)
+        for c in criteria:
+            copy = EngineeringEvaluationCriterion(
+                revision_id=new_revision.id,
+                requirement_ref=c.requirement_ref,
+                clause=c.clause,
+                parameter=c.parameter,
+                actual_value=c.actual_value,
+                actual_num=c.actual_num,
+                allowed_value=c.allowed_value,
+                allowed_num_min=c.allowed_num_min,
+                allowed_num_max=c.allowed_num_max,
+                unit=c.unit,
+                comparison_result=c.comparison_result,
+                applicability_comment=c.applicability_comment,
+                engineer_comment=c.engineer_comment,
+                created_by_worker_id=actor_worker_id,
+            )
+            self.db.add(copy)
+            self.db.flush()
+            criterion_map[c.id] = copy.id
+
+        sources = self.list_sources(source_revision_id)
+        for s in sources:
+            self.db.add(
+                EngineeringEvaluationSource(
+                    revision_id=new_revision.id,
+                    source_role=s.source_role,
+                    source_entity_type=s.source_entity_type,
+                    source_entity_id=s.source_entity_id,
+                    source_revision_id=s.source_revision_id,
+                    source_hash=s.source_hash,
+                    hash_schema_version=s.hash_schema_version,
+                    verified_at=None,  # C18: требуется повторная сверка
+                    applicability_note=s.applicability_note,
+                    created_by_worker_id=actor_worker_id,
+                )
+            )
+
+        exceptions = self.list_exceptions(source_revision_id)
+        for e in exceptions:
+            self.db.add(
+                EngineeringException(
+                    revision_id=new_revision.id,
+                    criterion_id=criterion_map[e.criterion_id],
+                    basis=e.basis,
+                    justification=e.justification,
+                    residual_risk=e.residual_risk,
+                    conditions=e.conditions,
+                    required_approval_route=e.required_approval_route,
+                    is_draft_copy=True,  # C18: черновая заготовка
+                    created_by_worker_id=actor_worker_id,
+                )
+            )
+        self.db.flush()
+        return {
+            "criteria": len(criteria),
+            "sources": len(sources),
+            "exceptions": len(exceptions),
+        }
+
+    # ── Обзор пересмотра / просрочки (Task 9D-2E; C19/C20) ─────────────────────
+
+    def latest_open_review_request(
+        self, evaluation_id: UUID, revision_id: UUID
+    ) -> EngineeringEvaluationEvent | None:
+        """Последний `REVIEW_CONFIRMATION_REQUESTED` без парного `REVIEW_CONFIRMED`.
+
+        Пара определяется по `correlation_id`: подтверждённый запрос закрыт. Возвращает
+        событие-запрос (несёт `content_fingerprint`, `proposed_review_due_at`,
+        `correlation_id`, actor) или None."""
+        open_request: EngineeringEvaluationEvent | None = None
+        confirmed: set[UUID] = set()
+        for event in self.list_events(evaluation_id):
+            if event.revision_id != revision_id:
+                continue
+            if event.event_type == "REVIEW_CONFIRMED":
+                if event.correlation_id is not None:
+                    confirmed.add(event.correlation_id)
+        for event in self.list_events(evaluation_id):
+            if event.revision_id != revision_id:
+                continue
+            if event.event_type == "REVIEW_CONFIRMATION_REQUESTED":
+                if event.correlation_id is not None and event.correlation_id in confirmed:
+                    continue
+                open_request = event  # последний незакрытый
+        return open_request
+
+    def has_review_overdue_for_cycle(
+        self, evaluation_id: UUID, revision_id: UUID, cycle_iso: str
+    ) -> bool:
+        """Есть ли уже `REVIEW_OVERDUE` для данного review-цикла (ключ — `review_due_at`)."""
+        for event in self.list_events(evaluation_id):
+            if event.revision_id != revision_id:
+                continue
+            if event.event_type != "REVIEW_OVERDUE":
+                continue
+            meta = event.event_metadata or {}
+            if meta.get("review_due_at") == cycle_iso:
+                return True
+        return False
 
     # ── Чтение ─────────────────────────────────────────────────────────────────
 

@@ -152,3 +152,119 @@ def compute_source_hash(
     payload = _serialize(source_entity_type, entity)
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     return digest, profile_version(source_entity_type)
+
+
+# ── Fingerprint содержимого ревизии (Task 9D-2E, 9D-2-C20) ──────────────────────
+# Детерминированный хэш «инженерного содержания» действующей ревизии для двухролевого
+# подтверждения пересмотра (§7.8, §16). Pure/read-only: работает над уже загруженными
+# объектами (как validation checker, C12), в БД не ходит. Состав фиксирован Spec §16.
+
+# decision — 13 полей (порядок фиксирован каноном).
+_FINGERPRINT_DECISION_FIELDS: tuple[str, ...] = (
+    "evaluation_outcome",
+    "classification",
+    "recommended_disposition",
+    "confirmed_severity",
+    "impact_scope",
+    "rationale",
+    "confidence_level",
+    "confidence_note",
+    "residual_risk",
+    "application_conditions",
+    "required_approval_route",
+    "revision_reason",
+    "supersedes_impact",
+)
+# criteria — 12 содержательных полей после id.
+_FINGERPRINT_CRITERION_FIELDS: tuple[str, ...] = (
+    "requirement_ref",
+    "clause",
+    "parameter",
+    "actual_value",
+    "actual_num",
+    "allowed_value",
+    "allowed_num_min",
+    "allowed_num_max",
+    "unit",
+    "comparison_result",
+    "applicability_comment",
+    "engineer_comment",
+)
+# sources — 7 полей после id.
+_FINGERPRINT_SOURCE_FIELDS: tuple[str, ...] = (
+    "source_role",
+    "source_entity_type",
+    "source_entity_id",
+    "source_revision_id",
+    "source_hash",
+    "hash_schema_version",
+    "applicability_note",
+)
+# exceptions — 6 полей после id.
+_FINGERPRINT_EXCEPTION_FIELDS: tuple[str, ...] = (
+    "criterion_id",
+    "basis",
+    "justification",
+    "residual_risk",
+    "conditions",
+    "required_approval_route",
+)
+
+# Числовые поля критерия — каноникализуются через Decimal (стабильность float↔numeric).
+_FINGERPRINT_NUMERIC_FIELDS: frozenset[str] = frozenset(
+    {"actual_num", "allowed_num_min", "allowed_num_max"}
+)
+
+
+def _fp_value(field: str, value: Any) -> Any:
+    """Нормализация значения поля для fingerprint (числа — через canonical_decimal)."""
+    if value is None:
+        return None
+    if field in _FINGERPRINT_NUMERIC_FIELDS:
+        # numeric может прийти как Decimal или float — приводим детерминированно.
+        return canonical_decimal(Decimal(str(value)))
+    return _normalize(value)
+
+
+def _fp_row(entity: Any, fields: tuple[str, ...]) -> list[Any]:
+    return [str(entity.id)] + [_fp_value(f, getattr(entity, f)) for f in fields]
+
+
+def compute_revision_fingerprint(
+    revision: Any,
+    *,
+    criteria: Any,
+    sources: Any,
+    exceptions: Any,
+) -> str:
+    """Возвращает `sha256`-hex fingerprint содержимого ревизии (C20, Spec §16).
+
+    Исключены: `status`/`version`, audit actor/time, `verified_at`, `review_due_at`,
+    `is_draft_copy`, события и review-metadata. Дочерние строки сортируются по `id`
+    (порядок независим). Вызывающий передаёт уже загруженные списки (read-only).
+    """
+    decision = [
+        _fp_value(f, getattr(revision, f)) for f in _FINGERPRINT_DECISION_FIELDS
+    ]
+    crit_rows = sorted(
+        (_fp_row(c, _FINGERPRINT_CRITERION_FIELDS) for c in criteria),
+        key=lambda r: r[0],
+    )
+    src_rows = sorted(
+        (_fp_row(s, _FINGERPRINT_SOURCE_FIELDS) for s in sources),
+        key=lambda r: r[0],
+    )
+    exc_rows = sorted(
+        (_fp_row(e, _FINGERPRINT_EXCEPTION_FIELDS) for e in exceptions),
+        key=lambda r: r[0],
+    )
+    payload = {
+        "decision": decision,
+        "criteria": crit_rows,
+        "sources": src_rows,
+        "exceptions": exc_rows,
+    }
+    blob = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()

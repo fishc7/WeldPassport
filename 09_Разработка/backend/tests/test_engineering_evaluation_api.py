@@ -401,7 +401,8 @@ def test_review_confirmation_two_roles(client: TestClient, db: Session):
     assert api.cmd(
         rid, "request-review-confirmation", api.ogs, proposed_review_due_at=FUTURE
     ).status_code == 200
-    r = api.cmd(rid, "confirm-review", api.chief, review_due_at=FUTURE)
+    # confirm срок отдельно не передаёт — применяется proposed из запроса (C20).
+    r = api.cmd(rid, "confirm-review", api.chief)
     assert r.status_code == 200, r.text
     assert r.json()["review_due_at"] is not None
 
@@ -419,7 +420,9 @@ def test_review_confirm_same_actor_rejected(client: TestClient, db: Session):
         )
     )
     db.commit()
-    assert api.cmd(rid, "request-review-confirmation", api.chief).status_code == 200
-    r = api.cmd(rid, "confirm-review", api.chief, review_due_at=FUTURE)
+    assert api.cmd(
+        rid, "request-review-confirmation", api.chief, proposed_review_due_at=FUTURE
+    ).status_code == 200
+    r = api.cmd(rid, "confirm-review", api.chief)
     assert r.status_code == 409
     assert r.json()["detail"]["code"] == eew.EVAL_SAME_ACTOR_REVIEW
