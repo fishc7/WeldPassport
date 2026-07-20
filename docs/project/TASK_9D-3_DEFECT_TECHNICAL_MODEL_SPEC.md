@@ -1,6 +1,8 @@
 # Implementation Spec — Task 9D-3 · Defect Technical Model
 
-Канон: [[DECISIONS#ADR-022. Defect Technical Model (Task 9D-3)|ADR-022]] · опирается на
+Канон: [[DECISIONS#ADR-022. Defect Technical Model (Task 9D-3)|ADR-022]] ·
+[[ADR-022-ADDENDUM-DEFECT-SUPERSEDE-TIMING|ADR-022 Addendum D-3B-S01]] (supersede-time — авторитет по
+моменту исполнения supersede) · опирается на
 [[DECISIONS#ADR-021. EngineeringEvaluation Core Canon (Task 9D-2)|ADR-021]]
 (`EFFECTIVE` `EngineeringEvaluationRevision` с `classification = CONFIRMED_DEFECT` — единственное
 основание) · [[DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019]] ·
@@ -34,9 +36,12 @@ ADR-022 не изменяется). Последовательно **9D-3-D01 �
 - **D04 — ровно одна `ACTIVE` в цепочке.** DB-инвариант — частичный `UNIQUE(defect_root_id) WHERE
   status='ACTIVE'`; и не более одной открытой `DRAFT`-ревизии — `UNIQUE(defect_root_id) WHERE
   status='DRAFT'`.
-- **D05 — supersede через новую ревизию.** `POST …/{id}/supersede` создаёт новую `DRAFT`-ревизию в
-  той же цепочке (событие `DEFECT_REVISION_CREATED`); её активация переводит предыдущую `ACTIVE` →
-  `SUPERSEDED` атомарно (`DEFECT_ACTIVATED` новой + `DEFECT_SUPERSEDED` предыдущей).
+- **D05 — supersede через новую ревизию (supersede-time; аддендум D-3B-S01).** `POST …/{id}/supersede`
+  в одной атомарной транзакции переводит предыдущую `ACTIVE` → `SUPERSEDED` **и** создаёт новую
+  `DRAFT`-ревизию в той же цепочке (события `DEFECT_SUPERSEDED` предыдущей + `DEFECT_REVISION_CREATED`
+  новой). После supersede действующей `ACTIVE` в цепочке нет (0 `ACTIVE`, 1 открытая `DRAFT`). Приёмка
+  новой версии — **отдельной** командой `activate` (`DRAFT → ACTIVE`, событие `DEFECT_ACTIVATED`).
+  Timing-модель зафиксирована в [[ADR-022-ADDENDUM-DEFECT-SUPERSEDE-TIMING|ADR-022 Addendum D-3B-S01]].
 - **D06 — кардинальность.** Одна `EngineeringEvaluation(CONFIRMED_DEFECT)` порождает **≤1 корневую
   цепочку** `Defect` (ADR-022 §3.3). `CANCELLED` **не** освобождает `EngineeringEvaluation` для второй
   независимой цепочки (D08).
@@ -348,6 +353,22 @@ API/read-схемы, напр. `standard_reference_display` (§10), собира
 
 ## 5. Lifecycle ревизии
 
+Модель исполнения supersede — **supersede-time** (аддендум
+[[ADR-022-ADDENDUM-DEFECT-SUPERSEDE-TIMING|D-3B-S01]]): команда `supersede` в одной транзакции гасит
+предыдущую `ACTIVE` и создаёт новую `DRAFT`; приёмка новой версии — отдельной командой `activate`.
+
+```text
+ACTIVE revision N
+    ↓ supersede
+SUPERSEDED revision N
+    +
+DRAFT revision N+1
+    ↓ activate
+ACTIVE revision N+1
+```
+
+Полная диаграмма статусов одной ревизии:
+
 ```text
 DRAFT → ACTIVE → SUPERSEDED
           ↓
@@ -359,19 +380,19 @@ DRAFT → ACTIVE → SUPERSEDED
 | — → DRAFT (revision_no=1) | `create-defect` (activate=false) | `WELDING_ENGINEER` | создаётся `DefectRoot` (+ `defect_no`, `UNIQUE(engineering_evaluation_id)`) и первая `DRAFT`-ревизия; событие `DEFECT_DRAFT_CREATED` |
 | — → ACTIVE (revision_no=1) | `create-defect` (activate=true) | `WELDING_ENGINEER` | то же + полная валидация §8; событие `DEFECT_ACTIVATED` |
 | DRAFT → DRAFT | `update-defect` (PATCH) | `WELDING_ENGINEER` | ревизия в `DRAFT`; правка технических полей; событие `DEFECT_UPDATED` |
-| DRAFT → ACTIVE | `activate-defect` | `WELDING_ENGINEER` | валидация §8; если это supersede-ревизия — предыдущая `ACTIVE` → `SUPERSEDED` атомарно; события `DEFECT_ACTIVATED` (+ `DEFECT_SUPERSEDED` предыдущей) |
-| — → DRAFT (revision_no+1) | `supersede-defect` | `WELDING_ENGINEER` | у цепочки есть `ACTIVE`; нет открытой `DRAFT`; создаётся новая `DRAFT`-ревизия (`supersedes_defect_id` = текущая `ACTIVE`, копия технических полей как старт); событие `DEFECT_REVISION_CREATED` |
+| DRAFT → ACTIVE | `activate-defect` | `WELDING_ENGINEER` | валидация §8; приёмка `DRAFT`-ревизии как действующей; событие `DEFECT_ACTIVATED`. Замещения предыдущей здесь **нет** — оно уже выполнено при `supersede` (supersede-time) |
+| ACTIVE → SUPERSEDED + — → DRAFT (revision_no+1) | `supersede-defect` | `WELDING_ENGINEER` | у цепочки есть `ACTIVE`; нет открытой `DRAFT`; **атомарно**: предыдущая `ACTIVE` → `SUPERSEDED` **и** создаётся новая `DRAFT`-ревизия (`supersedes_defect_id` = замещаемая `ACTIVE`, копия технических полей как старт); события `DEFECT_SUPERSEDED` предыдущей + `DEFECT_REVISION_CREATED` новой. После команды `ACTIVE` в цепочке нет |
 | DRAFT → CANCELLED | `cancel-defect` | `WELDING_ENGINEER` / `CHIEF_WELDER` | причина обязательна; событие `DEFECT_CANCELLED` |
 | ACTIVE → CANCELLED | `cancel-defect` | `WELDING_ENGINEER` / `CHIEF_WELDER` | причина обязательна; `active_defect_id` цепочки → `NULL`; событие `DEFECT_CANCELLED` |
-| ACTIVE → SUPERSEDED | авто при `activate-defect` новой ревизии | — | только в момент активации следующей ревизии (D05); событие `DEFECT_SUPERSEDED` |
 
 Запрещённые переходы: `ACTIVE → DRAFT`; `CANCELLED → *` (в т.ч. восстановление); `SUPERSEDED → *`
 (конечный, кроме исторического чтения). `SUPERSEDED` и `CANCELLED` **не означают устранение дефекта**
 (ADR-022 §6).
 
 Инварианты lifecycle: изменяется только `DRAFT`; после активации существенные технические поля
-immutable (§6); в цепочке (`defect_root_id`) ровно одна `ACTIVE` и не более одной открытой `DRAFT`
-(D04); `SUPERSEDED` — только после активации новой ревизии.
+immutable (§6); в цепочке (`defect_root_id`) — не более одной `ACTIVE` и не более одной открытой
+`DRAFT` (D04); `SUPERSEDED` наступает **в момент `supersede`** (supersede-time). Промежуточное
+состояние `SUPERSEDED + DRAFT` (0 `ACTIVE` в цепочке) — корректно (аддендум D-3B-S01).
 
 ---
 
@@ -416,18 +437,22 @@ immutable (§6); в цепочке (`defect_root_id`) ровно одна `ACTIV
   `DefectRoot` через `DefectSequence` (`ON CONFLICT … RETURNING`); начинается с `1`; неизменяем;
   общий для всех ревизий цепочки; номер `CANCELLED`-цепочки не переиспользуется (корень сохраняется).
   `MAX(defect_no)+1` **запрещён**.
-- **7.5. Ревизии и supersede.** `revision_no` монотонно растёт в цепочке (1, 2, 3…). `supersede-defect`
-  создаёт новую `DRAFT`-ревизию (`supersedes_defect_id` = текущая `ACTIVE`), **копируя все структурированные
-  технические поля** предыдущей `ACTIVE` как стартовые: классификацию (`defect_type_id`,
-  `location_type_id`, `indication_location`), геометрию/положение (`orientation`, `surface`,
-  `joint_side`, `axial_position_mm`, `circumferential_position_deg`), измерения (`length_mm`,
+- **7.5. Ревизии и supersede (supersede-time; аддендум D-3B-S01).** `revision_no` монотонно растёт в
+  цепочке (1, 2, 3…). `supersede-defect` в одной атомарной транзакции **переводит предыдущую `ACTIVE`
+  → `SUPERSEDED`** и создаёт новую `DRAFT`-ревизию (`supersedes_defect_id` = замещаемая `ACTIVE`),
+  **копируя все структурированные технические поля** предыдущей `ACTIVE` как стартовые: классификацию
+  (`defect_type_id`, `location_type_id`, `indication_location`), геометрию/положение (`orientation`,
+  `surface`, `joint_side`, `axial_position_mm`, `circumferential_position_deg`), измерения (`length_mm`,
   `width_mm`, `height_mm`, `depth_mm`, `affected_area_mm2`, `quantity`), нормативные
   (`standard_document`, `standard_revision`, `standard_clause`, `acceptance_level`,
   `normative_category_code`) и пояснительные (`technical_description`, `location_description`,
-  `evaluation_note`, `technical_note`). Активация новой ревизии атомарно переводит предыдущую `ACTIVE`
-  → `SUPERSEDED` и обновляет `DefectRoot.current_defect_id`/`active_defect_id`. Событие
-  `DEFECT_REVISION_CREATED` в `event_metadata` фиксирует перечень скопированных полей и `source_defect_id`
-  (audit metadata ревизии). В цепочке всегда ≤1 `ACTIVE` и ≤1 открытая `DRAFT` (D04).
+  `evaluation_note`, `technical_note`). Команда обновляет `DefectRoot.current_defect_id` = новая `DRAFT`
+  и `active_defect_id` = `NULL` (после supersede действующей `ACTIVE` нет). События: `DEFECT_SUPERSEDED`
+  предыдущей + `DEFECT_REVISION_CREATED` новой; в `event_metadata` `DEFECT_REVISION_CREATED` фиксируется
+  перечень скопированных/изменённых полей и `previous_defect_id`/`new_defect_id` (audit metadata
+  ревизии). Приёмка новой версии как действующей — **отдельной** командой `activate` (`DRAFT → ACTIVE`,
+  `DEFECT_ACTIVATED`, `active_defect_id` = новая ревизия). В цепочке всегда ≤1 `ACTIVE` и ≤1 открытая
+  `DRAFT` (D04); допустимо промежуточное состояние `SUPERSEDED + DRAFT` (0 `ACTIVE`).
 - **7.6. Валидация справочников при активации.** `defect_type_id`/`location_type_id` обязаны
   ссылаться на **активные** (`is_active=true`) записи справочников при активации/создании-`ACTIVE`
   (`DEFECT_TYPE_INACTIVE` / `DEFECT_LOCATION_TYPE_INACTIVE`). Историческое чтение уже активированной
@@ -457,8 +482,10 @@ immutable (§6); в цепочке (`defect_root_id`) ровно одна `ACTIV
 ## 8. Validation matrix (активация)
 
 Единый validation pipeline применяется при: `create-defect(activate=true)`; `activate-defect`
-(`DRAFT → ACTIVE`, включая supersede-ревизию). Проверки (агрегированный результат — все нарушения
-сразу, как 9D-2-C11):
+(`DRAFT → ACTIVE`, включая приёмку supersede-ревизии). В supersede-time модели (аддендум D-3B-S01)
+сама команда `supersede` создаёт **`DRAFT`** и проходит только структурную проверку (CHECK-уровень),
+а полная §8-проверка комплектности выполняется при `activate` этой `DRAFT`. Проверки (агрегированный
+результат — все нарушения сразу, как 9D-2-C11):
 
 | Проверка | Условие | Ошибка |
 |---|---|---|
@@ -477,7 +504,7 @@ immutable (§6); в цепочке (`defect_root_id`) ровно одна `ACTIV
 | Основание — CONFIRMED_DEFECT | effective revision `status='EFFECTIVE'` и `classification='CONFIRMED_DEFECT'` | `DEFECT_EVALUATION_NOT_CONFIRMED` / `DEFECT_EVALUATION_NOT_EFFECTIVE` |
 | Joint match | `root.joint_id == evaluation→finding→joint_id` | `DEFECT_JOINT_MISMATCH` |
 | Уникальность цепочки | нет другой цепочки на этой оценке | `DEFECT_ROOT_ALREADY_EXISTS` |
-| Одна ACTIVE в цепочке | при активации — в цепочке нет иной `ACTIVE` (кроме замещаемой) | `DEFECT_INVALID_TRANSITION` |
+| Одна ACTIVE в цепочке | при активации — в цепочке нет иной `ACTIVE` (в supersede-time предыдущая уже `SUPERSEDED`, поэтому `ACTIVE` нет) | `DEFECT_INVALID_TRANSITION` |
 
 Для `create-defect(activate=false)` (DRAFT) обязателен только контекст создания цепочки:
 `engineering_evaluation_id` (существует, `CONFIRMED_DEFECT`/`EFFECTIVE` — проверяется уже при создании
@@ -498,13 +525,16 @@ DEFECT_DRAFT_CREATED   DEFECT_UPDATED   DEFECT_ACTIVATED
 DEFECT_REVISION_CREATED   DEFECT_SUPERSEDED   DEFECT_CANCELLED
 ```
 
-Соответствие командам: `create-defect(DRAFT)` → `DEFECT_DRAFT_CREATED`;
-`create-defect(ACTIVE)`/`activate-defect` → `DEFECT_ACTIVATED`; `update-defect` → `DEFECT_UPDATED`;
-`supersede-defect` → `DEFECT_REVISION_CREATED`; активация supersede-ревизии → `DEFECT_ACTIVATED`
-(новой) + `DEFECT_SUPERSEDED` (предыдущей); `cancel-defect` → `DEFECT_CANCELLED`. Каждое событие
-хранит actor, `actor_role`, время, `reason` (обязателен для `CANCELLED`; для `SUPERSEDED` — причина
-из команды supersede), `from_status`/`to_status`, `defect_version` (после команды), `correlation_id`
-(если используется). События не заменяют Repair/Reweld/Reinspection/историю ремонта (их нет в 9D-3).
+Соответствие командам (supersede-time; аддендум D-3B-S01): `create-defect(DRAFT)` →
+`DEFECT_DRAFT_CREATED`; `create-defect(ACTIVE)`/`activate-defect` → `DEFECT_ACTIVATED`;
+`update-defect` → `DEFECT_UPDATED`; **`supersede-defect` → `DEFECT_SUPERSEDED` (предыдущей, `ACTIVE →
+SUPERSEDED`) + `DEFECT_REVISION_CREATED` (новой, `NULL → DRAFT`)** — оба в одной транзакции; приёмка
+новой `DRAFT` командой `activate` → `DEFECT_ACTIVATED` (`DRAFT → ACTIVE`, **без** повторного
+`DEFECT_SUPERSEDED`); `cancel-defect` → `DEFECT_CANCELLED`. Команда `supersede` **не** создаёт
+`DEFECT_ACTIVATED`. Каждое событие хранит actor, `actor_role`, время, `reason` (обязателен для
+`CANCELLED`; для `SUPERSEDED` — причина из команды supersede), `from_status`/`to_status`,
+`defect_version` (после команды), `correlation_id` (если используется). События не заменяют
+Repair/Reweld/Reinspection/историю ремонта (их нет в 9D-3).
 
 ---
 
@@ -516,8 +546,8 @@ DEFECT_REVISION_CREATED   DEFECT_SUPERSEDED   DEFECT_CANCELLED
 | `GET /quality/defects?joint_id={id}[&status=&defect_root_id=&engineering_evaluation_id=&limit=&offset=]` | список (фильтры) | READ-роли |
 | `GET /quality/defects/{defect_id}` | одна ревизия | READ-роли |
 | `PATCH /quality/defects/{defect_id}` | правка `DRAFT` (D11; на `ACTIVE` → `DEFECT_ACTIVE_IMMUTABLE`) | `WELDING_ENGINEER` |
-| `POST /quality/defects/{defect_id}/activate` | `DRAFT → ACTIVE` (валидация §8; supersede-ревизия замещает предыдущую) | `WELDING_ENGINEER` |
-| `POST /quality/defects/{defect_id}/supersede` | создать новую `DRAFT`-ревизию цепочки (D05) | `WELDING_ENGINEER` |
+| `POST /quality/defects/{defect_id}/activate` | `DRAFT → ACTIVE` (полная валидация §8; приёмка ревизии как действующей — замещения предыдущей здесь нет, оно выполнено при supersede) | `WELDING_ENGINEER` |
+| `POST /quality/defects/{defect_id}/supersede` | supersede-time (D05, аддендум D-3B-S01): атомарно предыдущая `ACTIVE → SUPERSEDED` + новая `DRAFT`-ревизия цепочки | `WELDING_ENGINEER` |
 | `POST /quality/defects/{defect_id}/cancel` | `DRAFT/ACTIVE → CANCELLED` (причина обязательна) | `WELDING_ENGINEER` / `CHIEF_WELDER` |
 | `GET /quality/defects/{defect_id}/history` | журнал событий **цепочки** (по `defect_root_id`) | READ-роли |
 | `GET /quality/defect-types` · `GET /quality/defect-types/{id}` | read-only НСИ; `active_only=true` по умолчанию | READ-роли |
@@ -610,12 +640,17 @@ actor-поля `Integer`; индексы; seed; clean upgrade; upgrade с тек
 `Joint`; номер `CANCELLED`-цепочки не переиспользуется; конкурентное создание не выдаёт одинаковые
 номера; rollback safety.
 
-**Lifecycle & supersede:** create DRAFT; create ACTIVE; `DRAFT→ACTIVE`; `DRAFT→CANCELLED`;
-`ACTIVE→CANCELLED`; supersede → новая `DRAFT`-ревизия (`revision_no+1`, `supersedes_defect_id`);
-активация supersede-ревизии → предыдущая `SUPERSEDED`, ровно одна `ACTIVE` в цепочке;
-`DEFECT_REVISION_CREATED`+`DEFECT_SUPERSEDED`; запрет второй открытой `DRAFT`
-(`DEFECT_CHAIN_HAS_OPEN_DRAFT`); supersede без `ACTIVE` (`DEFECT_SUPERSEDE_REQUIRES_ACTIVE`); запрет
-`ACTIVE→DRAFT`, восстановления `CANCELLED`, изменения `SUPERSEDED`.
+**Lifecycle & supersede (supersede-time; аддендум D-3B-S01):** create DRAFT; create ACTIVE;
+`DRAFT→ACTIVE`; `DRAFT→CANCELLED`; `ACTIVE→CANCELLED`; supersede → предыдущая **`ACTIVE→SUPERSEDED`
+атомарно** + новая `DRAFT`-ревизия (`revision_no+1`, `supersedes_defect_id`); после supersede в цепочке
+**нет `ACTIVE`** (`active_defect_id = NULL`, `get_current_active_revision → None`, ровно одна открытая
+`DRAFT`); события `DEFECT_SUPERSEDED`+`DEFECT_REVISION_CREATED` **без** `DEFECT_ACTIVATED`; отдельная
+команда `activate` новой `DRAFT` → `DRAFT→ACTIVE`, `DEFECT_ACTIVATED`, ровно одна `ACTIVE`; полная
+§8-валидация выполняется именно при `activate` (неполная `DRAFT` создаётся, но её активация
+отклоняется); rollback на структурно недопустимом patch сохраняет предыдущую `ACTIVE`; double supersede
+создаёт только одну `DRAFT`; запрет второй открытой `DRAFT` (`DEFECT_CHAIN_HAS_OPEN_DRAFT`); supersede
+без `ACTIVE` (`DEFECT_SUPERSEDE_REQUIRES_ACTIVE`); запрет `ACTIVE→DRAFT`, восстановления `CANCELLED`,
+изменения `SUPERSEDED`.
 
 **Activation validation:** каждая строка §8 (валид/невалид): нет типа/расположения; тип/расположение
 неактивны; отсутствует обязательное измерение; неположительное измерение; `UNKNOWN` при

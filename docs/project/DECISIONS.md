@@ -3741,6 +3741,14 @@ DRAFT → ACTIVE → SUPERSEDED
 после активации новой версии предыдущая становится `SUPERSEDED`; в одной цепочке версий может быть
 только **одна** действующая версия. Номер версии **не** используется как замена UUID.
 
+> **Момент исполнения supersede (timing).** Supersede timing execution model is defined by
+> **ADR-022 Addendum D-3B-S01** (см. [[ADR-022-ADDENDUM-DEFECT-SUPERSEDE-TIMING|ADR-022 Addendum
+> D-3B-S01]]). Принята **supersede-time** модель: команда `supersede` атомарно переводит предыдущую
+> `ACTIVE` → `SUPERSEDED` **и** создаёт новую ревизию как `DRAFT`; приёмка новой действующей версии —
+> отдельной командой `activate`. Формулировка «после активации новой версии предыдущая становится
+> `SUPERSEDED`» выше сохранена как исходный текст ADR-022 и уточняется аддендумом D-3B-S01 (авторитет
+> по моменту исполнения). Инвариант «одна действующая версия» не меняется.
+
 ### 8. Граница с FindingDisposition
 
 `Defect` отвечает на вопрос: **какой технический дефект подтверждён?** `FindingDisposition`
@@ -3838,6 +3846,7 @@ ADR-017 в технической модели не применяется.
 
 ```text
 docs/project/DECISIONS.md (ADR-022)
+docs/project/ADR-022-ADDENDUM-DEFECT-SUPERSEDE-TIMING.md (аддендум D-3B-S01 — supersede timing)
 docs/ARCHITECTURE.md (§5.10)
 docs/project/ARCHITECTURE_SESSIONS.md (Архитектурное согласование Task 9D-3 / ADR-022)
 docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Task 9D-3)
