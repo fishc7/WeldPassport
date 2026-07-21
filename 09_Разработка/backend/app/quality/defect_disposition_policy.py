@@ -1,4 +1,4 @@
-"""Policy-слой DefectDisposition (Task 9D-4A-3, ADR-023).
+"""Policy-слой DefectDisposition (Task 9D-4A-3/9D-4A-4, ADR-023).
 
 Проверка роли и разрешённости операции — вне API, models и schemas.
 Scope (Joint) вычисляется сервисом через permissions-framework; сюда передаётся
@@ -74,6 +74,35 @@ def validate_transition_request(
     if requires_reason(action, granted_roles) and is_blank(reason):
         return ddw.DISPOSITION_REASON_REQUIRED
 
+    return None
+
+
+def can_supersede(granted_roles: set[str]) -> bool:
+    return bool(granted_roles & ddw.DISPOSITION_SUPERSEDE_ROLES)
+
+
+def validate_supersede_request(
+    *,
+    current_status: str,
+    granted_roles: set[str],
+    reason: str | None,
+    has_conflicting_open_version: bool,
+) -> str | None:
+    """Возвращает машинный код ошибки или None, если supersede допустим (Task 9D-4A-4).
+
+    Вызывается сервисом ПОСЛЕ блокировки `DefectRoot` и старой disposition (порядок
+    9D-4A-4 Decision: lock root → visibility → status recheck → open-version recheck →
+    role/reason). Здесь — только чистая проверка полученных на вход фактов; сам lock
+    и перечитывание статуса — забота репозитория/сервиса.
+    """
+    if current_status != ddw.DISPOSITION_ACTIVE:
+        return ddw.DISPOSITION_SUPERSEDE_REQUIRES_ACTIVE
+    if has_conflicting_open_version:
+        return ddw.DISPOSITION_ALREADY_OPEN
+    if not can_supersede(granted_roles):
+        return ddw.DISPOSITION_PERMISSION_DENIED
+    if is_blank(reason):
+        return ddw.DISPOSITION_REASON_REQUIRED
     return None
 
 

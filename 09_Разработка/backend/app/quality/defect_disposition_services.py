@@ -1,8 +1,9 @@
-"""Доменный сервис DefectDisposition (Task 9D-4A-3, ADR-023).
+"""Доменный сервис DefectDisposition (Task 9D-4A-3/9D-4A-4, ADR-023).
 
 Все изменения статуса — только через этот сервис (prepare/approve/activate/cancel
-или единый transition). Прямое обновление status через repository запрещено.
-Policy — `defect_disposition_policy`; переходы — `defect_disposition_workflow`.
+или единый transition; supersede — отдельный метод, Task 9D-4A-4). Прямое обновление
+status через repository запрещено. Policy — `defect_disposition_policy`; переходы —
+`defect_disposition_workflow`.
 """
 
 from __future__ import annotations
@@ -138,6 +139,7 @@ class DefectDispositionService:
             ddw.DISPOSITION_ACTIVE_IMMUTABLE,
             ddw.DISPOSITION_CANCELLED_IMMUTABLE,
             ddw.DISPOSITION_INVALID_TRANSITION,
+            ddw.DISPOSITION_SUPERSEDE_REQUIRES_ACTIVE,
         ):
             raise DomainError(409, code, message)
         if code in (
@@ -399,3 +401,141 @@ class DefectDispositionService:
         self._repo.save()
         self._db.refresh(disp)
         return disp
+
+    # ── supersede (Task 9D-4A-4, решение 9D-4A-4 Decision) ───────────────────────
+
+    def supersede(
+        self,
+        disposition_id: UUID,
+        *,
+        decision_type: str,
+        justification: str,
+        actor_worker_id: int,
+        comment: str | None = None,
+        reason: str,
+    ) -> DefectDisposition:
+        """Замещает `ACTIVE` disposition новой `DRAFT`-версией (supersede-time).
+
+        Одна атомарная транзакция: lock `DefectRoot` → visibility/scope → повторная
+        проверка `status == ACTIVE` → проверка отсутствия другой открытой версии →
+        role policy + reason → `ACTIVE → SUPERSEDED` (старая) → создание `DRAFT`
+        (новая, `supersedes_disposition_id = old.id`) → два audit-события
+        (`DISPOSITION_SUPERSEDED` + `DISPOSITION_CREATED`) → один commit. Активация
+        новой версии — отдельная, уже существующая команда `transition`/`activate`.
+        """
+        old = self._require_disposition(disposition_id)
+
+        # 1) Lock владельца цепочки — операция создаёт вторую строку в той же цепочке,
+        # блокировки одной disposition (get_by_id_for_update) недостаточно.
+        root = self._repo.lock_root_for_update(old.defect_root_id)
+        if root is None:
+            raise DomainError(
+                404, ddw.DISPOSITION_ROOT_NOT_FOUND, "DefectRoot не найден"
+            )
+        joint = self._require_joint(root.joint_id)
+
+        # 2) Перечитать/заблокировать старое disposition под lock корня. `old` уже
+        # мог быть в identity map сессии (первый plain-read выше) — ORM по умолчанию
+        # не перезатирает атрибуты уже загруженного объекта, поэтому обязателен
+        # явный refresh (тот же приём, что `previous`-refresh в Defect.supersede).
+        old = self._require_disposition_for_update(old.id)
+        self._db.refresh(old)
+
+        # 3) Visibility/scope — скрытый ресурс → 404 до проверки роли действия.
+        self._require_visible(joint, actor_worker_id)
+
+        granted = self._granted_roles(
+            joint,
+            actor_worker_id,
+            ddw.DISPOSITION_SUPERSEDE_ROLES,
+            include_company=False,
+        )
+
+        # 4-5) Повторная проверка status/инварианта «не более одной открытой версии»
+        # после lock (защита от гонки; при штатной работе other либо None, либо == old).
+        other_open = self._repo.find_open_for_root(root.id)
+        has_conflict = other_open is not None and other_open.id != old.id
+
+        # 6) Role policy + reason (decision_type/justification новой версии — payload
+        # уровня; проверяются вместе, после инвариантов состояния/роли).
+        error = policy.validate_supersede_request(
+            current_status=old.status,
+            granted_roles=granted,
+            reason=reason,
+            has_conflicting_open_version=has_conflict,
+        )
+        if error is not None:
+            messages = {
+                ddw.DISPOSITION_SUPERSEDE_REQUIRES_ACTIVE: (
+                    f"Supersede возможен только из ACTIVE (текущий статус: {old.status})"
+                ),
+                ddw.DISPOSITION_ALREADY_OPEN: (
+                    "По defect_root уже есть другая открытая версия DefectDisposition"
+                ),
+                ddw.DISPOSITION_PERMISSION_DENIED: (
+                    "Недостаточно прав для 'SUPERSEDE'"
+                ),
+                ddw.DISPOSITION_REASON_REQUIRED: (
+                    "Для supersede обязательна причина (supersede_reason)"
+                ),
+            }
+            self._deny(error, messages.get(error, error))
+
+        if decision_type not in DEFECT_DISPOSITION_DECISION_TYPES:
+            self._deny(
+                ddw.DISPOSITION_DECISION_TYPE_INVALID,
+                f"Недопустимый decision_type: {decision_type}",
+            )
+        if policy.is_blank(justification):
+            self._deny(
+                ddw.DISPOSITION_JUSTIFICATION_REQUIRED,
+                "Обоснование новой версии disposition обязательно",
+            )
+
+        reason_clean = reason.strip()
+
+        # 7) ACTIVE → SUPERSEDED (старая).
+        old.status = ddw.DISPOSITION_SUPERSEDED
+        old.supersede_reason = reason_clean
+
+        # 8) Создание DRAFT (новая версия).
+        new = DefectDisposition(
+            defect_root_id=root.id,
+            supersedes_disposition_id=old.id,
+            decision_type=decision_type,
+            justification=justification.strip(),
+            comment=comment.strip() if comment and comment.strip() else None,
+            status=ddw.DISPOSITION_DRAFT,
+            created_by_worker_id=actor_worker_id,
+        )
+        self._repo.add(new)
+
+        # 9) Audit-события: старая — SUPERSEDE, новая — обычный CREATE.
+        actor_role = policy.pick_actor_role(ddw.ACTION_SUPERSEDE, granted)
+        self._record_event(
+            old,
+            event_type=ddw.EVENT_SUPERSEDED,
+            action=ddw.ACTION_SUPERSEDE,
+            actor_worker_id=actor_worker_id,
+            actor_role=actor_role,
+            previous_status=ddw.DISPOSITION_ACTIVE,
+            new_status=ddw.DISPOSITION_SUPERSEDED,
+            reason=reason_clean,
+            metadata={"new_disposition_id": str(new.id)},
+        )
+        self._record_event(
+            new,
+            event_type=ddw.EVENT_CREATED,
+            action="CREATE",
+            actor_worker_id=actor_worker_id,
+            actor_role=actor_role,
+            previous_status=None,
+            new_status=ddw.DISPOSITION_DRAFT,
+            metadata={"supersedes_disposition_id": str(old.id)},
+        )
+
+        # 10) Один commit.
+        self._repo.save()
+        self._db.refresh(old)
+        self._db.refresh(new)
+        return new

@@ -4010,3 +4010,88 @@ ACTIVATE requires reason and audit.
 **Конкурентность (B-02).** Переходы `transition` сериализуются через
 `SELECT … FOR UPDATE` на строке `defect_dispositions` до проверки status/policy;
 status update и append audit event — в одной транзакции с одним commit.
+
+---
+
+## 9D-4A-4 Decision (DefectDisposition Supersede Workflow)
+
+Дата: 2026-07-21
+
+Статус: **ACCEPTED — принято** (завершает жизненный цикл `DefectDisposition`,
+начатый ADR-023 и Task 9D-4A-3; ADR-023 не переписывается).
+
+Контур: Quality / DefectDisposition workflow. Не создаются `QualityDecisionWorkflow`,
+связь `LaboratoryConclusion → DefectDisposition`, workflow `Repair`/`Reinspection`/`NCR`.
+
+```text
+9D-4A-4 Decision:
+DefectDisposition supersede follows the supersede-time model.
+Only ACTIVE dispositions may be superseded.
+SUPERSEDE atomically marks the old disposition SUPERSEDED
+and creates a new DRAFT linked through supersedes_disposition_id.
+The operation locks DefectRoot and requires a reason and audit.
+```
+
+**Замещаемые статусы.** Только `ACTIVE → SUPERSEDED`. Для `DRAFT`/`PREPARED` используется
+существующий `CANCEL`; `APPROVED` (не активированное) не считается действующим и не
+требует supersede. `CANCELLED`/`SUPERSEDED` — терминальны, замещению не подлежат.
+
+**Связь версий.** Только существующие поля: `new.defect_root_id = old.defect_root_id`,
+`new.supersedes_disposition_id = old.id`. Отдельный `root_disposition_id` **не** вводится:
+`defect_root_id` уже — владелец единой логической цепочки disposition (не более одной
+открытой версии на цепочку, инвариант `ALREADY_OPEN` из 9D-4A-3 сохраняется).
+
+**Timing — supersede-time** (по прецеденту `Defect`, ADR-022 Addendum D-3B-S01, а не
+activate-time `EngineeringEvaluation` из 9D-2-C18): команда `SUPERSEDE` в одной
+транзакции переводит старую `ACTIVE` в `SUPERSEDED` и создаёт новую `DRAFT`. Активация
+новой версии (`DRAFT → PREPARED → APPROVED → ACTIVE`) — отдельная, уже существующая
+команда `transition`; `SUPERSEDE` и `ACTIVATE` не объединяются в одну команду. Допустимое
+промежуточное состояние цепочки: `0 ACTIVE + 1 открытая новая версия`.
+
+**Роли.** `SUPERSEDE` — `OGS_ENGINEER`, `CHIEF_WELDER` (те же, что `CREATE`/`PREPARE`:
+supersede открывает пересмотр, но не вводит решение в действие). Роли для новой версии —
+без изменений (9D-4A-3 Role Decision): `PREPARE = {OGS, CHIEF}`, `APPROVE = {OTK, CHIEF}`,
+`ACTIVATE = {CHIEF only}`, `CANCEL = {CHIEF only}`. `OTK_INSPECTOR` не получает `SUPERSEDE`
+или `ACTIVATE`.
+
+**Причина.** `supersede_reason` (поле уже есть в схеме с 9D-4A-2) обязателен и непуст
+всегда при `SUPERSEDE`; сохраняется в старом disposition и в событии `DISPOSITION_SUPERSEDED`.
+Справочник кодов причин не вводится.
+
+**Единственный ACTIVE.** Партиционный `UNIQUE(defect_root_id) WHERE status='ACTIVE'`
+не меняется — остаётся основной защитой на уровне БД.
+
+**Конкурентность.** Блокировка старой строки `disposition` (`get_by_id_for_update`, B-02)
+недостаточна: операция создаёт вторую строку в той же цепочке. Добавляется
+`lock_root_for_update(defect_root_id)` на `quality.defect_roots` (по прецеденту
+`DefectRepository.lock_root_for_update`), выполняемая **до** повторной проверки статуса
+и before role/reason policy. Порядок: lock root → загрузить/заблокировать старое disposition
+→ visibility/scope → повторная проверка `status = ACTIVE` → проверка отсутствия другой
+открытой версии → role policy + reason → `ACTIVE → SUPERSEDED` → создание `DRAFT` →
+audit-события → один commit.
+
+**Аудит.** Новый тип события `DISPOSITION_SUPERSEDED` (для старой версии: `previous_status
+= ACTIVE`, `new_status = SUPERSEDED`, `action = SUPERSEDE`, `reason`, метаданные с
+`new_disposition_id`). Для новой версии — существующий `DISPOSITION_CREATED` с метаданными
+`supersedes_disposition_id`. Требует новой миграции, расширяющей CHECK
+`quality.defect_disposition_events.event_type`; миграции `20260721_22`/`20260721_23`
+**не** изменяются задним числом.
+
+**MVP / вне рамок.** Входит: команда `SUPERSEDE`, переход только `ACTIVE → SUPERSEDED`,
+атомарное создание `DRAFT`, root-level locking, append-only audit, новый event type и
+миграция, API-команда, тесты (workflow/policy/audit/транзакционность/конкурентность). Вне
+рамок: `Repair`, `Reinspection`, NCR, CAPA, файлы, `QualityDecisionWorkflow`, связь с
+`LaboratoryConclusion`, объединение `SUPERSEDE`+`ACTIVATE`, замещение
+`DRAFT`/`PREPARED`/`APPROVED`, параллельные цепочки disposition, восстановление
+`SUPERSEDED`, справочник причин.
+
+```text
+09_Разработка/backend/app/quality/defect_disposition_workflow.py
+09_Разработка/backend/app/quality/defect_disposition_policy.py
+09_Разработка/backend/app/quality/defect_disposition_repository.py
+09_Разработка/backend/app/quality/defect_disposition_services.py
+09_Разработка/backend/app/quality/defect_disposition_schemas.py
+09_Разработка/backend/app/quality/defect_disposition_api.py
+09_Разработка/backend/migrations/versions/20260721_24_disp_supersede.py
+09_Разработка/backend/tests/test_defect_disposition_workflow.py
+```

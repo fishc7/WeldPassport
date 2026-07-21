@@ -3,7 +3,9 @@
 Физические таблицы схемы `quality`:
 
 * `defect_dispositions` — исполняемое решение по цепочке дефекта (9D-4A-2);
-* `defect_disposition_events` — append-only аудит переходов (9D-4A-3).
+* `defect_disposition_events` — append-only аудит переходов (9D-4A-3; CHECK типов
+  события расширен под `DISPOSITION_SUPERSEDED` миграцией `20260721_24_disp_supersede`,
+  Task 9D-4A-4 — миграции `22`/`23` задним числом не меняются).
 
 Решение привязано к `DefectRoot` (цепочке версий дефекта), а не к конкретной
 технической ревизии `Defect`: техническая ревизия может быть заменена через supersede,
@@ -166,21 +168,24 @@ def _in_event(column: str, values: tuple[str, ...]) -> str:
 
 # Импорт типов событий после констант статусов — избегаем циклов при seed.
 # Значения дублируются строками в CHECK миграции; канон — defect_disposition_workflow.
+# DISPOSITION_SUPERSEDED добавлен миграцией 20260721_24_disp_supersede (Task 9D-4A-4).
 _DISPOSITION_EVENT_TYPES: tuple[str, ...] = (
     "DISPOSITION_CREATED",
     "DISPOSITION_PREPARED",
     "DISPOSITION_APPROVED",
     "DISPOSITION_ACTIVATED",
     "DISPOSITION_CANCELLED",
+    "DISPOSITION_SUPERSEDED",
 )
 
 
 class DefectDispositionEvent(Base):
-    """Неизменяемое событие перехода DefectDisposition (append-only, Task 9D-4A-3).
+    """Неизменяемое событие перехода DefectDisposition (append-only, Task 9D-4A-3/9D-4A-4).
 
     API изменения/удаления событий нет. `actor_worker_id` — hr.workers.id (Integer
-    без FK). `action` — команда перехода (`PREPARE`/`APPROVE`/`ACTIVATE`/`CANCEL`)
-    либо `CREATE` при создании.
+    без FK). `action` — команда перехода (`PREPARE`/`APPROVE`/`ACTIVATE`/`CANCEL`),
+    `CREATE` при создании либо `SUPERSEDE` (9D-4A-4: пишется для старой версии при
+    `ACTIVE → SUPERSEDED`; для новой версии — обычный `DISPOSITION_CREATED`).
     """
 
     __tablename__ = DEFECT_DISPOSITION_EVENTS_TABLE

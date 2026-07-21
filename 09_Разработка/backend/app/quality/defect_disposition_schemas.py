@@ -1,4 +1,4 @@
-"""Pydantic-схемы HTTP-слоя DefectDisposition (Task 9D-4A-3, ADR-023).
+"""Pydantic-схемы HTTP-слоя DefectDisposition (Task 9D-4A-3/9D-4A-4, ADR-023).
 
 Вход с `extra="forbid"`; актор — из `X-User-Id`, не из тела. Статус через API
 напрямую не принимается: только команда `action` в transition. Доменные проверки —
@@ -37,6 +37,22 @@ class DefectDispositionTransitionRequest(BaseModel):
 
     action: DispositionAction
     comment: str | None = None
+
+
+class DefectDispositionSupersedeRequest(BaseModel):
+    """Тело команды `SUPERSEDE` (Task 9D-4A-4): открывает новую версию решения.
+
+    Только из `ACTIVE`. `supersede_reason` обязателен и непуст. `decision_type`/
+    `justification`/`comment` — содержимое новой `DRAFT`-версии (у `DefectDisposition`
+    нет отдельного API правки полей DRAFT — они задаются один раз, как при `create`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision_type: DecisionType
+    justification: str = Field(min_length=1)
+    comment: str | None = None
+    supersede_reason: str = Field(min_length=1)
 
 
 class DefectDispositionRead(BaseModel):

@@ -1,4 +1,4 @@
-"""Репозиторий DefectDisposition (Task 9D-4A-3).
+"""Репозиторий DefectDisposition (Task 9D-4A-3/9D-4A-4).
 
 Только persistence/query: чтение/запись disposition и append-only events.
 Без доменной политики, RBAC и HTTP — они в сервисе/policy. Commit — в сервисе.
@@ -39,6 +39,21 @@ class DefectDispositionRepository:
 
     def get_root(self, root_id: UUID) -> DefectRoot | None:
         return self.db.get(DefectRoot, root_id)
+
+    def lock_root_for_update(self, root_id: UUID) -> DefectRoot | None:
+        """Блокирует строку `defect_roots` (SELECT … FOR UPDATE), Task 9D-4A-4.
+
+        Нужна для `supersede`: операция создаёт вторую строку disposition в той же
+        цепочке, поэтому блокировки только старой disposition (`get_by_id_for_update`)
+        недостаточно — сериализуем на уровне владельца цепочки (по прецеденту
+        `DefectRepository.lock_root_for_update`).
+        """
+        return (
+            self.db.query(DefectRoot)
+            .filter(DefectRoot.id == root_id)
+            .with_for_update()
+            .first()
+        )
 
     def find_open_for_root(self, root_id: UUID) -> DefectDisposition | None:
         return (

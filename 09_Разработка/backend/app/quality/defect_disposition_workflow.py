@@ -1,9 +1,12 @@
-"""Доменная политика жизненного цикла DefectDisposition (Task 9D-4A-3, ADR-023).
+"""Доменная политика жизненного цикла DefectDisposition (Task 9D-4A-3/9D-4A-4, ADR-023).
 
 Чистые константы и pure-функции без обращения к БД. Статусы совпадают с CHECK
-модели (`defect_disposition_models`); полный канонический набор включает
-`SUPERSEDED`, но переходы в него в 9D-4A-3 **не** реализуются (отдельный сценарий
-замены). Стиль Tasks 9A–9D-3: UPPERCASE-коды, frozenset переходов.
+модели (`defect_disposition_models`). Переход `ACTIVE → SUPERSEDED` (Task 9D-4A-4,
+решение 9D-4A-4 Decision в DECISIONS.md) выполняется отдельной командой `SUPERSEDE`
+(supersede-time модель, по прецеденту `Defect`/ADR-022 Addendum D-3B-S01), а не
+универсальным `transition`: `ACTION_SUPERSEDE` намеренно не входит в
+`DISPOSITION_ACTIONS`/`DispositionAction` — общий `/transition` эндпойнт его не
+принимает. Стиль Tasks 9A–9D-3: UPPERCASE-коды, frozenset переходов.
 """
 
 from __future__ import annotations
@@ -50,12 +53,15 @@ DISPOSITION_OPEN_STATUSES: frozenset[str] = frozenset(
     }
 )
 
-# MVP-переходы (SUPERSEDED не входит — отдельный сценарий замены).
+# Переходы жизненного цикла. ACTIVE → SUPERSEDED существует только для документации/
+# `can_transition`: фактически выполняется командой `SUPERSEDE` (9D-4A-4), а не общим
+# `transition` — тот безусловно считает ACTIVE иммутабельным до проверки этой таблицы
+# (см. `defect_disposition_policy.validate_transition_request`).
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     DISPOSITION_DRAFT: frozenset({DISPOSITION_PREPARED, DISPOSITION_CANCELLED}),
     DISPOSITION_PREPARED: frozenset({DISPOSITION_APPROVED, DISPOSITION_CANCELLED}),
     DISPOSITION_APPROVED: frozenset({DISPOSITION_ACTIVE}),
-    DISPOSITION_ACTIVE: frozenset(),
+    DISPOSITION_ACTIVE: frozenset({DISPOSITION_SUPERSEDED}),
     DISPOSITION_SUPERSEDED: frozenset(),
     DISPOSITION_CANCELLED: frozenset(),
 }
@@ -74,6 +80,11 @@ DISPOSITION_ACTIONS: tuple[str, ...] = (
 )
 DispositionAction = Literal["PREPARE", "APPROVE", "ACTIVATE", "CANCEL"]
 
+# `SUPERSEDE` (Task 9D-4A-4) — отдельная команда с собственным эндпойнтом/сервисным
+# методом (создаёт новую строку, а не только меняет статус текущей). Не входит в
+# `DISPOSITION_ACTIONS`/`DispositionAction`: `/transition` её не принимает.
+ACTION_SUPERSEDE = "SUPERSEDE"
+
 _ACTION_TARGET: dict[str, str] = {
     ACTION_PREPARE: DISPOSITION_PREPARED,
     ACTION_APPROVE: DISPOSITION_APPROVED,
@@ -87,6 +98,9 @@ EVENT_PREPARED = "DISPOSITION_PREPARED"
 EVENT_APPROVED = "DISPOSITION_APPROVED"
 EVENT_ACTIVATED = "DISPOSITION_ACTIVATED"
 EVENT_CANCELLED = "DISPOSITION_CANCELLED"
+# Task 9D-4A-4: событие старой версии при supersede (CHECK на уровне БД расширяется
+# отдельной миграцией `20260721_24_disp_supersede`, миграции 22/23 не меняются).
+EVENT_SUPERSEDED = "DISPOSITION_SUPERSEDED"
 
 DISPOSITION_EVENT_TYPES: tuple[str, ...] = (
     EVENT_CREATED,
@@ -94,6 +108,7 @@ DISPOSITION_EVENT_TYPES: tuple[str, ...] = (
     EVENT_APPROVED,
     EVENT_ACTIVATED,
     EVENT_CANCELLED,
+    EVENT_SUPERSEDED,
 )
 
 _ACTION_EVENT: dict[str, str] = {
@@ -149,12 +164,21 @@ DISPOSITION_ACTIVATE_ROLES: frozenset[str] = frozenset({ROLE_CHIEF_WELDER})
 DISPOSITION_CANCEL_ROLES: frozenset[str] = frozenset({ROLE_CHIEF_WELDER})
 DISPOSITION_OVERRIDE_ROLES: frozenset[str] = frozenset({ROLE_CHIEF_WELDER})
 DISPOSITION_READ_ROLES: frozenset[str] = iw.INSPECTION_READ_ROLES
+# SUPERSEDE (Task 9D-4A-4, решение 9D-4A-4 Decision): открывает пересмотр решения, но
+# не вводит новое решение в действие — те же роли, что CREATE/PREPARE. OTK_INSPECTOR
+# supersede не выполняет.
+DISPOSITION_SUPERSEDE_ROLES: frozenset[str] = frozenset(
+    {ROLE_OGS_ENGINEER, ROLE_CHIEF_WELDER}
+)
 
 _ACTION_ROLES: dict[str, frozenset[str]] = {
     ACTION_PREPARE: DISPOSITION_PREPARE_ROLES,
     ACTION_APPROVE: DISPOSITION_APPROVE_ROLES,
     ACTION_ACTIVATE: DISPOSITION_ACTIVATE_ROLES,
     ACTION_CANCEL: DISPOSITION_CANCEL_ROLES,
+    # Не участвует в общем /transition (ACTION_SUPERSEDE вне DISPOSITION_ACTIONS);
+    # запись здесь — только чтобы pick_actor_role() работал единообразно для supersede.
+    ACTION_SUPERSEDE: DISPOSITION_SUPERSEDE_ROLES,
 }
 
 
@@ -174,3 +198,5 @@ DISPOSITION_PERMISSION_DENIED = "DISPOSITION_PERMISSION_DENIED"
 DISPOSITION_ALREADY_OPEN = "DISPOSITION_ALREADY_OPEN"
 DISPOSITION_JUSTIFICATION_REQUIRED = "DISPOSITION_JUSTIFICATION_REQUIRED"
 DISPOSITION_DECISION_TYPE_INVALID = "DISPOSITION_DECISION_TYPE_INVALID"
+# Task 9D-4A-4 (supersede)
+DISPOSITION_SUPERSEDE_REQUIRES_ACTIVE = "DISPOSITION_SUPERSEDE_REQUIRES_ACTIVE"

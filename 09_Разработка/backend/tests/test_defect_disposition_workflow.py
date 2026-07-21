@@ -1,7 +1,8 @@
-"""Тесты workflow / policy / audit DefectDisposition (Task 9D-4A-3).
+"""Тесты workflow / policy / audit DefectDisposition (Task 9D-4A-3/9D-4A-4).
 
 Включает исправления Code Review B-01 (ACTIVATE = CHIEF only) и B-02
-(SELECT FOR UPDATE / конкурентные переходы).
+(SELECT FOR UPDATE / конкурентные переходы), а также supersede workflow (9D-4A-4):
+ACTIVE → SUPERSEDED + новая DRAFT, root-level locking, аудит, конкурентность.
 """
 
 from __future__ import annotations
@@ -71,6 +72,29 @@ def _to_approved(client: TestClient, ctx: DefectCtx, root_id) -> str:
         == 200
     )
     return did
+
+
+def _to_active(client: TestClient, ctx: DefectCtx, root_id) -> str:
+    did = _to_approved(client, ctx, root_id)
+    assert (
+        _transition(client, ctx.chief, did, "ACTIVATE", "Ввод в действие").status_code
+        == 200
+    )
+    return did
+
+
+def _supersede(client: TestClient, worker, disposition_id, **over):
+    body = {
+        "decision_type": "REPAIR_REQUIRED",
+        "justification": "Пересмотр решения по новым данным",
+        "supersede_reason": "Обнаружены новые обстоятельства",
+    }
+    body.update(over)
+    return client.post(
+        f"{API}/{disposition_id}/supersede",
+        json=body,
+        headers=DefectCtx.h(worker),
+    )
 
 
 # ── Workflow transitions ───────────────────────────────────────────────────────
@@ -496,6 +520,362 @@ class TestConcurrency:
         ]
 
 
+# ── Supersede (Task 9D-4A-4) ────────────────────────────────────────────────────
+
+
+class TestSupersedeHappyPath:
+    def test_active_superseded_creates_new_draft(
+        self, client: TestClient, ctx: DefectCtx, root
+    ):
+        old_id = _to_active(client, ctx, root.id)
+
+        r = _supersede(
+            client,
+            ctx.ogs,
+            old_id,
+            decision_type="ACCEPT_AS_IS",
+            justification="Новая формулировка решения",
+            supersede_reason="Уточнение по результатам повторного анализа",
+        )
+        assert r.status_code == 200, r.text
+        new = r.json()
+        assert new["status"] == "DRAFT"
+        assert new["decision_type"] == "ACCEPT_AS_IS"
+        assert new["justification"] == "Новая формулировка решения"
+        assert new["supersedes_disposition_id"] == old_id
+        assert new["defect_root_id"] == str(root.id)
+        assert new["id"] != old_id
+
+        old = client.get(f"{API}/{old_id}", headers=ctx.h(ctx.chief)).json()
+        assert old["status"] == "SUPERSEDED"
+        assert old["supersede_reason"] == "Уточнение по результатам повторного анализа"
+
+    def test_new_version_can_reach_active(
+        self, client: TestClient, ctx: DefectCtx, root
+    ):
+        old_id = _to_active(client, ctx, root.id)
+        new_id = _supersede(client, ctx.chief, old_id, supersede_reason="Причина").json()[
+            "id"
+        ]
+
+        assert _transition(client, ctx.ogs, new_id, "PREPARE").status_code == 200
+        assert (
+            _transition(client, ctx.otk, new_id, "APPROVE", "ok").status_code == 200
+        )
+        r = _transition(client, ctx.chief, new_id, "ACTIVATE", "ввод новой версии")
+        assert r.status_code == 200, r.text
+        assert r.json()["status"] == "ACTIVE"
+
+
+class TestSupersedeForbidden:
+    @pytest.mark.parametrize("state", ["draft", "prepared", "approved", "cancelled"])
+    def test_only_active_can_be_superseded(
+        self, client: TestClient, ctx: DefectCtx, root, state: str
+    ):
+        if state == "draft":
+            did = _create_via_api(client, ctx, root.id)["id"]
+        elif state == "prepared":
+            did = _create_via_api(client, ctx, root.id)["id"]
+            assert _transition(client, ctx.ogs, did, "PREPARE").status_code == 200
+        elif state == "approved":
+            did = _to_approved(client, ctx, root.id)
+        else:
+            did = _create_via_api(client, ctx, root.id)["id"]
+            assert (
+                _transition(client, ctx.chief, did, "CANCEL", "отмена").status_code
+                == 200
+            )
+
+        r = _supersede(client, ctx.chief, did)
+        assert r.status_code == 409, r.text
+        assert r.json()["detail"]["code"] == ddw.DISPOSITION_SUPERSEDE_REQUIRES_ACTIVE
+
+    def test_superseded_cannot_be_superseded_again(
+        self, client: TestClient, ctx: DefectCtx, root
+    ):
+        old_id = _to_active(client, ctx, root.id)
+        assert _supersede(client, ctx.chief, old_id).status_code == 200
+
+        r = _supersede(client, ctx.chief, old_id)
+        assert r.status_code == 409, r.text
+        assert r.json()["detail"]["code"] == ddw.DISPOSITION_SUPERSEDE_REQUIRES_ACTIVE
+
+    def test_superseded_immutable_via_transition(
+        self, client: TestClient, ctx: DefectCtx, root
+    ):
+        old_id = _to_active(client, ctx, root.id)
+        assert _supersede(client, ctx.chief, old_id).status_code == 200
+
+        r = _transition(client, ctx.chief, old_id, "CANCEL", "попытка")
+        assert r.status_code == 409, r.text
+        assert r.json()["detail"]["code"] == ddw.DISPOSITION_INVALID_TRANSITION
+
+    def test_unknown_disposition_404(self, client: TestClient, ctx: DefectCtx):
+        r = _supersede(client, ctx.chief, uuid4())
+        assert r.status_code == 404, r.text
+
+
+class TestSupersedeRolePolicy:
+    def test_otk_inspector_cannot_supersede(
+        self, client: TestClient, ctx: DefectCtx, root
+    ):
+        old_id = _to_active(client, ctx, root.id)
+        r = _supersede(client, ctx.otk, old_id)
+        assert r.status_code == 403, r.text
+        assert r.json()["detail"]["code"] == ddw.DISPOSITION_PERMISSION_DENIED
+
+    def test_ogs_engineer_can_supersede(
+        self, client: TestClient, ctx: DefectCtx, root
+    ):
+        old_id = _to_active(client, ctx, root.id)
+        r = _supersede(client, ctx.ogs, old_id)
+        assert r.status_code == 200, r.text
+
+    def test_chief_welder_can_supersede(
+        self, client: TestClient, ctx: DefectCtx, root
+    ):
+        old_id = _to_active(client, ctx, root.id)
+        r = _supersede(client, ctx.chief, old_id)
+        assert r.status_code == 200, r.text
+
+    def test_norole_cannot_see_or_supersede(
+        self, client: TestClient, ctx: DefectCtx, root
+    ):
+        """`norole` не имеет даже READ-видимости → 404 раньше проверки роли действия
+        (тот же порядок, что в `transition`: скрытый ресурс → 404 до 403)."""
+        old_id = _to_active(client, ctx, root.id)
+        r = _supersede(client, ctx.norole, old_id)
+        assert r.status_code == 404, r.text
+
+
+class TestSupersedeReasonAndPayload:
+    def test_missing_reason_rejected_by_schema(
+        self, client: TestClient, ctx: DefectCtx, root
+    ):
+        old_id = _to_active(client, ctx, root.id)
+        r = client.post(
+            f"{API}/{old_id}/supersede",
+            json={
+                "decision_type": "REPAIR_REQUIRED",
+                "justification": "новая версия",
+            },
+            headers=ctx.h(ctx.chief),
+        )
+        assert r.status_code == 422, r.text
+
+    def test_blank_reason_rejected_by_service(
+        self, client: TestClient, ctx: DefectCtx, root
+    ):
+        old_id = _to_active(client, ctx, root.id)
+        r = _supersede(client, ctx.chief, old_id, supersede_reason="   ")
+        assert r.status_code == 422, r.text
+        assert r.json()["detail"]["code"] == ddw.DISPOSITION_REASON_REQUIRED
+
+    def test_invalid_decision_type_rejected(
+        self, client: TestClient, ctx: DefectCtx, root
+    ):
+        old_id = _to_active(client, ctx, root.id)
+        r = client.post(
+            f"{API}/{old_id}/supersede",
+            json={
+                "decision_type": "NOT_A_TYPE",
+                "justification": "x",
+                "supersede_reason": "x",
+            },
+            headers=ctx.h(ctx.chief),
+        )
+        assert r.status_code == 422, r.text
+
+    def test_blank_justification_rejected(
+        self, client: TestClient, ctx: DefectCtx, root
+    ):
+        old_id = _to_active(client, ctx, root.id)
+        r = client.post(
+            f"{API}/{old_id}/supersede",
+            json={
+                "decision_type": "REPAIR_REQUIRED",
+                "justification": "   ",
+                "supersede_reason": "x",
+            },
+            headers=ctx.h(ctx.chief),
+        )
+        assert r.status_code == 422, r.text
+
+
+class TestSupersedeAudit:
+    def test_events_recorded_for_old_and_new(
+        self, client: TestClient, ctx: DefectCtx, root
+    ):
+        old_id = _to_active(client, ctx, root.id)
+        r = _supersede(
+            client,
+            ctx.ogs,
+            old_id,
+            supersede_reason="Причина замещения",
+        )
+        assert r.status_code == 200, r.text
+        new_id = r.json()["id"]
+
+        old_events = client.get(f"{API}/{old_id}/events", headers=ctx.h(ctx.chief)).json()
+        superseded = [e for e in old_events if e["event_type"] == ddw.EVENT_SUPERSEDED]
+        assert len(superseded) == 1
+        ev = superseded[0]
+        assert ev["action"] == "SUPERSEDE"
+        assert ev["previous_status"] == "ACTIVE"
+        assert ev["new_status"] == "SUPERSEDED"
+        assert ev["actor_role"] == "OGS_ENGINEER"
+        assert ev["actor_worker_id"] == ctx.ogs.id
+        assert ev["reason"] == "Причина замещения"
+
+        new_events = client.get(f"{API}/{new_id}/events", headers=ctx.h(ctx.chief)).json()
+        assert [e["event_type"] for e in new_events] == [ddw.EVENT_CREATED]
+        assert new_events[0]["previous_status"] is None
+        assert new_events[0]["new_status"] == "DRAFT"
+
+    def test_rollback_keeps_old_active_and_no_new_row(
+        self, db: Session, ctx: DefectCtx, root, monkeypatch
+    ):
+        svc = DefectDispositionService(db)
+        old = svc.create(
+            defect_root_id=root.id,
+            decision_type="REPAIR_REQUIRED",
+            justification="rollback supersede",
+            actor_worker_id=ctx.ogs.id,
+        )
+        svc.transition(old.id, action="PREPARE", actor_worker_id=ctx.ogs.id)
+        svc.transition(
+            old.id, action="APPROVE", actor_worker_id=ctx.otk.id, comment="ok"
+        )
+        svc.transition(
+            old.id, action="ACTIVATE", actor_worker_id=ctx.chief.id, comment="ввод"
+        )
+        old_id = old.id
+
+        def boom() -> None:
+            raise RuntimeError("simulated commit failure")
+
+        monkeypatch.setattr(svc._repo, "save", boom)
+        with pytest.raises(RuntimeError):
+            svc.supersede(
+                old_id,
+                decision_type="ACCEPT_AS_IS",
+                justification="новая версия",
+                actor_worker_id=ctx.ogs.id,
+                reason="причина",
+            )
+        db.rollback()
+        db.expire_all()
+
+        reloaded = db.get(DefectDisposition, old_id)
+        assert reloaded is not None
+        assert reloaded.status == "ACTIVE"
+
+        siblings = (
+            db.query(DefectDisposition)
+            .filter(DefectDisposition.defect_root_id == root.id)
+            .all()
+        )
+        assert len(siblings) == 1
+
+        events = (
+            db.query(DefectDispositionEvent)
+            .filter(DefectDispositionEvent.defect_disposition_id == old_id)
+            .all()
+        )
+        assert [e.event_type for e in events] == [
+            ddw.EVENT_CREATED,
+            ddw.EVENT_PREPARED,
+            ddw.EVENT_APPROVED,
+            ddw.EVENT_ACTIVATED,
+        ]
+
+
+class TestSupersedeConcurrency:
+    def test_concurrent_supersede_only_one_wins(self, db: Session):
+        """Два конкурентных supersede одной ACTIVE-версии: только один создаёт DRAFT."""
+        ctx = DefectCtx(db, "Ds")
+        joint = ctx.new_joint("J-DS-1")
+        evaluation = ctx.new_evaluation(joint)
+        root = make_root(ctx, joint=joint, evaluation=evaluation, defect_no=1)
+        svc = DefectDispositionService(db)
+        disp = svc.create(
+            defect_root_id=root.id,
+            decision_type="REPAIR_REQUIRED",
+            justification="concurrency supersede",
+            actor_worker_id=ctx.ogs.id,
+        )
+        svc.transition(disp.id, action="PREPARE", actor_worker_id=ctx.ogs.id)
+        svc.transition(
+            disp.id, action="APPROVE", actor_worker_id=ctx.otk.id, comment="ok"
+        )
+        svc.transition(
+            disp.id, action="ACTIVATE", actor_worker_id=ctx.chief.id, comment="ввод"
+        )
+        old_id = disp.id
+        ogs_id = ctx.ogs.id
+        chief_id = ctx.chief.id
+        db.commit()
+
+        def supersede_worker(actor_worker_id: int, tag: str):
+            s = SessionLocal()
+            try:
+                new = DefectDispositionService(s).supersede(
+                    old_id,
+                    decision_type="ACCEPT_AS_IS",
+                    justification=f"версия от {tag}",
+                    actor_worker_id=actor_worker_id,
+                    reason=f"race {tag}",
+                )
+                return ("ok", str(new.id))
+            except DomainError as exc:
+                s.rollback()
+                return ("err", exc.code)
+            except Exception as exc:  # noqa: BLE001
+                s.rollback()
+                return ("err", type(exc).__name__)
+            finally:
+                s.close()
+
+        results = _run_parallel(
+            [
+                lambda: supersede_worker(ogs_id, "A"),
+                lambda: supersede_worker(chief_id, "B"),
+            ]
+        )
+        codes = [r[0] for r in results]
+        assert codes.count("ok") == 1, results
+        assert codes.count("err") == 1, results
+        err_code = [r[1] for r in results if r[0] == "err"][0]
+        assert err_code == ddw.DISPOSITION_SUPERSEDE_REQUIRES_ACTIVE, results
+
+        db.expire_all()
+        old = db.get(DefectDisposition, old_id)
+        assert old is not None
+        assert old.status == "SUPERSEDED"
+
+        siblings = (
+            db.query(DefectDisposition)
+            .filter(DefectDisposition.defect_root_id == root.id)
+            .all()
+        )
+        assert len(siblings) == 2, siblings
+
+        new_rows = [d for d in siblings if d.id != old_id]
+        assert len(new_rows) == 1
+        assert new_rows[0].status == "DRAFT"
+        assert new_rows[0].supersedes_disposition_id == old_id
+
+        events = (
+            db.query(DefectDispositionEvent)
+            .filter(DefectDispositionEvent.defect_disposition_id == old_id)
+            .all()
+        )
+        superseded_events = [
+            e for e in events if e.event_type == ddw.EVENT_SUPERSEDED
+        ]
+        assert len(superseded_events) == 1, superseded_events
+
+
 # ── Pure workflow unit ─────────────────────────────────────────────────────────
 
 
@@ -512,7 +892,9 @@ class TestWorkflowPure:
         assert not ddw.can_transition("APPROVED", "CANCELLED")
         assert not ddw.can_transition("ACTIVE", "CANCELLED")
         assert not ddw.can_transition("CANCELLED", "DRAFT")
-        assert not ddw.can_transition("ACTIVE", "SUPERSEDED")  # не в MVP
+        # ACTIVE → SUPERSEDED существует в таблице переходов (9D-4A-4), но выполняется
+        # только отдельной командой SUPERSEDE, а не общим /transition (см. TestSupersede).
+        assert ddw.can_transition("ACTIVE", "SUPERSEDED")
         assert ddw.ROLE_OTK_INSPECTOR not in ddw.DISPOSITION_ACTIVATE_ROLES
         assert ddw.DISPOSITION_ACTIVATE_ROLES == frozenset({ddw.ROLE_CHIEF_WELDER})
 

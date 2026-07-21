@@ -1,7 +1,9 @@
-"""HTTP-слой DefectDisposition (Task 9D-4A-3, ADR-023).
+"""HTTP-слой DefectDisposition (Task 9D-4A-3/9D-4A-4, ADR-023).
 
 Тонкий транспорт: маршрутизация, Pydantic, актор из `X-User-Id`. Переходы статуса —
 только через `POST …/transition` (команда `action`); прямого PATCH status нет.
+`SUPERSEDE` (Task 9D-4A-4) — отдельный эндпойнт `POST …/supersede`, т.к. создаёт
+новую версию (новую строку), а не только меняет статус текущей.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from app.quality.defect_disposition_schemas import (
     DefectDispositionCreateRequest,
     DefectDispositionEventRead,
     DefectDispositionRead,
+    DefectDispositionSupersedeRequest,
     DefectDispositionTransitionRequest,
 )
 from app.quality.defect_disposition_services import DefectDispositionService
@@ -74,6 +77,28 @@ def transition_disposition(
         action=payload.action,
         actor_worker_id=actor_worker_id,
         comment=payload.comment,
+    )
+
+
+@router.post(
+    "/quality/defect-dispositions/{disposition_id}/supersede",
+    response_model=DefectDispositionRead,
+)
+def supersede_disposition(
+    disposition_id: UUID,
+    payload: DefectDispositionSupersedeRequest,
+    svc: DefectDispositionService = Depends(_svc),
+    actor_worker_id: int = Depends(get_current_user_id),
+):
+    """Открывает новую версию решения (Task 9D-4A-4): `ACTIVE → SUPERSEDED` + новая
+    `DRAFT`. Возвращает новую версию; старая доступна по её собственному `GET`."""
+    return svc.supersede(
+        disposition_id,
+        decision_type=payload.decision_type,
+        justification=payload.justification,
+        actor_worker_id=actor_worker_id,
+        comment=payload.comment,
+        reason=payload.supersede_reason,
     )
 
 
