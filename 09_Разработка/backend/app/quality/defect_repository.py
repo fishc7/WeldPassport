@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import and_
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.quality.defect_models import (
@@ -177,6 +177,38 @@ class DefectRepository:
         self, location_type_id: UUID
     ) -> DefectLocationType | None:
         return self.db.get(DefectLocationType, location_type_id)
+
+    # ── Публичное чтение справочников (Task 9D-3C-2; без domain policy/RBAC) ────
+    # Отдельные от internal-валидации методы: list с фильтром активности и стабильной
+    # сортировкой по code; detail — семантическая обёртка над get_*, возвращает запись
+    # независимо от is_active. Правило «reference must be active» (DEFECT_*_INACTIVE)
+    # к публичному чтению НЕ применяется — оно остаётся только в create/activate-валидации.
+
+    def list_defect_types(self, *, active_only: bool = True) -> list[DefectType]:
+        stmt = select(DefectType)
+        if active_only:
+            stmt = stmt.where(DefectType.is_active.is_(True))
+        stmt = stmt.order_by(DefectType.code.asc())
+        return list(self.db.execute(stmt).scalars().all())
+
+    def get_defect_type_for_read(
+        self, defect_type_id: UUID
+    ) -> DefectType | None:
+        return self.get_defect_type(defect_type_id)
+
+    def list_defect_location_types(
+        self, *, active_only: bool = True
+    ) -> list[DefectLocationType]:
+        stmt = select(DefectLocationType)
+        if active_only:
+            stmt = stmt.where(DefectLocationType.is_active.is_(True))
+        stmt = stmt.order_by(DefectLocationType.code.asc())
+        return list(self.db.execute(stmt).scalars().all())
+
+    def get_defect_location_type_for_read(
+        self, location_type_id: UUID
+    ) -> DefectLocationType | None:
+        return self.get_defect_location_type(location_type_id)
 
     # ── Родительские сущности (read-only, для доменной валидации) ──────────────
 

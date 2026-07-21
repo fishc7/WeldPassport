@@ -36,7 +36,13 @@ from app.hr.models import WorkerRole
 from app.projects.repository import ProjectRepo
 from app.quality import defect_workflow as dw
 from app.quality import engineering_evaluation_workflow as eew
-from app.quality.defect_models import Defect, DefectEvent, DefectRoot
+from app.quality.defect_models import (
+    Defect,
+    DefectEvent,
+    DefectLocationType,
+    DefectRoot,
+    DefectType,
+)
 from app.quality.defect_repository import DefectRepository
 from app.quality.defect_validation import (
     normalize_field_values,
@@ -340,6 +346,38 @@ class DefectService:
         joint = self._require_joint(root.joint_id)
         self._require_visible(joint, actor_worker_id)
         return self._repo.list_events(root.id)
+
+    # ── справочники (публичное read-only; Task 9D-3C-2, Spec 9D-3C §10) ──────────
+    # Системные справочники не привязаны к Joint: без actor_worker_id, без Joint-scope
+    # и RBAC-решений (authenticated read-only обеспечивается будущим API-dependency,
+    # Task 9D-3C-3). Методы только делегируют репозиторию; detail при отсутствии →
+    # каноническая доменная 404. Активность записи публичное чтение НЕ проверяет —
+    # `DEFECT_TYPE_INACTIVE`/`DEFECT_LOCATION_TYPE_INACTIVE` остаются только в
+    # create/activate-валидации (`_resolve_refs`), которая здесь не затрагивается.
+
+    def list_defect_types(self, *, active_only: bool = True) -> list[DefectType]:
+        return self._repo.list_defect_types(active_only=active_only)
+
+    def get_defect_type_for_read(self, defect_type_id: UUID) -> DefectType:
+        defect_type = self._repo.get_defect_type_for_read(defect_type_id)
+        if defect_type is None:
+            raise DomainError(404, dw.DEFECT_TYPE_NOT_FOUND, "Тип дефекта не найден")
+        return defect_type
+
+    def list_defect_location_types(
+        self, *, active_only: bool = True
+    ) -> list[DefectLocationType]:
+        return self._repo.list_defect_location_types(active_only=active_only)
+
+    def get_defect_location_type_for_read(
+        self, location_type_id: UUID
+    ) -> DefectLocationType:
+        location_type = self._repo.get_defect_location_type_for_read(location_type_id)
+        if location_type is None:
+            raise DomainError(
+                404, dw.DEFECT_LOCATION_TYPE_NOT_FOUND, "Расположение не найдено"
+            )
+        return location_type
 
     # ── создание DRAFT ─────────────────────────────────────────────────────────
 
