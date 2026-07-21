@@ -24,9 +24,9 @@
 
 # 🟢 Текущее состояние
 
-Текущий этап: **Task 9D — Quality / Defect Management**, блок **9D-4 (Finding Disposition and Holds)**, подблок **9D-4A (DefectDisposition workflow)** — реализация в процессе (9D-4A-2/4A-3 done, 9D-4A-4 in progress).
+Текущий этап: **Task 9D — Quality / Defect Management**, блок **9D-4 (Finding Disposition and Holds)**, подблок **9D-4A (DefectDisposition workflow)** — **завершён** (9D-4A-2/4A-3/4A-4 done). Следующий шаг — оставшаяся часть блока 9D-4 (`ProductionHold`/`ProductionHoldRelease`), затем 9D-5.
 
-Общий статус: инженерный контур (`Project → Line → EngineeringDocument → Joint → WeldOperation → HeatTreatment → Inspection`) реализован полностью (Tasks 1–8F, 9A–9C). Идёт реализация контроля качества после результата контроля (`QualityFinding → EngineeringEvaluation → Defect → DefectDisposition`). `PROJECT_STATUS.yaml` не обновлялся с 06.07.2026 и не отражает всё, что сделано после этой даты — см. риски ниже.
+Общий статус: инженерный контур (`Project → Line → EngineeringDocument → Joint → WeldOperation → HeatTreatment → Inspection`) реализован полностью (Tasks 1–8F, 9A–9C). Контур `QualityFinding → EngineeringEvaluation → Defect → DefectDisposition` (create/prepare/approve/activate/cancel/supersede) реализован и закоммичен. `PROJECT_STATUS.yaml` не обновлялся с 06.07.2026 и не отражает всё, что сделано после этой даты — см. риски ниже.
 
 ---
 
@@ -57,28 +57,25 @@
 | 9D-3 Defect core (ADR-022) | ✅ done | `8e0ae4c` (2026-07-20) |
 | **9D-4A-2** DefectDisposition — модель данных (ADR-023) | ✅ done | входит в `dfaa87b` |
 | **9D-4A-3** DefectDisposition — роли (`OTK_INSPECTOR` approve, `CHIEF_WELDER` activate) | ✅ done | `dfaa87b` (2026-07-21) `feat(quality): add defect disposition workflow` |
-| **9D-4A-4** DefectDisposition — Supersede workflow | 🔄 **в работе, не закоммичено** | — |
-
-> Примечание: в постановке задачи текущей работой назван 9D-4A-3 — по факту репозитория этот подблок уже завершён и закоммичен. Реально незакоммиченная работа сейчас — 9D-4A-4.
+| **9D-4A-4** DefectDisposition — Supersede workflow | ✅ done | `d3a6d87` (2026-07-21) `feat(quality): add defect disposition supersede workflow` |
 
 ### 9D-4A-4 — DefectDisposition Supersede Workflow
 
 - **Цель.** Дать возможность пересмотреть уже активное официальное решение по дефекту (`DefectDisposition`) без потери истории: старая версия помечается `SUPERSEDED`, атомарно создаётся новая версия `DRAFT`, связанная через `supersedes_disposition_id`.
-- **Текущий статус.** Архитектурное решение принято и записано в `docs/project/DECISIONS.md` (раздел «9D-4A-4 Decision», 2026-07-21, статус ACCEPTED) — **но эта запись сама ещё не закоммичена**. Код изменён, но не закоммичен.
-- **Что уже сделано.** Изменены `defect_disposition_workflow.py`, `defect_disposition_policy.py`, `defect_disposition_repository.py`, `defect_disposition_services.py`, `defect_disposition_schemas.py`, `defect_disposition_api.py`, тесты `test_defect_disposition_workflow.py`; добавлена миграция `20260721_24_disp_supersede.py` (новый event type `DISPOSITION_SUPERSEDED`, root-level lock).
-- **Что осталось.** Прогнать тесты, зафиксировать (`git add` + commit) код и решение в `DECISIONS.md`; после этого — обновить `PROJECT_STATUS.yaml` и `PROJECT_EXECUTION_MAP.md` по правилу проекта.
+- **Статус.** ✅ Завершено и закоммичено (`d3a6d87`, 2026-07-21). Архитектурное решение зафиксировано в `docs/project/DECISIONS.md` (раздел «9D-4A-4 Decision», статус ACCEPTED) в том же коммите, что и код.
+- **Что сделано.** `defect_disposition_workflow.py`, `defect_disposition_policy.py`, `defect_disposition_repository.py`, `defect_disposition_services.py`, `defect_disposition_schemas.py`, `defect_disposition_api.py`, тесты `test_defect_disposition_workflow.py`; миграция `20260721_24_disp_supersede.py` (новый event type `DISPOSITION_SUPERSEDED`, root-level lock). Полный набор тестов (47 локальных, 393 по domain quality, 1519 по всему backend) — зелёный.
+- **Что осталось.** Ничего — блок 9D-4A закрыт целиком (9D-4A-2/4A-3/4A-4).
 
 ---
 
 # ⏭ Следующие шаги
 
-1. Закоммитить 9D-4A-4 (Supersede workflow) — тесты и решение уже готовы, требуется зафиксировать.
-2. Закрыть оставшуюся часть блока **9D-4** — `ProductionHold` / `ProductionHoldRelease` и вычисляемый quality state `Joint` (пока нет отдельной реализации, только упоминания в workflow).
-3. **9D-5 — Customer Quality Decision** (внешний участник, внутренний регистратор, evidence, история версий).
-4. **9D-6 — Corrective Action and Reinspection Links** (интеграция с Repair/Reweld/Inspection, closure readiness).
-5. **9D-7 — API, permissions and integration** (RBAC, cross-module валидация, интеграционные тесты всего контура 9D).
-6. **9D-8 — Architecture consolidation** Task 9D.
-7. Актуализировать `docs/project/PROJECT_STATUS.yaml` и `PROJECT_EXECUTION_MAP.md` (не обновлялись с 06.07.2026).
+1. Закрыть оставшуюся часть блока **9D-4** — `ProductionHold` / `ProductionHoldRelease` и вычисляемый quality state `Joint` (пока нет отдельной реализации, только упоминания в workflow).
+2. **9D-5 — Customer Quality Decision** (внешний участник, внутренний регистратор, evidence, история версий).
+3. **9D-6 — Corrective Action and Reinspection Links** (интеграция с Repair/Reweld/Inspection, closure readiness).
+4. **9D-7 — API, permissions and integration** (RBAC, cross-module валидация, интеграционные тесты всего контура 9D).
+5. **9D-8 — Architecture consolidation** Task 9D.
+6. Актуализировать `docs/project/PROJECT_STATUS.yaml` и `PROJECT_EXECUTION_MAP.md` (не обновлялись с 06.07.2026).
 
 ---
 
@@ -86,6 +83,7 @@
 
 | Commit | Дата | Описание |
 |---|---|---|
+| `d3a6d87` | 2026-07-21 | feat(quality): add defect disposition supersede workflow (9D-4A-4) |
 | `dfaa87b` | 2026-07-21 | feat(quality): add defect disposition workflow (9D-4A-2/4A-3) |
 | `18f3899` | 2026-07-21 | feat(quality): implement defect API and reference services |
 | `8e0ae4c` | 2026-07-20 | feat(quality): add defect technical model (Task 9D-3) |
