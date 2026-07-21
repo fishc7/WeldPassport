@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.engineering.models import DocumentRevision, EngineeringDocument, Joint
 from app.hr.models import Worker, WorkerRole
-from app.projects.models import Line, Project
+from app.projects.models import Company, Line, Project, ProjectCompany
 from app.quality.defect_models import (
     Defect,
     DefectEvent,
@@ -33,6 +33,8 @@ from app.quality.models import (
 from .conftest import TEST_COMPANY_ID
 
 TODAY = date.today()
+
+DEFECTS_API = "/api/v1/quality/defects"
 
 
 def seeded_type_id(db: Session, code: str = "CRACK"):
@@ -110,6 +112,7 @@ class DefectCtx:
         self.chief = self._role_worker(f"{code}C", "CHIEF_WELDER")
         self.otk = self._role_worker(f"{code}K", "OTK_INSPECTOR")
         self.norole = self._worker(f"{code}Z")
+        self._linked_company: Company | None = None
 
     def _worker(self, suffix: str) -> Worker:
         w = Worker(
@@ -125,17 +128,75 @@ class DefectCtx:
         return w
 
     def _role_worker(self, suffix: str, role_code: str) -> Worker:
+        return self.scoped_role_worker(suffix, role_code, "GLOBAL")
+
+    def scoped_role_worker(
+        self,
+        suffix: str,
+        role_code: str,
+        scope_type: str,
+        scope_id: str | None = None,
+    ) -> Worker:
+        """Работник с ролью в заданном scope (для RBAC/scope-матрицы 9D-3C-4)."""
         w = self._worker(suffix)
         role = WorkerRole(
             worker_id=w.id,
             role_code=role_code,
-            scope_type="GLOBAL",
+            scope_type=scope_type,
+            scope_id=scope_id,
             is_active=True,
             valid_from=TODAY,
         )
         self.db.add(role)
         self.db.commit()
         return w
+
+    def scope_id_for(self, scope_type: str) -> str | None:
+        """Идентификатор scope для текущего контекста Joint (COMPANY — связанная org)."""
+        if scope_type == "PROJECT":
+            return str(self.project.id)
+        if scope_type == "LINE":
+            return str(self.line.id)
+        if scope_type == "ENGINEERING_DOCUMENT":
+            return str(self.document.id)
+        if scope_type == "COMPANY":
+            return str(self.ensure_linked_company().id)
+        if scope_type == "SITE":
+            return str(uuid4())
+        return None
+
+    def ensure_linked_company(
+        self, *, name: str | None = None, role_code: str = "WELDING_CONTRACTOR"
+    ) -> Company:
+        """Организация с действующей связью project_companies (для COMPANY-scope)."""
+        if self._linked_company is not None:
+            return self._linked_company
+        company = Company(
+            name=name or f"Org {self.code}",
+            status="active",
+            created_by=self.creator.id,
+        )
+        self.db.add(company)
+        self.db.commit()
+        self.db.refresh(company)
+        self.link_project_company(company, role_code)
+        self._linked_company = company
+        return company
+
+    def link_project_company(self, company: Company, role_code: str) -> None:
+        self.db.add(
+            ProjectCompany(
+                project_id=self.project.id,
+                company_id=company.id,
+                role_code=role_code,
+                valid_from=TODAY,
+            )
+        )
+        self.db.commit()
+
+    @staticmethod
+    def h(worker: Worker) -> dict[str, str]:
+        return {"X-User-Id": str(worker.id)}
 
     def new_joint(self, joint_no: str) -> Joint:
         j = Joint(
@@ -276,4 +337,43 @@ def _now(ctx: DefectCtx):
     return ctx.db.execute(text("SELECT now()")).scalar_one()
 
 
-__all__ = ["DefectCtx", "make_root", "make_defect", "DefectEvent"]
+def create_defect_http(
+    client,
+    worker: Worker,
+    *,
+    joint_id,
+    engineering_evaluation_id,
+    activate: bool = False,
+    extra_fields: dict | None = None,
+):
+    """POST /quality/defects через TestClient (real-DB HTTP helper)."""
+    from decimal import Decimal
+    from uuid import UUID
+
+    body: dict = {
+        "joint_id": str(joint_id),
+        "engineering_evaluation_id": str(engineering_evaluation_id),
+        "activate": activate,
+    }
+    if extra_fields:
+        for key, value in extra_fields.items():
+            if isinstance(value, UUID):
+                body[key] = str(value)
+            elif isinstance(value, Decimal):
+                body[key] = str(value)
+            else:
+                body[key] = value
+    return client.post(DEFECTS_API, json=body, headers=DefectCtx.h(worker))
+
+
+__all__ = [
+    "DEFECTS_API",
+    "DefectCtx",
+    "DefectEvent",
+    "create_defect_http",
+    "make_defect",
+    "make_root",
+    "seeded_location_id",
+    "seeded_type_id",
+    "valid_active_fields",
+]
