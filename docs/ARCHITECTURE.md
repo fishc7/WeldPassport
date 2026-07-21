@@ -615,7 +615,8 @@ Printed Forms Canon).
 
 > **Частичное замещение (§5.9, ADR-019).** Участок `Quality Finding → Closure` углублён
 > в §5.9: `Quality Decision` декомпозировано на `EngineeringEvaluation →
-> DefectAcceptanceAssessment → FindingDisposition` (более **не** самостоятельная
+> DefectAcceptanceAssessment → FindingDisposition` (историческая модель ADR-019,
+> `SUPERSEDED_BY DefectDisposition`; `Quality Decision` более **не** самостоятельная
 > доменная сущность — только обобщённое бизнес-понятие); `Defect Severity` → `Confirmed
 > Severity`; `OTK_INSPECTOR` — **опциональная проектная роль** (fallback — `CHIEF_WELDER`).
 > Действующая реализационная структура — **9D-1 … 9D-8** (историческая разбивка 9E — 9K —
@@ -672,19 +673,25 @@ Defect/Repair/Reinspection остаются вне объёма.
 
 Канон: [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019]] ·
 [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 008-07 — Quality Finding and Engineering Evaluation|Architecture Session 008-07]].
-**Статус:** канон принят. Реализация Task 9D — **частичная (partially implemented)**:
+**Статус:** основной канон ADR-019 принят. Его модель `FindingDisposition` является
+исторической и заменена для подтверждённых Defect моделью `DefectDisposition` в
+[[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024 (ACCEPTED)]].
+Целевая модель ниже принята, но текущая реализация ещё не приведена к ней и требует
+отдельной Task Implementation Specification. Реализация Task 9D — **частичная (partially implemented)**:
 **Task 9D-1 QualityFinding Core реализован** (модель `QualityFinding` + счётчик номера
 `<PROJECT_CODE>-QF-<SEQUENCE>` + журнал, базовый lifecycle `DRAFT → REGISTERED →
 UNDER_EVALUATION` + отмена/удаление DRAFT, репозиторий, сервис-команды, схемы, API,
-RBAC, миграция, тесты). **`EngineeringEvaluation` и блоки 9D-2 … 9D-6 не реализованы**
-(planned / not implemented). Канон, lifecycle, роли и границы задач ниже не меняются.
+RBAC, миграция, тесты). Реализация следующих блоков отражена в
+[[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]; статусные фразы исходного ADR-019
+сохраняются как исторические снимки. Целевая замена disposition-модели определяется только
+принятым ADR-024.
 
 Session 008-07 углубляет участок `Quality Finding → Closure` канона Session 008
 (ADR-017) и разделяет ранее единое `Quality Decision` на **три** отдельных решения:
 
 ```text
 QualityFinding → EngineeringEvaluation → Defect / DefectAcceptanceAssessment →
-FindingDisposition → ProductionHold → Corrective Action / Reinspection →
+DefectDisposition (accepted target, ADR-024) → ProductionHold → Corrective Action / Reinspection →
 CustomerQualityDecision → Closure
 ```
 
@@ -702,8 +709,9 @@ CustomerQualityDecision → Closure
 | EngineeringEvaluation | Ревизионная сущность; готовит `WELDING_ENGINEER`, фиксирует/вводит в действие `CHIEF_WELDER`; после фиксации содержание неизменяемо, одновременно действует одна `EFFECTIVE` `EngineeringEvaluationRevision`, новая ревизия → предыдущая `SUPERSEDED` (термин `APPROVED` заменён на `EFFECTIVE`, 9D-2-C03/C05); классификации `CONFIRMED_DEFECT`/`NOT_CONFIRMED`/`TECHNOLOGICAL_DEVIATION`/…; определяет `impact_scope` |
 | RequirementReference и applicability | Структурированная `RequirementReference` (документ, редакция, пункт, снимок текста, применимость); `Document Applicability` (`REFERENCE_ONLY`/`UNDER_REVIEW`/`APPLICABLE`/`APPLICABLE_WITH_LIMITATIONS`/`SUPERSEDED`/`NOT_APPLICABLE`) — обязательным основанием служат только `APPLICABLE`/`APPLICABLE_WITH_LIMITATIONS`; загруженный «для ознакомления» документ правил не активирует |
 | Defect | Отдельная подтверждённая запись после `CONFIRMED_DEFECT`; `DefectType` — управляемый справочник (не enum); вычисляемый lifecycle; `DefectMeasurement` от источника контроля (ОГС не переписывает измерения лаборатории); геометрия разделена: `DefectLocation` / `RepairExcavationZone` / `RepairWeldZone` |
-| DefectAcceptanceAssessment | Техническая приемлемость (`ACCEPTABLE`/`UNACCEPTABLE`/`CONDITIONALLY_ACCEPTABLE`/`INSUFFICIENT_DATA`/`NOT_APPLICABLE`) **≠** `FindingDisposition`; противоречивые комбинации блокируются |
-| FindingDisposition | «Что необходимо сделать»; создаётся только по действующей `EFFECTIVE` `EngineeringEvaluationRevision`; типы `NO_ACTION_REQUIRED`/`ADDITIONAL_INSPECTION`/`DOCUMENT_CORRECTION`/`PROCESS_REVIEW`/`ACCEPT_AS_IS`/`REPAIR`/`REWELD`/`CUT_OUT_AND_REPLACE`/`REJECT_JOINT`/`RETURN_FOR_ADDITIONAL_EVALUATION`; критические утверждает `CHIEF_WELDER` |
+| DefectAcceptanceAssessment | Техническая приемлемость (`ACCEPTABLE`/`UNACCEPTABLE`/`CONDITIONALLY_ACCEPTABLE`/`INSUFFICIENT_DATA`/`NOT_APPLICABLE`) **≠** исполняемое disposition; противоречивые комбинации блокируются |
+| FindingDisposition | **Историческая модель ADR-019; `SUPERSEDED_BY DefectDisposition` для подтверждённых Defect.** Была связана с `QualityFinding`/evaluation и имела собственные типы/lifecycle. Не является синонимом `recommended_disposition`; не используется как основание новых Tasks |
+| DefectDisposition | **Принятая целевая модель ADR-024; реализация требует отдельного приведения.** Официальное исполняемое решение по подтверждённому Defect; дочерний агрегат `DefectRoot`; связь с evaluation только через Defect. Типы MVP: `REPAIR_REQUIRED`/`REINSPECTION_REQUIRED`/`ACCEPT_AS_IS`/`REJECT_JOINT`. Не является Repair, Reweld, Reinspection, ProductionHold или рекомендацией evaluation |
 | Corrective action | Отдельное действие `authorize_corrective_action_start` до старта repair/reweld/cut-out; для `REPAIR`/`REWELD`/`CUT_OUT_AND_REPLACE` предварительно — утверждённый `ReinspectionRequirement`; исполнение через `CorrectiveActionLink`, а не по текстовой отметке |
 | CustomerQualityDecision | Внешнее решение (внешний участник + внутренний регистратор + обязательное доказательство), не внутренняя оценка ОГС; версионно и неизменяемо |
 | Quality State Joint | Отдельно `technical_quality_state`/`documentation_state`/`customer_acceptance_state`/`handover_readiness`/`production_hold`; агрегация по активным finding (наиболее строгое); API возвращает блокирующие finding |
@@ -718,25 +726,35 @@ QualityFinding: DRAFT → REGISTERED → UNDER_EVALUATION → DISPOSITION_PENDIN
    (ветка: DISPOSITION_PENDING → CUSTOMER_DECISION_PENDING → READY_FOR_CLOSURE;
     + DRAFT → deleted; REGISTERED → CANCELLED)
 EngineeringEvaluationRevision: DRAFT → PREPARED → FIXED → EFFECTIVE → SUPERSEDED (согл.: FIXED → PENDING_APPROVAL → EFFECTIVE; + PREPARED → DRAFT возврат; PREPARED/FIXED/PENDING_APPROVAL → WITHDRAWN) — ADR-021/9D-2-C06
-FindingDisposition:   DRAFT → PENDING_APPROVAL → APPROVED → IN_EXECUTION → COMPLETED (+ RETURNED; SUPERSEDED)
+FindingDisposition:   исторический lifecycle ADR-019; SUPERSEDED_BY DefectDisposition
+DefectDisposition:    DRAFT → PREPARED → APPROVED → ACTIVE → SUPERSEDED
+                      (+ UPDATE_DRAFT в DRAFT; CANCELLED до ACTIVE; ADR-024 ACCEPTED)
 ProductionHold:       ACTIVE → CONFIRMED → PARTIALLY_RELEASED → RELEASED (+ SUPERSEDED; INVALIDATED)
 ```
 
-Роли (новых `role_code` нет): `CHIEF_WELDER` — утверждение evaluation, критические
-disposition, подтверждение hold, закрытие критических finding, применимость документов;
-**обязательный fallback** критических полномочий ОТК (008-07-BP). `WELDING_ENGINEER` —
-подготовка evaluation, регистрация/рассмотрение finding, disposition в пределах матрицы
+Роли ADR-019 (новых `role_code` нет): `CHIEF_WELDER` — утверждение evaluation,
+подтверждение hold, закрытие критических finding, применимость документов; исторический
+fallback критических полномочий ОТК (008-07-BP). Для `DefectDisposition` принятый ADR-024
+вводит локальное исключение: ordinary APPROVE — только effective `OTK_INSPECTOR`
+в GLOBAL/том же PROJECT scope, ACTIVATE — только `CHIEF_WELDER`, override отсутствует;
+действующий OTK-route проверяется и при APPROVE, и повторно при ACTIVATE. Историческая
+законность APPROVE определяется immutable authorization snapshot роли/scope на момент
+команды: роль прежнего approver не обязана оставаться active, а текущий OTK-route при
+ACTIVATE может обеспечиваться другим инспектором.
+`WELDING_ENGINEER` — подготовка evaluation, регистрация/рассмотрение finding, disposition в пределах матрицы
 полномочий; **не заменяет** `CHIEF_WELDER` в критических решениях. `OTK_INSPECTOR` —
 **опциональная проектная роль** (008-07-BP): внутреннее ОТК не обязательно, определяется
-конфигурацией проекта; workflow не требует фиктивного пользователя ОТК; при наличии
-реального ОТК роль активируется без изменения доменной модели. Заказчик — **внешний
+конфигурацией проекта; workflow ADR-019 не требует фиктивного пользователя ОТК. Это общее
+правило не является fallback для `DefectDisposition`: без реального effective OTK-route его
+нельзя утвердить или активировать. Заказчик — **внешний
 контур качества** через `CustomerQualityDecision` (или внешний inspection result); не
 является внутренним ОТК и не заменяет внутреннее решение ОГС.
 
 **Первый объём Task 9D** (9D-1 … 9D-8): `QualityFinding`, `FindingLocation`,
 `FindingEvidence`, `FindingCorrection`, `FindingAssignment`, `EngineeringEvaluation`,
 `RequirementReference`, `Defect`, `DefectType`, `DefectMeasurement`,
-`DefectAcceptanceAssessment`, `FindingDisposition`, `ProductionHold`,
+`DefectAcceptanceAssessment`, исторический `FindingDisposition` (
+`SUPERSEDED_BY DefectDisposition`), целевой `DefectDisposition`, `ProductionHold`,
 `ProductionHoldRelease`, `CustomerQualityDecision`, `CorrectiveActionLink`,
 `ReinspectionRequirement`. **Не входят** (точки расширения без пустых таблиц):
 `ResponsibilityAssessment`, `FindingPattern`, `CorrectivePreventiveAction`,
@@ -751,10 +769,15 @@ disposition, подтверждение hold, закрытие критичес�
   (поглощение: `9E → 9D-2 + 9D-4 + 9D-5`; `9F → 9D-3`; `9G → частично 9D-2 + 9D-3`;
   `9J → частично 9D-6`), непоглощённый объём (9H, 9I, 9K, остаток 9G) — будущие задачи.
 - **008-07-BP** — `OTK_INSPECTOR = optional project role`; критический fallback —
-  `CHIEF_WELDER` (см. роли выше и §5.8).
+  `CHIEF_WELDER` (см. роли выше и §5.8). ADR-024 вводит исключение только для
+  `DefectDisposition`: без OTK-route approve/activate невозможны, override вне MVP.
+- **ADR-024 ACCEPTED** — каждая mutating-команда требует `Idempotency-Key`; audit хранит
+  immutable authorization snapshot роли/scope, а `UPDATE_DRAFT` — доказуемый before/after
+  всех изменённых allow-list полей. Полная command matrix остаётся каноном ADR-024 §I.
 - **008-07-BQ** — `ADR-017 = PARTIALLY_SUPERSEDED_BY_ADR-019`: `Quality Decision`
   декомпозировано на `EngineeringEvaluation → DefectAcceptanceAssessment →
-  FindingDisposition` и более не является доменной сущностью; `Defect Severity` →
+  исторический `FindingDisposition` и более не является доменной сущностью; ADR-024
+  заменяет этот disposition-контур на `DefectDisposition`; `Defect Severity` →
   `Confirmed Severity`.
 
 Подробнее — [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019]] ·
@@ -770,7 +793,8 @@ disposition, подтверждение hold, закрытие критичес�
 `Defect` — **самостоятельная техническая запись** подтверждённого технического дефекта
 конкретного `Joint` (технический факт, происхождение, классификация, локализация, измеримые
 характеристики, нормативная классификация, история версий). `Defect` **не** является
-`QualityFinding`, `EngineeringEvaluation`, `FindingDisposition`, заданием на ремонт, фактом
+`QualityFinding`, `EngineeringEvaluation`, историческим `FindingDisposition`, целевым
+`DefectDisposition`, заданием на ремонт, фактом
 Repair/Reweld, повторным контролем или закрытием несоответствия.
 
 Ключевые правила:
@@ -783,7 +807,7 @@ Repair/Reweld, повторным контролем или закрытием �
 | Классификация | Структурированные поля (тип, группа, локализация, ориентация, поверхность, сторона, положение, длина/ширина/высота/глубина/площадь, число индикаций, нормативное обозначение/документ/редакция/пункт, описание); свободный текст не заменяет классификацию; коды стабильны и не зависят от языка; без привязки к единственному стандарту; методоспецифика НК остаётся в результате контроля |
 | Lifecycle | `DRAFT → ACTIVE → SUPERSEDED` (+ `CANCELLED`); **нет** статусов `REPAIRED`/`REMOVED`/`REWELDED`/`ACCEPTED`/`CLOSED`/`PASSED_REINSPECTION`; `SUPERSEDED`/`CANCELLED` не означают устранение дефекта; исходный `Defect` сохраняется как исторический факт после ремонта и повторного контроля |
 | Версионность | После активации существенные поля не меняются напрямую — только **supersede**: новый UUID, общий `defect_root`, ссылка на предыдущую версию, причина изменения, одна действующая версия в цепочке; номер версии не заменяет UUID |
-| Граница с FindingDisposition | `Defect` = «какой дефект подтверждён»; `FindingDisposition` = «что с ним сделать»; решения (принять/ремонт/reweld/вырезать/доп. контроль/пригодность) в `Defect` не хранятся |
+| Граница с disposition | `Defect` = «какой дефект подтверждён»; целевой `DefectDisposition` = «какое исполняемое решение принято по Defect». Исторический `FindingDisposition` заменён для подтверждённых Defect по ADR-024. Решения (принять/ремонт/reweld/вырезать/доп. контроль/пригодность) в `Defect` не хранятся |
 | Граница с Repair/Reweld/Reinspection | Не входят в 9D-3; ремонт не меняет `Defect`; повторный контроль не заменяет `Defect`; новый дефект от reinspection проходит новый цикл `QualityFinding → EngineeringEvaluation → Defect` |
 | Удаление | Физическое удаление через бизнес-API запрещено; ошибочные записи — через `CANCELLED` |
 | Аудит | `DEFECT_DRAFT_CREATED` / `DEFECT_UPDATED` / `DEFECT_ACTIVATED` / `DEFECT_CANCELLED` / `DEFECT_REVISION_CREATED` / `DEFECT_SUPERSEDED` (actor, время, причина отмены/supersede, старое/новое состояние, связь, correlation id) |

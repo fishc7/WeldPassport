@@ -76,8 +76,11 @@
 Любое фундаментальное решение считается принятым **только после его документального
 закрепления**.
 
-Чат и переписка — рабочий инструмент. Источник истины — файлы репозитория:
-`CONSTITUTION.md`, `ARCHITECTURE.md`, `DECISIONS.md`, `PROJECT_STATUS.yaml`.
+Чат и переписка — рабочий инструмент. Нормативные источники истины — Конституция,
+Architecture Sessions, ADR, каноническая архитектура и утверждённые Task /
+Implementation Specification. `PROJECT_STATUS.yaml`, Dashboard, Execution Map, Summary
+и Roadmap — ненормативные представления состояния и планов; при конфликте действует
+приоритет, установленный [[docs/project/ARCHITECTURE_GOVERNANCE#8. Status/control-документы и приоритет канона|AGF §8]].
 
 ---
 
@@ -85,7 +88,7 @@
 
 Проектирует не AI самостоятельно.
 
-Архитектура WeldPassport формируется **совместно** (роли — [[docs/project/ARCHITECTURE_GOVERNANCE#3. Роли|AGF §3]]):
+Архитектура WeldPassport формируется **совместно** (роли — [[docs/project/ARCHITECTURE_GOVERNANCE#4. Роли|AGF §4]]):
 
 - **Chief Domain Expert** — реальные производственные процессы и нормативная экспертиза;
 - **Chief AI Architect** — архитектура системы, модели данных, доменная модель;
@@ -127,8 +130,10 @@ Session и обновления `UBIQUITOUS_LANGUAGE.md`.
 
 Управление архитектурой WeldPassport регламентируется **Architecture Governance Framework (AGF)**.
 
-AGF определяет уровни управления (Конституция → Sessions → ADR → документация → код),
-роли участников и обязательную последовательность изменений. Полный текст — в отдельном
+AGF определяет уровни управления (Конституция → Architecture Session → ADR → Canonical
+Architecture → Task / Implementation Specification → Implementation Decision → Code →
+Review), роли участников и обязательную последовательность изменений. Implementation
+Decision не может стоять выше или заменять ADR. Полный текст — в отдельном
 документе: [[docs/project/ARCHITECTURE_GOVERNANCE|ARCHITECTURE_GOVERNANCE.md]].
 
 Фундаментальные принципы меняются **только** по цепочке AGF. Конституция остаётся
@@ -374,11 +379,12 @@ welding.welder_admissions — допуск по методам, материал
 ## 13. Изменение Конституции
 
 Изменения принципов и границ доменов — только по [[docs/project/ARCHITECTURE_GOVERNANCE|AGF]]:
-Architecture Session → ADR → обновление Конституции → синхронизация документации → код.
+Architecture Session → ADR → Canonical Architecture → Task / Implementation Specification
+→ Implementation Decision (при необходимости) → Code → Review.
 Журнал сессий — [[docs/project/ARCHITECTURE_SESSIONS|ARCHITECTURE_SESSIONS]].
 Новые термины — [[docs/project/UBIQUITOUS_LANGUAGE|UBIQUITOUS_LANGUAGE]] (принцип №2).
 Срочные правки кода без фиксации в документации запрещены.
 
 ---
 
-*Версия: 2026-07-06. Этап: архитектурный принцип №2 (канонический язык).*
+*Версия: 2026-07-21. Этап: AGF levels и приоритет нормативного канона.*

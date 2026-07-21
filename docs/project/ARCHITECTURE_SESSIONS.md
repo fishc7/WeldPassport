@@ -2222,6 +2222,11 @@ Official Document по ADR-018).
 | **Тема** | Углублённая архитектура Task 9D: Quality Finding, Engineering Evaluation, Defect, Disposition, Holds, Customer Decision, Corrective/Reinspection Links |
 | **Статус** | Завершена. Канон зафиксирован в [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019]]. Код, модели, миграции, API и тесты не создавались; реализация Task 9D **не начата** |
 
+> **Историческая disposition-модель.** Используемый в Session 008-07 термин
+> `FindingDisposition` имеет статус `SUPERSEDED_BY DefectDisposition` по принятому ADR-024.
+> Это не переименование: mapping владельца, типов и lifecycle определён в ADR-024 §C.
+> Пометка не меняет остальные решения Session 008-07.
+
 ### Краткое описание
 
 Сессия углубляет участок `Quality Finding → Closure` канона Session 008 (ADR-017) и
@@ -2419,6 +2424,175 @@ ADR-017 и «вычисляемый lifecycle» ADR-019 (текст ADR-017/ADR-
 
 ---
 
+## Architecture Session 009 — DefectDisposition lifecycle, approval, activation and supersede governance
+
+| | |
+|---|---|
+| **Номер** | 009 |
+| **Дата** | 2026-07-21 |
+| **Тема** | DefectDisposition lifecycle, approval, activation and supersede governance |
+| **Статус** | Завершена — [[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024]] принят 2026-07-21 после финального независимого архитектурного review с вердиктом `APPROVED`. Код, модели, миграции, API и тесты не изменялись |
+
+### A. Проблема
+
+ADR-023 утвердил модель хранения `DefectDisposition`, но прямо оставил вне рамок lifecycle,
+правила утверждения, RBAC, workflow и аудит. Эти вопросы позднее были ошибочно оформлены
+как Implementation Decisions 9D-4A-3/4; кроме того, документы разошлись по полномочию
+обычного `APPROVE` для `CHIEF_WELDER`.
+
+Первая редакция Session 009/ADR-024 была подготовлена после уже существующей реализации и
+не прошла независимый архитектурный review. Блокирующие замечания:
+
+- **F-01:** `DefectDisposition` ошибочно описан как простое новое имя
+  `FindingDisposition`, хотя меняются владелец, типы, lifecycle и полномочия;
+- **F-02/F-03:** `APPROVE_OVERRIDE` не имел серверно проверяемого условия и позволял
+  одному `CHIEF_WELDER` пройти prepare → override → activate;
+- **F-04…F-10:** требовались синхронизация Architecture/UL, UPDATE DRAFT, точный scope,
+  visibility-before-lock, idempotency, CANCEL и audit migration consequences.
+
+Сессия завершена после финального независимого review. Принятие решения не переписывает
+историю commits `dfaa87b`/`d3a6d87` и не объявляет прежнюю реализацию архитектурно
+корректной.
+
+### B. Рассмотренные варианты
+
+- **A — override с независимым вторым актором:** обычный approve выполняет ОТК; один
+  `CHIEF_WELDER` выполняет override, другой — activation. Отклонено для MVP: модель
+  допускает несколько CHIEF, но не гарантирует наличие двух независимых акторов.
+- **B — без override в MVP:** approve выполняет только effective `OTK_INSPECTOR` в
+  GLOBAL/соответствующем PROJECT scope; activation — только `CHIEF_WELDER`. При отсутствии
+  OTK-route решение не может быть утверждено и активировано. **Выбрано и принято.**
+- **C — совмещённые полномочия:** главный сварщик выполняет ordinary approve и activate.
+  Отклонено: исключение неотличимо от штатного маршрута и нарушает separation of duties.
+
+### C. Пересмотренный проект решения
+
+Принят вариант **B — без override в MVP**. `DefectDisposition` —
+дочерний агрегат `DefectRoot` и официальное исполняемое решение, отдельное от
+`EngineeringEvaluation`, Repair и `ProductionHold`.
+
+`DefectDisposition` не является простым переименованием `FindingDisposition`. ADR-024
+заменяет историческую модель для подтверждённых Defect; mapping владельца, типов и
+статусов фиксируется в ADR-024. `FindingDisposition` помечается
+`SUPERSEDED_BY DefectDisposition`, сохранив исторический текст ADR-019.
+
+Для пересмотра принят **activate-time supersede**: прежняя `ACTIVE` версия продолжает
+действовать, пока новая версия проходит `DRAFT → PREPARED → APPROVED`; перевод старой в
+`SUPERSEDED` и новой в `ACTIVE` выполняется атомарно.
+
+### D. Lifecycle
+
+| From | Action | To | Role | Preconditions | Audit |
+|---|---|---|---|---|---|
+| — | `CREATE` | `DRAFT` | `OGS_ENGINEER`, `CHIEF_WELDER` | `DefectRoot`, justification, root lock | `DISPOSITION_CREATED` |
+| `DRAFT` | `UPDATE_DRAFT` | `DRAFT` | `OGS_ENGINEER`, `CHIEF_WELDER` | Только allow-list; root/lineage/status/actor неизменяемы | `DISPOSITION_DRAFT_UPDATED` |
+| `DRAFT` | `PREPARE` | `PREPARED` | `OGS_ENGINEER`, `CHIEF_WELDER` | Комплектность | `DISPOSITION_PREPARED` |
+| `PREPARED` | `APPROVE` | `APPROVED` | `OTK_INSPECTOR` | Effective GLOBAL либо тот же PROJECT scope | `DISPOSITION_APPROVED` |
+| `APPROVED` | `ACTIVATE` | `ACTIVE` | effective `CHIEF_WELDER` | Валидный исторический authorization snapshot APPROVE; текущий effective OTK-route проекта; причина; при замене lineage указывает на current ACTIVE; root и связанные disposition заблокированы; idempotency replay/conflict проверен | `DISPOSITION_ACTIVATED` + при замене `DISPOSITION_SUPERSEDED` |
+| `DRAFT` | `CANCEL` | `CANCELLED` | создавший DRAFT `OGS_ENGINEER` или `CHIEF_WELDER` | Непустая причина | `DISPOSITION_CANCELLED` |
+| `PREPARED`/`APPROVED` | `CANCEL` | `CANCELLED` | `CHIEF_WELDER` | Непустая причина | `DISPOSITION_CANCELLED` |
+
+`SUPERSEDED` и `CANCELLED` терминальны. `APPROVE_OVERRIDE` и отдельный `REJECTED` в MVP
+не вводятся. Отмена replacement не меняет old ACTIVE; после CANCELLED можно создать новую
+open-версию.
+
+### E. Инварианты
+
+- не более одной `ACTIVE` и не более одной открытой неактивной версии на `DefectRoot`;
+- допускается `1 ACTIVE + 1 DRAFT/PREPARED/APPROVED` для будущей замены;
+- `0 ACTIVE + 1 open` допустимо до первой активации, но не создаётся пересмотром
+  действующего решения;
+- ordinary approve и activation разделены; override отсутствует в MVP;
+- actor приходит только из серверного контекста и соответствует реальному активному
+  worker со scoped ролью;
+- история и события append-only.
+
+### F. Конкурентность
+
+До блокировки выполняются visibility-scoped lookup и базовая проверка права; невидимый
+ресурс возвращает `404`. Затем под транзакцией блокируется `DefectRoot`, disposition
+повторно загружается и заново проверяются ownership, status и effective role.
+
+Единый порядок: `DefectRoot → current ACTIVE → open/replacement`; две disposition
+блокируются в порядке UUID. Две параллельные create/replace/activate дают одного
+победителя. Обязательны partial `UNIQUE` для `ACTIVE` и для `DRAFT/PREPARED/APPROVED`.
+Root lock + повторная проверка + idempotency contract достаточны для MVP;
+`expected_version` не обязателен.
+
+### G. Actor и audit
+
+Body не содержит actor/status/role. Событие фиксирует root/disposition, related disposition,
+действие, from/to, полный immutable authorization snapshot роли/scope из ADR-024 §E.1,
+reason/reason_code, серверное время и correlation/idempotency identifier. Причина
+обязательна для activation, cancellation и замены.
+`DISPOSITION_DRAFT_UPDATED` фиксирует все изменённые allow-list поля с before/after и
+логической version до/после; no-op доменного события не создаёт.
+
+Историческая законность APPROVE определяется snapshot на момент команды. При ACTIVATE роль
+прежнего OTK approver задним числом не перепроверяется: текущий OTK-route — отдельная
+operational precondition и может обеспечиваться другим effective `OTK_INSPECTOR`. Если
+маршрута нет, disposition остаётся `APPROVED`.
+
+### H. Supersede
+
+Замена заранее создаётся как связанная `DRAFT`, не выключая текущую `ACTIVE`. При
+активации замены одна транзакция блокирует root и обе версии, переводит старую
+`ACTIVE → SUPERSEDED`, новую `APPROVED → ACTIVE`, записывает оба события и делает commit.
+
+### I. MVP / вне рамок
+
+В рамках: lifecycle, UPDATE DRAFT, роли/scope, actor/audit, concurrency, idempotency и
+activate-time replacement.
+Вне рамок: `ProductionHold`, Repair, Reweld, Reinspection, NCR, CAPA, внешнее решение,
+печатные формы, `APPROVE_OVERRIDE` и любые изменения backend/моделей/миграций/API/тестов
+на этой сессии.
+
+### J. Влияние на существующий код
+
+Частично соответствуют: связь с `DefectRoot`, набор статусов, server-side actor,
+append-only events, локальные disposition row locks и `UNIQUE ACTIVE`. Это **не означает**
+соответствие целевой root-level concurrency модели.
+
+Требуют будущего bugfix: ordinary CHIEF approve; supersede-time вместо activate-time;
+запрет `ACTIVE + open`; отсутствие visibility-before-lock и root-first lock на
+create/activate; отсутствие UPDATE DRAFT event, open-version partial UNIQUE,
+approved-cancel, creator-only OGS cancel и command idempotency.
+
+### K. Итог финального независимого review
+
+Финальный независимый архитектурный review этапа 2.2 завершён 2026-07-21 с вердиктом
+`APPROVED`. Findings F-01…F-10 и R-01…R-04 закрыты: приняты архитектурная замена
+`FindingDisposition → DefectDisposition`, вариант B без override, полный lifecycle/scope,
+root-level serialization, command idempotency, immutable authorization snapshot,
+детерминированный UPDATE_DRAFT audit и activate-time replacement.
+
+ADR-024 принят. `APPROVE_OVERRIDE` исключён из MVP; ordinary `APPROVE` выполняет только
+effective `OTK_INSPECTOR`, `ACTIVATE` — только `CHIEF_WELDER`. Текущая реализация требует
+отдельного приведения к ADR по будущей Task Implementation Specification; настоящая запись
+не означает завершение реализации и не разрешает непосредственную правку кода.
+
+### Связанные ADR
+
+- [[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024 — DefectDisposition Lifecycle and Authority Model]]
+- Дополняет [[docs/project/DECISIONS#ADR-023. DefectDisposition — модель хранения уровня данных (Task 9D-4A-2)|ADR-023]]
+- Опирается на [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019]],
+  [[docs/project/DECISIONS#ADR-021. EngineeringEvaluation Core Canon (Task 9D-2)|ADR-021]] и
+  [[docs/project/DECISIONS#ADR-022. Defect Technical Model (Task 9D-3)|ADR-022]]
+
+### Синхронизированные документы
+
+- `docs/project/DECISIONS.md` (ADR-024 и редиректы 9D-4A-3/4)
+- `docs/project/ARCHITECTURE_GOVERNANCE.md`
+- `docs/project/CONSTITUTION.md`
+- `docs/project/TASK_REGISTRY.md`
+- `docs/project/implementation-decisions/README.md`
+- `docs/project/implementation-decisions/9D-4A-3-disposition-approve-activate-roles.md`
+- `docs/project/implementation-decisions/9D-4A-4-disposition-supersede-workflow.md`
+- `docs/ARCHITECTURE.md` (accepted target model и historical supersede marker)
+- `docs/project/UBIQUITOUS_LANGUAGE.md` (`DefectDisposition`, deprecated `FindingDisposition`, `Recommended disposition`)
+
+---
+
 ## Шаблон новой сессии
 
 ```markdown
@@ -2450,7 +2624,7 @@ ADR-017 и «вычисляемый lifecycle» ADR-019 (текст ADR-017/ADR-
 
 ---
 
-*Версия журнала: 2026-07-16. Записей: 9 (Session 008 завершена — блоки 008-01 —
+*Версия журнала: 2026-07-21. Записей: 10 (Session 008 завершена — блоки 008-01 —
 008-05, ADR-017: канон решений по качеству, дефектов, ремонта и документов качества;
 блок 008-06 «Печатные формы» завершён 2026-07-16 и принят в ADR-018: Electronic
 Documents and Printed Forms Canon; Session 008-07 завершена 2026-07-16 — ADR-019:
@@ -2458,5 +2632,6 @@ Documents and Printed Forms Canon; Session 008-07 завершена 2026-07-16 
 008-07-BO/BP/BQ; ADR-017 = PARTIALLY_SUPERSEDED_BY_ADR-019; действующая структура
 качества — Tasks 9D-1 … 9D-8 (историческая 9E — 9K → SUPERSEDED_BY_TASK_9D), реализация
 не начата. Session 007 завершена; Task 9C — ADR-016. Консолидация Task 9C — 2026-07-15;
-архитектурное согласование Task 9D-3 / ADR-022 — Defect Technical Model — 2026-07-20,
-статус Accepted, реализация не начата).*
+архитектурное согласование Task 9D-3 / ADR-022 — Defect Technical Model — 2026-07-20;
+Session 009 завершена 2026-07-21 — ADR-024: DefectDisposition Lifecycle and Authority
+Model, без изменений кода).*

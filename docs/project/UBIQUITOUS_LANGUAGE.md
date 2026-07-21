@@ -2146,7 +2146,8 @@ Evaluation → Defect → Quality Decision → Repair → Reinspection → Defec
 > **Частичное замещение ADR-019 (решение 008-07-BQ).** `Quality Decision` декомпозировано
 > на [[#Engineering Evaluation|Engineering Evaluation]] →
 > [[#Defect Acceptance Assessment|Defect Acceptance Assessment]] →
-> [[#Finding Disposition|Finding Disposition]] и **более не является доменной сущностью**
+> исторический [[#Finding Disposition|Finding Disposition]] и **более не является доменной сущностью**;
+> целевая замена — [[#Defect Disposition|Defect Disposition]] (ADR-024, ACCEPTED)
 > (только обобщённое бизнес-понятие). Термин `Defect Severity` в текущем каноне заменён
 > на [[#Confirmed Severity|Confirmed Severity]]. Актуальные определения — Раздел 11.
 
@@ -2187,7 +2188,7 @@ ADR-017
 отвечающая на вопрос «что установлено технически». Готовит `WELDING_ENGINEER`,
 утверждает `CHIEF_WELDER`; имеет классификацию ([[#Evaluation Classification|Evaluation
 Classification]]), [[#Confirmed Severity|Confirmed Severity]] и [[#Impact Scope|Impact
-Scope]]. Отделена от решения о действии ([[#Finding Disposition|Finding Disposition]]) и
+Scope]]. Отделена от исполняемого решения ([[#Defect Disposition|Defect Disposition]]) и
 от приемлемости дефекта ([[#Defect Acceptance Assessment|Defect Acceptance Assessment]]).
 При классификации `CONFIRMED_DEFECT` порождает [[#Defect|Defect]]. Роль `OTK_INSPECTOR`
 в оценке — **опциональная** (решение 008-07-BP; fallback — `CHIEF_WELDER`).
@@ -2200,7 +2201,7 @@ Quality — `WELDING_ENGINEER` (подготовка) + `CHIEF_WELDER` (утве
 ### Не является
 
 - автоматическим признанием дефекта;
-- решением о действии ([[#Finding Disposition|Finding Disposition]]);
+- исполняемым решением ([[#Defect Disposition|Defect Disposition]]);
 - приемлемостью дефекта ([[#Defect Acceptance Assessment|Defect Acceptance Assessment]]).
 
 ### Связанные ADR
@@ -2222,7 +2223,8 @@ ADR-017 (частично замещён), ADR-019
 
 - [[#Engineering Evaluation|Engineering Evaluation]] — «что установлено технически»;
 - [[#Defect Acceptance Assessment|Defect Acceptance Assessment]] — «приемлем ли дефект»;
-- [[#Finding Disposition|Finding Disposition]] — «что необходимо сделать».
+- историческая [[#Finding Disposition|Finding Disposition]] — ранее «что необходимо сделать»;
+- целевая [[#Defect Disposition|Defect Disposition]] — исполняемое решение по подтверждённому Defect.
 
 Термин допустимо использовать только как обобщённое бизнес-понятие в обсуждениях, не
 как модельную сущность или поле. Историческая формулировка ADR-017 (`ACCEPT` /
@@ -2233,7 +2235,7 @@ ADR-017 (частично замещён), ADR-019
 - доменной сущностью или полем модели (декомпозировано в ADR-019);
 - заменой [[#Engineering Evaluation|Engineering Evaluation]] /
   [[#Defect Acceptance Assessment|Defect Acceptance Assessment]] /
-  [[#Finding Disposition|Finding Disposition]].
+  [[#Defect Disposition|Defect Disposition]].
 
 ### Связанные ADR
 
@@ -2832,9 +2834,14 @@ ADR-018
 
 Термины углублённой архитектуры **Task 9D** (ADR-019). Контур:
 `QualityFinding → EngineeringEvaluation → Defect / DefectAcceptanceAssessment →
-FindingDisposition → ProductionHold → Corrective Action / Reinspection →
-CustomerQualityDecision → Closure`. **Реализация Task 9D не начата** (9D-1 … 9D-8,
-planned / not implemented). Английские статусы сопровождаются русскими пояснениями.
+DefectDisposition (accepted target, ADR-024) → ProductionHold → Corrective Action /
+Reinspection → CustomerQualityDecision → Closure`.
+
+`FindingDisposition` ниже сохраняется как исторический термин ADR-019 и имеет статус
+`Deprecated / SUPERSEDED_BY DefectDisposition`. `DefectDisposition` — отдельная принятая
+целевая модель ADR-024; это не простое переименование. Текущая реализация ещё не приведена
+к принятому канону и требует отдельной Task Implementation Specification. Актуальный статус реализации Tasks — только в
+[[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]].
 
 > Термины [[#Quality Finding|Quality Finding]], [[#Engineering Evaluation|Engineering
 > Evaluation]] и [[#Defect|Defect]] определены в своих статьях (Раздел 10) и здесь не
@@ -2842,13 +2849,16 @@ planned / not implemented). Английские статусы сопровож
 > [[#Quality Decision|Quality Decision]] разделено на три отдельных решения —
 > `Engineering Evaluation` («что установлено технически»),
 > [[#Defect Acceptance Assessment|Defect Acceptance Assessment]] («приемлем ли дефект»)
-> и [[#Finding Disposition|Finding Disposition]] («что необходимо сделать»); `Quality
+> и историческую [[#Finding Disposition|Finding Disposition]] («что необходимо сделать»);
+> целевая модель заменяет её на [[#Defect Disposition|Defect Disposition]]. `Quality
 > Decision` более не доменная сущность. `Defect` создаётся только после `APPROVED`
 > evaluation с классификацией `CONFIRMED_DEFECT`. Роль `OTK_INSPECTOR` —
 > **опциональная проектная роль** (решение 008-07-BP): внутреннее ОТК не обязательно;
 > при его отсутствии критические полномочия выполняет `CHIEF_WELDER`; представитель
 > заказчика фиксируется через [[#Customer Quality Decision|Customer Quality Decision]] и
-> **не** является внутренним ОТК.
+> **не** является внутренним ОТК. Это историческое fallback-правило ADR-019 не применяется
+> к целевой [[#Defect Disposition|DefectDisposition]]: без действующего OTK-route её нельзя
+> утвердить или активировать.
 
 ## Finding Origin
 
@@ -2876,8 +2886,9 @@ ADR-019
 ### Определение
 
 Локализация [[#Quality Finding|Quality Finding]] в пределах `Joint`. Один finding
-охватывает несколько зон только при однородности зон, одном техническом значении, одной
-инженерной оценке и одном [[#Finding Disposition|disposition]]. Для разных дефектов,
+охватывает несколько зон только при однородности зон и одном техническом значении. Связь с
+целевым [[#Defect Disposition|DefectDisposition]] возникает только через отдельный
+подтверждённый Defect. Для разных дефектов,
 причин или решений создаются отдельные finding.
 
 ### Не является
@@ -2955,7 +2966,7 @@ ADR-019
 
 ### Не является
 
-- [[#Finding Disposition|Finding Disposition]] (решением о действии);
+- [[#Defect Disposition|Defect Disposition]] (исполняемым решением о действии);
 - [[#Finding Origin|Finding Origin]] (происхождением finding).
 
 ### Связанные ADR
@@ -3032,7 +3043,7 @@ ADR-019
 
 Структурированная ссылка на нормативное требование: документ, редакция документа, пункт
 или раздел, снимок применённого текста, источник, применимость к проекту, связь с
-[[#Engineering Evaluation|Engineering Evaluation]], [[#Finding Disposition|disposition]]
+[[#Engineering Evaluation|Engineering Evaluation]], [[#Defect Disposition|disposition]]
 или другим решением. Историческое решение **не** изменяется при появлении новой редакции
 документа.
 
@@ -3102,6 +3113,33 @@ ADR-019
 
 ---
 
+## Recommended Disposition
+
+**Русское название:** Рекомендованный маршрут решения.
+
+**Статус:** Канон EngineeringEvaluation; не является исполняемым решением.
+
+### Определение
+
+Структурированная рекомендация `recommended_disposition` действующей
+[[#Engineering Evaluation|Engineering Evaluation]] о предпочтительном дальнейшем
+маршруте. Она является входом для отдельного решения, но сама по себе:
+
+- не создаёт [[#Defect Disposition|DefectDisposition]];
+- не меняет статус `QualityFinding` или `Defect`;
+- не разрешает Repair, Reweld, Reinspection или ProductionHold;
+- не является историческим [[#Finding Disposition|FindingDisposition]].
+
+### Владелец
+
+Quality / EngineeringEvaluation.
+
+### Связанные ADR
+
+ADR-021; ADR-024 (ACCEPTED) — граница с исполняемым решением.
+
+---
+
 ## Defect Acceptance Assessment
 
 **Статус:** Канон
@@ -3110,13 +3148,13 @@ ADR-019
 
 Оценка технической **приемлемости** дефекта: `ACCEPTABLE`, `UNACCEPTABLE`,
 `CONDITIONALLY_ACCEPTABLE`, `INSUFFICIENT_DATA`, `NOT_APPLICABLE`. Приемлемость **не
-равна** решению о действии ([[#Finding Disposition|Finding Disposition]]) — например
+равна** исполняемому решению ([[#Defect Disposition|Defect Disposition]]) — например
 `UNACCEPTABLE + REPAIR` или `CONDITIONALLY_ACCEPTABLE + ACCEPT_AS_IS`. Противоречивые
 комбинации блокируются.
 
 ### Не является
 
-- [[#Finding Disposition|Finding Disposition]] (решением о необходимом действии).
+- [[#Defect Disposition|Defect Disposition]] (исполняемым решением о необходимом действии).
 
 ### Связанные ADR
 
@@ -3126,32 +3164,82 @@ ADR-019
 
 ## Finding Disposition
 
-**Статус:** Канон
+**Русское название:** Историческое решение по несоответствию.
+
+**Статус:** **Deprecated / `SUPERSEDED_BY DefectDisposition`**
 
 ### Определение
 
-Решение о необходимом действии по [[#Quality Finding|Quality Finding]] («что необходимо
-сделать?»), отделённое от [[#Engineering Evaluation|Engineering Evaluation]] («что
-установлено?»). Типы: `NO_ACTION_REQUIRED`, `ADDITIONAL_INSPECTION`,
-`DOCUMENT_CORRECTION`, `PROCESS_REVIEW`, `ACCEPT_AS_IS`, `REPAIR`, `REWELD`,
-`CUT_OUT_AND_REPLACE`, `REJECT_JOINT`, `RETURN_FOR_ADDITIONAL_EVALUATION`. Создаётся
-только по действующей `EFFECTIVE` `EngineeringEvaluationRevision`. Критические типы утверждает `CHIEF_WELDER`;
-`ACCEPT_AS_IS` требует внутреннего обоснования ОГС и, при необходимости, внешнего
-решения ([[#Customer Quality Decision|Customer Quality Decision]]). Lifecycle:
-`DRAFT → PENDING_APPROVAL → APPROVED → IN_EXECUTION → COMPLETED` (+ `RETURNED`,
-`SUPERSEDED`, `CANCELLED`). `COMPLETED` **не** закрывает finding автоматически.
+Историческая модель ADR-019 для решения о необходимом действии по
+[[#Quality Finding|Quality Finding]] после evaluation. Она владела собственными типами
+`NO_ACTION_REQUIRED`, `ADDITIONAL_INSPECTION`, `DOCUMENT_CORRECTION`, `PROCESS_REVIEW`,
+`ACCEPT_AS_IS`, `REPAIR`, `REWELD`, `CUT_OUT_AND_REPLACE`, `REJECT_JOINT`,
+`RETURN_FOR_ADDITIONAL_EVALUATION` и lifecycle
+`DRAFT → PENDING_APPROVAL → APPROVED → IN_EXECUTION → COMPLETED`
+(+ `RETURNED`, `SUPERSEDED`, `CANCELLED`).
+
+ADR-024 заменяет эту модель для подтверждённых Defect на
+[[#Defect Disposition|DefectDisposition]]. Это не синоним и не чистое переименование:
+меняются владелец, входное условие, типы, lifecycle, полномочия и supersede timing.
+Исторические ссылки сохраняются; новые Tasks не должны использовать этот термин.
 
 ### Не является
 
-- [[#Engineering Evaluation|Engineering Evaluation]] (технической классификацией);
-- [[#Defect Acceptance Assessment|Defect Acceptance Assessment]] (приемлемостью дефекта);
-- самостоятельным `Quality Decision` — историческое единое решение ADR-017
-  декомпозировано в ADR-019, и `Finding Disposition` — его часть «что необходимо
-  сделать» (решение 008-07-BQ).
+- [[#Recommended Disposition|recommended_disposition]];
+- [[#Defect Disposition|DefectDisposition]];
+- действующим термином для новой реализации.
 
 ### Связанные ADR
 
-ADR-019
+ADR-019; ADR-024 (ACCEPTED, mapping и supersede)
+
+---
+
+## Defect Disposition
+
+**Русское название:** Исполняемое решение по подтверждённому дефекту.
+
+**Статус:** Канон (ADR-024 принят; текущая реализация требует отдельного приведения).
+
+### Определение
+
+`DefectDisposition` — официальное исполняемое решение о том, что необходимо сделать с
+подтверждённым [[#Defect|Defect]]. Принадлежит [[#Defect Root|DefectRoot]] как дочерний
+агрегат и создаётся только после квалификации результата как Defect. Связь с
+[[#Engineering Evaluation|EngineeringEvaluation]] проходит через подтверждённый Defect;
+evaluation/recommendation не создают disposition автоматически.
+
+Типы MVP: `REPAIR_REQUIRED`, `REINSPECTION_REQUIRED`, `ACCEPT_AS_IS`,
+`REJECT_JOINT`. Lifecycle и authority определяются принятым ADR-024:
+`DRAFT → PREPARED → APPROVED → ACTIVE → SUPERSEDED`, с `UPDATE_DRAFT` в DRAFT и
+`CANCELLED` до ACTIVE. `APPROVE` разрешён только effective `OTK_INSPECTOR` в GLOBAL или
+соответствующем PROJECT scope; `ACTIVATE` — только `CHIEF_WELDER`, с повторной проверкой
+действующего OTK-route. Fallback ADR-019 и `project_companies.INSPECTION` этот маршрут не
+заменяют; `APPROVE_OVERRIDE` вне MVP. Законность исторического APPROVE определяется
+неизменяемым authorization snapshot роли/scope на момент команды; при ACTIVATE прежний
+approver не обязан сохранять active-роль, но проект обязан иметь текущий effective
+OTK-route. Каждая mutating-команда требует `Idempotency-Key`; точная replay-семантика — в
+ADR-024 §I.
+
+### Владелец
+
+Quality; aggregate owner — `DefectRoot`.
+
+### Входное условие
+
+Существует подтверждённый Defect и доступный DefectRoot. `recommended_disposition` может
+быть входной рекомендацией, но не заменяет явную команду создания.
+
+### Не является
+
+- [[#Engineering Evaluation|EngineeringEvaluation]] или её рекомендацией;
+- [[#Repair|Repair]], Reweld или [[#Reinspection|Reinspection]];
+- [[#Production Hold|ProductionHold]];
+- историческим [[#Finding Disposition|FindingDisposition]].
+
+### Связанные ADR
+
+ADR-023 (storage); ADR-024 (ACCEPTED lifecycle/authority).
 
 ---
 
@@ -3162,7 +3250,7 @@ ADR-019
 ### Определение
 
 Отдельное аудируемое действие `authorize_corrective_action_start`. Утверждение
-[[#Finding Disposition|disposition]] **не** означает автоматического разрешения начать
+[[#Defect Disposition|disposition]] **не** означает автоматического разрешения начать
 работу; до этого действия нельзя начинать repair, reweld, cut-out, replacement и иные
 критические корректирующие действия. Выдаётся в пределах матрицы полномочий.
 
@@ -3178,7 +3266,7 @@ ADR-019
 
 ### Определение
 
-Связь [[#Finding Disposition|disposition]] с фактическими действиями: `Repair`,
+Связь [[#Defect Disposition|disposition]] с фактическими действиями: `Repair`,
 `Reweld`, `CutOutAndReplacement`, дополнительный `Inspection`, `DocumentCorrection`,
 `ProcessReview`, иное утверждённое действие. Disposition не считается исполненным по
 текстовой отметке пользователя — состояние исполнения вычисляется по связанным
@@ -3271,7 +3359,7 @@ ADR-019
 
 - внутренним решением ОГС;
 - заменой [[#Engineering Evaluation|Engineering Evaluation]] или
-  [[#Finding Disposition|disposition]].
+  [[#Defect Disposition|DefectDisposition]].
 
 ### Связанные ADR
 
@@ -3533,7 +3621,9 @@ ADR-022
 
 ---
 
-*Версия словаря: 2026-07-20. Канонических терминов: 64 (+ Session 008: 18 новых
+*Версия словаря: 2026-07-21. Добавлен принятый канон `DefectDisposition` и каноническая
+граница `Recommended Disposition`; `FindingDisposition` помечен Deprecated /
+`SUPERSEDED_BY DefectDisposition` по ADR-024. Канонических терминов: 64 (+ Session 008: 18 новых
 терминов, `Repair` и `Reinspection` переведены из черновика в канон, `Defect`
 уточнён под ADR-017; + Session 008-06 / ADR-018: 6 новых терминов — Official
 Document, Document Revision, Document Snapshot, Document Source, Document Template,

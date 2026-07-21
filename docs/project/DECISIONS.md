@@ -2527,6 +2527,14 @@ docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Task 9D зависи
 Finding and Engineering Evaluation»** (углублённая проработка Task 9D). Канон
 утверждён на сессии без создания кода/моделей/миграций/API/тестов.
 
+> **Partial supersede для disposition-модели.** Разделы ADR-019 о
+> `FindingDisposition` сохраняются как исторический канон, но принятый
+> [[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024]] заменяет
+> их моделью `DefectDisposition` для подтверждённых `Defect`. Это не простое
+> переименование: меняются владелец, типы, lifecycle, authority и supersede timing.
+> Прочие положения ADR-019 не пересматриваются. Текущий код требует отдельного приведения
+> к принятому канону по Task Implementation Specification.
+
 Статус реализации: **PARTIALLY IMPLEMENTED — реализовано частично.** Реализованный
 блок — **Task 9D-1 QualityFinding Core** (модель `QualityFinding`, нумерация
 `<PROJECT_CODE>-QF-<SEQUENCE>`, журнал, базовый lifecycle `DRAFT → REGISTERED →
@@ -2721,6 +2729,11 @@ disposition): `ACCEPTABLE`, `UNACCEPTABLE`, `CONDITIONALLY_ACCEPTABLE`,
 `CUT_OUT_AND_REPLACE`, `REJECT_JOINT` и иные с техническим блокированием).
 `ACCEPT_AS_IS` включает внутреннее техническое обоснование ОГС и отдельное решение
 заказчика/проектировщика, если оно требуется.
+
+> **Историческая модель — `SUPERSEDED_BY DefectDisposition`.** Этот пункт не
+> переносится в новую модель автоматически. Точный mapping типов/статусов и запрет
+> автоматической миграции определены ADR-024 §C. Запись остаётся историческим источником,
+> а не спецификацией будущего кода Task 9D-4A.
 
 **16. Corrective Action Authorization.** Утверждение disposition **не** означает
 автоматического разрешения начать работу. Вводится отдельное аудируемое действие
@@ -2931,6 +2944,11 @@ mandatory`); `WELDING_ENGINEER` не заменяет `CHIEF_WELDER`; предс
 ADR-017 (частичное замещение безусловной обязательности ОТК) и разделами архитектуры
 (§5.8/§5.9, матрица владельцев доменов).
 
+> **Локальное ограничение ADR-024.** Fallback `CHIEF_WELDER` не применяется к
+> `DefectDisposition`: в MVP ordinary `APPROVE` выполняет только effective
+> `OTK_INSPECTOR` в GLOBAL/соответствующем PROJECT scope, а override отсутствует. Это
+> ограничение не отменяет BP для других исторических/будущих контуров качества.
+
 **008-07-BQ — статус ADR-017.** `ADR-017 = PARTIALLY_SUPERSEDED_BY_ADR-019` (см. статусный
 блок ADR-017). Каноническая декомпозиция: `Quality Decision → EngineeringEvaluation →
 DefectAcceptanceAssessment → FindingDisposition`; **`Quality Decision` более не является
@@ -3073,6 +3091,11 @@ docs/project/ROADMAP.md
 под **Task 9D-2** (ревизионность, источники, критерии, `EngineeringException`, уровень
 уверенности, остаточный риск, срок пересмотра, lifecycle ревизии, события/аудит).
 Канон утверждён без создания кода/моделей/миграций/API/тестов.
+
+> **Историческая ссылка на disposition.** Упоминания `FindingDisposition` в ADR-021
+> сохраняют контекст решения 9D-2. ADR-024 заменяет эту модель на
+> `DefectDisposition` только для подтверждённых Defect; `recommended_disposition` остаётся
+> необязывающей рекомендацией EngineeringEvaluation и не мигрирует автоматически.
 
 Статус реализации: **NOT IMPLEMENTED — не реализовано.** Реализован только предыдущий
 блок Task 9D-1 (`QualityFinding` Core). Task 9D-2 не начата.
@@ -3607,6 +3630,11 @@ docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Task 9D-2)
 характеристики, нормативная ссылка, lifecycle, версионность через supersede, отмена,
 аудит, роли, границы). Канон утверждён без создания кода/моделей/миграций/API/тестов.
 
+> **Историческая ссылка на disposition.** Граница `FindingDisposition` в ADR-022
+> сохраняется как след первоначального проектирования. ADR-024 заменяет её целевым
+> `DefectDisposition`, принадлежащим `DefectRoot`; это не меняет техническую модель самого
+> `Defect`.
+
 Статус реализации: **NOT IMPLEMENTED — не реализовано.** Реализованы предыдущие блоки
 Task 9D-1 (`QualityFinding` Core) и Task 9D-2 (`EngineeringEvaluation`, ADR-021). Task 9D-3
 **не начата**: следующий этап — Implementation Spec Task 9D-3. Ни модель `Defect`, ни
@@ -3888,20 +3916,14 @@ Task 9D-4A-2 и остаются предметом последующих бл�
 (исходно ввёл рабочее понятие `FindingDisposition` для контура Task 9D-4) ·
 [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]]
 
-> **Терминология: `DefectDisposition` реализует контур, ранее описанный как
-> `FindingDisposition` (Task 9D-4).** ADR-019, ADR-021 и ADR-022 резервировали контур
-> Task 9D-4 под рабочим названием `FindingDisposition` — «что необходимо сделать с
-> подтверждённым наблюдением/дефектом» (принять как есть, ремонт, переделка,
-> дополнительный контроль, выбраковка). При реализации Task 9D-4A выбран термин
-> **`DefectDisposition`**: решение привязывается к цепочке подтверждённого технического
-> дефекта (`DefectRoot`, ADR-022 §7), а не абстрактно к `QualityFinding`. **`DefectDisposition`
-> — принятый доменный термин текущей реализации.** Терминология `QualityFinding`/
-> `FindingDisposition`, использованная в ADR-019/ADR-021/ADR-022 для этого контура, **в
-> текущей реализации не применяется**; текст этих ADR не переписывается и сохраняется как
-> архитектурный след с редиректом на ADR-023. Домен, заданный этими решениями (одно
-> официальное исполняемое решение, отделённое от `EngineeringEvaluation` и от технического
-> факта дефекта), настоящим решением **не пересматривается** — уточняется только имя
-> сущности контура Task 9D-4.
+> **Уточнение после независимого review ADR-024.** ADR-023 первоначально трактовал переход
+> от `FindingDisposition` к `DefectDisposition` как терминологическое уточнение. Проверка
+> показала, что это не чистое переименование: владелец меняется с QualityFinding/evaluation
+> на `DefectRoot`, а типы, lifecycle, authority и supersede timing различаются.
+> ADR-023 сохраняет принятые решения только уровня хранения `DefectDisposition`; принятый
+> [[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024]] отдельно
+> оформляет архитектурную замену исторической модели, mapping и границы. Это действующий
+> целевой канон архитектуры, но текущая реализация ещё не приведена к нему.
 
 ### Решения
 
@@ -3947,13 +3969,11 @@ Task 9D-4A-2 и остаются предметом последующих бл�
 
 ### Примечание о терминологии Task 9D-4A
 
-Task 9D-4A реализовала контур официального исполняемого решения по дефекту под именем
-**`DefectDisposition`**. `DefectDisposition` — выбранный доменный термин текущей
-реализации. Терминология `QualityFinding`/`FindingDisposition`, использованная в
-ранних канонах (ADR-019, ADR-021, ADR-022 §8) для обозначения этого же контура (Task
-9D-4), **в текущей реализации не используется**. Настоящее примечание — терминологическое
-уточнение; доменная модель, заданная ADR-019/ADR-021/ADR-022, этим решением не
-пересматривается.
+Task 9D-4A реализовала модель хранения под именем **`DefectDisposition`**. Исторический
+`FindingDisposition` ADR-019 и `DefectDisposition` не являются синонимами. ADR-024
+оформляет их отношение как архитектурную замену для подтверждённых Defect и
+запрещает автоматический mapping типов/статусов. ADR-023 не принимает эту lifecycle-модель
+самостоятельно и сохраняет силу только в своей границе уровня данных.
 
 ### Граница Task 9D-4A-2
 
@@ -3979,119 +3999,69 @@ docs/project/DECISIONS.md (ADR-023)
 
 ---
 
-## 9D-4A-3 Role Decision (DefectDisposition ACTIVATE)
+## ADR-024. DefectDisposition Lifecycle and Authority Model
 
 Дата: 2026-07-21
 
-Статус: **ACCEPTED — принято** (дополнение к реализации Task 9D-4A-3; ADR-023 не
-переписывается).
+Статус: **ACCEPTED**
 
-Контур: Quality / DefectDisposition workflow.
+Дата принятия: 2026-07-21.
 
-```text
-9D-4A-3 Role Decision:
-OTK_INSPECTOR approves DefectDisposition.
-CHIEF_WELDER activates approved DefectDisposition.
-ACTIVATE requires reason and audit.
-```
+Полный текст решения:
+[[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024 — DefectDisposition Lifecycle and Authority Model]].
 
-**Разделение ответственности.**
+Architecture Session:
+[[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 009 — DefectDisposition lifecycle, approval, activation and supersede governance|Session 009]].
 
-| Роль | Действие | Переход |
-|---|---|---|
-| `OTK_INSPECTOR` | `APPROVE` | `PREPARED → APPROVED` |
-| `CHIEF_WELDER` | `ACTIVATE` | `APPROVED → ACTIVE` |
+Финальный независимый архитектурный review:
+[[docs/project/ARCHITECTURE_SESSIONS#K. Итог финального независимого review|этап 2.2 — APPROVED]].
 
-`OTK_INSPECTOR` **не** выполняет `ACTIVATE`. Для `ACTIVATE` обязательны непустой
-`reason`, audit event (`DISPOSITION_ACTIVATED`), реальный `actor_worker_id` и
-`actor_role = CHIEF_WELDER`. State machine MVP не меняется; `SUPERSEDED` по-прежнему
-вне переходов 9D-4A-3.
+ADR-024 дополняет модель хранения ADR-023 и частично заменяет ADR-019 только в
+части исторической модели `FindingDisposition`. Это архитектурная замена, а не чистое
+переименование: `DefectDisposition` принадлежит `DefectRoot`, создаётся только после
+подтверждённого Defect и имеет новые типы/lifecycle/authority.
 
-**Конкурентность (B-02).** Переходы `transition` сериализуются через
-`SELECT … FOR UPDATE` на строке `defect_dispositions` до проверки status/policy;
-status update и append audit event — в одной транзакции с одним commit.
+В MVP `APPROVE` выполняет только effective `OTK_INSPECTOR` в GLOBAL или том же
+PROJECT scope, `ACTIVATE` — только `CHIEF_WELDER`; `APPROVE_OVERRIDE` отсутствует. Без
+действующего OTK-route решение нельзя утвердить и активировать. Также определены
+UPDATE_DRAFT, creator-only OGS cancel для собственного DRAFT, activate-time replacement,
+two-phase visibility/locking, обязательный `Idempotency-Key` для каждой mutating-команды и
+immutable authorization snapshot роли/scope. Исторический OTK approval оценивается по
+snapshot момента APPROVE; ACTIVATE отдельно требует текущий OTK-route, который не обязан
+принадлежать прежнему approver.
+
+Фактическая реализация оценена, но не объявлена каноном. Расхождения перечислены в
+ADR-024 §K и требуют отдельной будущей Task Implementation Specification и реализации.
+Настоящий документационный этап код, модели, миграции, API и тесты не меняет.
 
 ---
 
-## 9D-4A-4 Decision (DefectDisposition Supersede Workflow)
+## Task 9D-4A-3 — DefectDisposition Approve/Activate Implementation Decision — перенесено
 
-Дата: 2026-07-21
+**Это не ADR.** Начиная с 2026-07-21 технические решения уровня Task фиксируются как
+**Implementation Decision** в отдельном каталоге, а не как раздел журнала ADR — см.
+[[docs/project/ARCHITECTURE_GOVERNANCE#3. Различие ADR и Implementation Decision|AGF §3]].
 
-Статус: **ACCEPTED — принято** (завершает жизненный цикл `DefectDisposition`,
-начатый ADR-023 и Task 9D-4A-3; ADR-023 не переписывается).
+Принятые архитектурные полномочия и lifecycle описывает
+[[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024 (ACCEPTED)]].
+Implementation Decision не разрешает изменять реализацию без Task Implementation Specification.
 
-Контур: Quality / DefectDisposition workflow. Не создаются `QualityDecisionWorkflow`,
-связь `LaboratoryConclusion → DefectDisposition`, workflow `Repair`/`Reinspection`/`NCR`.
+Первоначально полный текст был зафиксирован в этом журнале в commit `dfaa87b`
+(2026-07-21); отдельного файла Implementation Decision в том commit не существовало.
+Единственный полный канонический текст после переноса:
+[[docs/project/implementation-decisions/9D-4A-3-disposition-approve-activate-roles|docs/project/implementation-decisions/9D-4A-3-disposition-approve-activate-roles.md]].
 
-```text
-9D-4A-4 Decision:
-DefectDisposition supersede follows the supersede-time model.
-Only ACTIVE dispositions may be superseded.
-SUPERSEDE atomically marks the old disposition SUPERSEDED
-and creates a new DRAFT linked through supersedes_disposition_id.
-The operation locks DefectRoot and requires a reason and audit.
-```
+---
 
-**Замещаемые статусы.** Только `ACTIVE → SUPERSEDED`. Для `DRAFT`/`PREPARED` используется
-существующий `CANCEL`; `APPROVED` (не активированное) не считается действующим и не
-требует supersede. `CANCELLED`/`SUPERSEDED` — терминальны, замещению не подлежат.
+## Task 9D-4A-4 — DefectDisposition Supersede Implementation Decision — перенесено
 
-**Связь версий.** Только существующие поля: `new.defect_root_id = old.defect_root_id`,
-`new.supersedes_disposition_id = old.id`. Отдельный `root_disposition_id` **не** вводится:
-`defect_root_id` уже — владелец единой логической цепочки disposition (не более одной
-открытой версии на цепочку, инвариант `ALREADY_OPEN` из 9D-4A-3 сохраняется).
+**Это не ADR.** См. примечание выше — [[docs/project/ARCHITECTURE_GOVERNANCE#3. Различие ADR и Implementation Decision|AGF §3]].
 
-**Timing — supersede-time** (по прецеденту `Defect`, ADR-022 Addendum D-3B-S01, а не
-activate-time `EngineeringEvaluation` из 9D-2-C18): команда `SUPERSEDE` в одной
-транзакции переводит старую `ACTIVE` в `SUPERSEDED` и создаёт новую `DRAFT`. Активация
-новой версии (`DRAFT → PREPARED → APPROVED → ACTIVE`) — отдельная, уже существующая
-команда `transition`; `SUPERSEDE` и `ACTIVATE` не объединяются в одну команду. Допустимое
-промежуточное состояние цепочки: `0 ACTIVE + 1 открытая новая версия`.
+Принятые архитектурные инварианты и activate-time replacement описывает
+[[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024 (ACCEPTED)]].
+Implementation Decision не разрешает изменять реализацию без Task Implementation Specification.
 
-**Роли.** `SUPERSEDE` — `OGS_ENGINEER`, `CHIEF_WELDER` (те же, что `CREATE`/`PREPARE`:
-supersede открывает пересмотр, но не вводит решение в действие). Роли для новой версии —
-без изменений (9D-4A-3 Role Decision): `PREPARE = {OGS, CHIEF}`, `APPROVE = {OTK, CHIEF}`,
-`ACTIVATE = {CHIEF only}`, `CANCEL = {CHIEF only}`. `OTK_INSPECTOR` не получает `SUPERSEDE`
-или `ACTIVATE`.
-
-**Причина.** `supersede_reason` (поле уже есть в схеме с 9D-4A-2) обязателен и непуст
-всегда при `SUPERSEDE`; сохраняется в старом disposition и в событии `DISPOSITION_SUPERSEDED`.
-Справочник кодов причин не вводится.
-
-**Единственный ACTIVE.** Партиционный `UNIQUE(defect_root_id) WHERE status='ACTIVE'`
-не меняется — остаётся основной защитой на уровне БД.
-
-**Конкурентность.** Блокировка старой строки `disposition` (`get_by_id_for_update`, B-02)
-недостаточна: операция создаёт вторую строку в той же цепочке. Добавляется
-`lock_root_for_update(defect_root_id)` на `quality.defect_roots` (по прецеденту
-`DefectRepository.lock_root_for_update`), выполняемая **до** повторной проверки статуса
-и before role/reason policy. Порядок: lock root → загрузить/заблокировать старое disposition
-→ visibility/scope → повторная проверка `status = ACTIVE` → проверка отсутствия другой
-открытой версии → role policy + reason → `ACTIVE → SUPERSEDED` → создание `DRAFT` →
-audit-события → один commit.
-
-**Аудит.** Новый тип события `DISPOSITION_SUPERSEDED` (для старой версии: `previous_status
-= ACTIVE`, `new_status = SUPERSEDED`, `action = SUPERSEDE`, `reason`, метаданные с
-`new_disposition_id`). Для новой версии — существующий `DISPOSITION_CREATED` с метаданными
-`supersedes_disposition_id`. Требует новой миграции, расширяющей CHECK
-`quality.defect_disposition_events.event_type`; миграции `20260721_22`/`20260721_23`
-**не** изменяются задним числом.
-
-**MVP / вне рамок.** Входит: команда `SUPERSEDE`, переход только `ACTIVE → SUPERSEDED`,
-атомарное создание `DRAFT`, root-level locking, append-only audit, новый event type и
-миграция, API-команда, тесты (workflow/policy/audit/транзакционность/конкурентность). Вне
-рамок: `Repair`, `Reinspection`, NCR, CAPA, файлы, `QualityDecisionWorkflow`, связь с
-`LaboratoryConclusion`, объединение `SUPERSEDE`+`ACTIVATE`, замещение
-`DRAFT`/`PREPARED`/`APPROVED`, параллельные цепочки disposition, восстановление
-`SUPERSEDED`, справочник причин.
-
-```text
-09_Разработка/backend/app/quality/defect_disposition_workflow.py
-09_Разработка/backend/app/quality/defect_disposition_policy.py
-09_Разработка/backend/app/quality/defect_disposition_repository.py
-09_Разработка/backend/app/quality/defect_disposition_services.py
-09_Разработка/backend/app/quality/defect_disposition_schemas.py
-09_Разработка/backend/app/quality/defect_disposition_api.py
-09_Разработка/backend/migrations/versions/20260721_24_disp_supersede.py
-09_Разработка/backend/tests/test_defect_disposition_workflow.py
-```
+Первоначально полный текст был зафиксирован в этом журнале в commit `d3a6d87`
+(2026-07-21); отдельного файла Implementation Decision в том commit не существовало.
+Единственный полный канонический текст после переноса:
+[[docs/project/implementation-decisions/9D-4A-4-disposition-supersede-workflow|docs/project/implementation-decisions/9D-4A-4-disposition-supersede-workflow.md]].
