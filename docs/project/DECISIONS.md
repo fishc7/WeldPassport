@@ -3853,3 +3853,160 @@ docs/project/IMPLEMENTATION_PLAN_ENGINEERING_JOINTS_MVP.md (Task 9D-3)
 docs/project/PROJECT_SUMMARY.md (Текущий статус архитектуры)
 docs/project/UBIQUITOUS_LANGUAGE.md (Defect; Defect Root; Defect Revision; Confirmed Defect; Defect Supersede; Defect Cancellation)
 ```
+
+---
+
+## ADR-023. DefectDisposition — модель хранения уровня данных (Task 9D-4A-2)
+
+Дата: 2026-07-21
+
+Статус: **ACCEPTED — принято.** Три частных решения уровня данных для официального
+исполняемого решения по дефекту в рамках **Task 9D-4A-2 (Database Migration)**:
+представление контролируемых значений, объект-владелец ссылки (`DefectRoot`) и
+модель audit-ссылок на исполнителей.
+
+Статус реализации: **IMPLEMENTED — реализовано (уровень данных).** Созданы
+ORM-модель `DefectDisposition`
+(`09_Разработка/backend/app/quality/defect_disposition_models.py`), Alembic-миграция
+`20260721_22_defect_dispositions` и тесты структуры БД
+(`09_Разработка/backend/tests/test_defect_disposition_migration.py`). Переходы
+статусов, правила утверждения, RBAC, сервисы, workflow и API — **не входят** в
+Task 9D-4A-2 и остаются предметом последующих блоков Task 9D-4A.
+
+Контур: Quality / Defect Disposition.
+
+Продолжает и детализирует: [[docs/project/DECISIONS#ADR-022. Defect Technical Model (Task 9D-3)|ADR-022]]
+(§8 «Граница с `FindingDisposition`» зарезервировал контур Task 9D-4 под официальное
+исполняемое решение по дефекту; ADR-023 фиксирует его модель хранения под именем
+`DefectDisposition`)
+
+Опирается на: [[docs/project/DECISIONS#ADR-022. Defect Technical Model (Task 9D-3)|ADR-022]]
+(`DefectRoot` как владелец цепочки версий `Defect`; приём частичного `UNIQUE`
+«одна действующая запись на корень») ·
+[[docs/project/DECISIONS#ADR-021. EngineeringEvaluation Core Canon (Task 9D-2)|ADR-021]] ·
+[[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019]]
+(исходно ввёл рабочее понятие `FindingDisposition` для контура Task 9D-4) ·
+[[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017]]
+
+> **Терминология: `DefectDisposition` реализует контур, ранее описанный как
+> `FindingDisposition` (Task 9D-4).** ADR-019, ADR-021 и ADR-022 резервировали контур
+> Task 9D-4 под рабочим названием `FindingDisposition` — «что необходимо сделать с
+> подтверждённым наблюдением/дефектом» (принять как есть, ремонт, переделка,
+> дополнительный контроль, выбраковка). При реализации Task 9D-4A выбран термин
+> **`DefectDisposition`**: решение привязывается к цепочке подтверждённого технического
+> дефекта (`DefectRoot`, ADR-022 §7), а не абстрактно к `QualityFinding`. **`DefectDisposition`
+> — принятый доменный термин текущей реализации.** Терминология `QualityFinding`/
+> `FindingDisposition`, использованная в ADR-019/ADR-021/ADR-022 для этого контура, **в
+> текущей реализации не применяется**; текст этих ADR не переписывается и сохраняется как
+> архитектурный след с редиректом на ADR-023. Домен, заданный этими решениями (одно
+> официальное исполняемое решение, отделённое от `EngineeringEvaluation` и от технического
+> факта дефекта), настоящим решением **не пересматривается** — уточняется только имя
+> сущности контура Task 9D-4.
+
+### Решения
+
+**9D-4A-C01 — хранение контролируемых значений через `CHECK`, а не native PostgreSQL `ENUM`.**
+
+- **Контекст.** Task 9D-4A вводит контролируемые значения `decision_type` и `status`.
+  Существующая схема `quality` использует `VARCHAR`-поля с `CHECK`-ограничениями.
+- **Решение.** Используются `VARCHAR` + `CHECK`-ограничения вместо native PostgreSQL `ENUM`.
+- **Причина.** Согласованность с существующими модулями `quality`; более простая эволюция
+  схемы (изменение допустимых значений не требует `ALTER TYPE`); согласование с ADR-022.
+- **Влияние.** БД хранит контролируемые значения через `CHECK`-ограничения
+  (`ck_defect_dispositions_decision_type`, `ck_defect_dispositions_status`). Доменные
+  значения (`REPAIR_REQUIRED`, `REINSPECTION_REQUIRED`, `ACCEPT_AS_IS`, `REJECT_JOINT`;
+  `DRAFT`, `PREPARED`, `APPROVED`, `ACTIVE`, `SUPERSEDED`, `CANCELLED`) не меняются.
+
+**9D-4A-C02 — `DefectDisposition` ссылается на `DefectRoot`, а не на ревизию `Defect`.**
+
+- **Контекст.** У дефекта может быть несколько технических ревизий (ADR-022 §7,
+  supersede-цепочка). Официальное инженерное решение должно переживать смену ревизии.
+- **Решение.** `DefectDisposition` ссылается на `quality.defect_roots.id`, а **не** на
+  `quality.defects.id`.
+- **Причина.** `DefectRoot` представляет владельца жизненного цикла дефекта. Disposition —
+  решение о жизненном цикле дефекта в целом, а не об одной технической ревизии.
+- **Влияние.** На один `defect_root` допускается не более одного действующего решения:
+  частичный `UNIQUE`-индекс `uq_defect_dispositions_one_active_per_root` по
+  `defect_root_id WHERE status = 'ACTIVE'` — тот же приём, что
+  `uq_defects_one_active_per_root` (ADR-022 / 9D-3A).
+
+**9D-4A-C03 — worker-ссылки аудита вместо универсального UUID-пользователя.**
+
+- **Контекст.** Существующие модули `quality` используют worker-based поля аудита
+  (`*_by_worker_id`), а не универсальные ссылки на учётную запись.
+- **Решение.** Используются `created_by_worker_id` и `approved_by_worker_id`
+  (`hr.workers.id`, тип `Integer`, без FK — переходный период) вместо универсальных
+  UUID-ссылок на пользователя.
+- **Причина.** Согласованность с существующей моделью авторизации проекта: допуск и
+  контроль фиксируются как факт работника (`worker`), а не учётной записи (`user_account`)
+  — см. AGENTS.md §5 (разделение `worker`/`welder_profile`/`user_account`).
+- **Влияние.** Аудит-информация `DefectDisposition` остаётся согласованной с аудитом
+  остальных сущностей домена `quality`. Пара `approved_at`/`approved_by_worker_id`
+  дополнительно защищена `CHECK`-инвариантом «обе заполнены либо обе `NULL`»
+  (`ck_defect_dispositions_approved_pair`).
+
+### Примечание о терминологии Task 9D-4A
+
+Task 9D-4A реализовала контур официального исполняемого решения по дефекту под именем
+**`DefectDisposition`**. `DefectDisposition` — выбранный доменный термин текущей
+реализации. Терминология `QualityFinding`/`FindingDisposition`, использованная в
+ранних канонах (ADR-019, ADR-021, ADR-022 §8) для обозначения этого же контура (Task
+9D-4), **в текущей реализации не используется**. Настоящее примечание — терминологическое
+уточнение; доменная модель, заданная ADR-019/ADR-021/ADR-022, этим решением не
+пересматривается.
+
+### Граница Task 9D-4A-2
+
+**Входит:** ORM-модель `DefectDisposition`; Alembic-миграция таблицы
+`quality.defect_dispositions`; `CHECK`-ограничения (`decision_type`, `status`,
+непустое `justification`, запрет self-supersede, парность `approved_at`/
+`approved_by_worker_id`); FK на `defect_roots` и self-FK supersede-цепочки
+(`supersedes_disposition_id`); индексы, включая частичный `UNIQUE`; тесты структуры БД.
+
+**Не входит:** переходы статусов (`DRAFT → PREPARED → APPROVED → ACTIVE → SUPERSEDED /
+CANCELLED`); правила утверждения; RBAC; repository/services; API; события/аудит-лог
+(в отличие от таблицы аудит-полей); workflow согласования — предмет последующих блоков
+Task 9D-4A.
+
+### Где зафиксировано
+
+```text
+docs/project/DECISIONS.md (ADR-023)
+09_Разработка/backend/app/quality/defect_disposition_models.py
+09_Разработка/backend/migrations/versions/20260721_22_defect_dispositions.py
+09_Разработка/backend/tests/test_defect_disposition_migration.py
+```
+
+---
+
+## 9D-4A-3 Role Decision (DefectDisposition ACTIVATE)
+
+Дата: 2026-07-21
+
+Статус: **ACCEPTED — принято** (дополнение к реализации Task 9D-4A-3; ADR-023 не
+переписывается).
+
+Контур: Quality / DefectDisposition workflow.
+
+```text
+9D-4A-3 Role Decision:
+OTK_INSPECTOR approves DefectDisposition.
+CHIEF_WELDER activates approved DefectDisposition.
+ACTIVATE requires reason and audit.
+```
+
+**Разделение ответственности.**
+
+| Роль | Действие | Переход |
+|---|---|---|
+| `OTK_INSPECTOR` | `APPROVE` | `PREPARED → APPROVED` |
+| `CHIEF_WELDER` | `ACTIVATE` | `APPROVED → ACTIVE` |
+
+`OTK_INSPECTOR` **не** выполняет `ACTIVATE`. Для `ACTIVATE` обязательны непустой
+`reason`, audit event (`DISPOSITION_ACTIVATED`), реальный `actor_worker_id` и
+`actor_role = CHIEF_WELDER`. State machine MVP не меняется; `SUPERSEDED` по-прежнему
+вне переходов 9D-4A-3.
+
+**Конкурентность (B-02).** Переходы `transition` сериализуются через
+`SELECT … FOR UPDATE` на строке `defect_dispositions` до проверки status/policy;
+status update и append audit event — в одной транзакции с одним commit.

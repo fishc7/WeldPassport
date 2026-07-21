@@ -34,6 +34,8 @@ from app.main import app
 from app.projects.models import Company, Line, Project, ProjectCompany
 from app.quality.models import (
     Defect,
+    DefectDisposition,
+    DefectDispositionEvent,
     DefectEvent,
     DefectRoot,
     DefectSequence,
@@ -217,6 +219,30 @@ def _purge_test_data(db: Session) -> None:
     ]
     if not worker_ids:
         return
+
+    # DefectDisposition (Task 9D-4A) удаляем ДО DefectRoot: FK
+    # defect_dispositions.defect_root_id → defect_roots RESTRICT;
+    # events → dispositions RESTRICT. Порядок: events → dispositions (self-FK
+    # supersedes обнуляем) → затем Defect/Root ниже.
+    disposition_ids = [
+        row[0]
+        for row in db.query(DefectDisposition.id)
+        .filter(DefectDisposition.created_by_worker_id.in_(worker_ids))
+        .all()
+    ]
+    if disposition_ids:
+        db.query(DefectDispositionEvent).filter(
+            DefectDispositionEvent.defect_disposition_id.in_(disposition_ids)
+        ).delete(synchronize_session=False)
+        db.query(DefectDisposition).filter(
+            DefectDisposition.id.in_(disposition_ids)
+        ).update(
+            {DefectDisposition.supersedes_disposition_id: None},
+            synchronize_session=False,
+        )
+        db.query(DefectDisposition).filter(
+            DefectDisposition.id.in_(disposition_ids)
+        ).delete(synchronize_session=False)
 
     # Defect (Task 9D-3A) удаляем ДО EngineeringEvaluation: FK
     # defect_roots.engineering_evaluation_id → engineering_evaluations RESTRICT и

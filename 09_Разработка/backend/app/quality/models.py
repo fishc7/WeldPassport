@@ -439,6 +439,14 @@ from app.quality.defect_models import (  # noqa: E402
     DefectType,
 )
 
+# ── Task 9D-4A: реэкспорт модели официального решения по дефекту ────────────────
+# Вынесена в отдельный модуль (defect_disposition_models); доступна через
+# app.quality.models для conftest, Alembic (metadata) и тестов.
+from app.quality.defect_disposition_models import (  # noqa: E402
+    DefectDisposition,
+    DefectDispositionEvent,
+)
+
 __all__ = [
     "QUALITY_SCHEMA",
     "Inspection",
@@ -470,4 +478,6 @@ __all__ = [
     "DefectLocationType",
     "DefectSequence",
     "DefectEvent",
+    "DefectDisposition",
+    "DefectDispositionEvent",
 ]

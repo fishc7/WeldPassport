@@ -54,7 +54,9 @@ def _tables_present() -> set[str]:
 
 
 def test_single_head():
-    assert _script().get_heads() == [REVISION]
+    # Инвариант — линейная история без ветвления. Конкретную голову не фиксируем:
+    # каждая следующая миграция (9D-4A-2 и далее) сдвигает её легитимно.
+    assert len(_script().get_heads()) == 1
 
 
 def test_linear_down_revision():
@@ -318,4 +320,4 @@ def test_downgrade_then_upgrade_roundtrip():
         )
     finally:
         s.close()
-    assert _script().get_heads() == [REVISION]
+    assert len(_script().get_heads()) == 1
