@@ -102,15 +102,15 @@ Tasks 1–4 выполнены до введения 2026-07-21 обязател
 
 | Task | Название | Архитектурное основание | Статус | Ключевой commit |
 |---|---|---|---|---|
-| B-03 | Migration Foundation | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] + [[docs/project/TASK_B-03_MIGRATION_FOUNDATION_SPEC|Implementation Specification B-03]] | `planned` | designed; specification accepted; ADR-025 prerequisite закрыта; B-04 не входит; baseline, marker move и runtime changes запрещены; implementation/commit pending |
+| B-03 | Migration Foundation | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] + [[docs/project/TASK_B-03_MIGRATION_FOUNDATION_SPEC|Implementation Specification B-03]] | `done` | `fc2faad` → `939ab1f` → `893707f` → `f584525` → `5bee400` → `d73bea9` (2026-07-22); реализация, remediation и closure evidence завершены, closure verified 2026-07-22 (см. [[docs/project/TASK_B-03_MIGRATION_FOUNDATION_SPEC#23. Closure Evidence\|Closure Evidence]]); baseline, marker move и runtime changes не выполнялись; B-04 и TEST-DB Foundation не входят |
 | B-04 | Canonical Baseline Adoption | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] | `not_designed` | ожидает приёмки B-03 и отдельной Implementation Specification; единственный владелец version marker transfer, baseline stamp и adoption; spec/commit отсутствуют |
 | RUNTIME-LEGACY-COMPATIBILITY-PROFILE | Canonical/Legacy Runtime Composition | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] | `not_designed` | ожидает отдельной Implementation Specification; владеет `main.py` composition, config/profile switch, preflight и legacy router loading; spec/commit отсутствуют |
 | TEST-DB-FOUNDATION | Isolated PostgreSQL Test Database Foundation | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] | `not_designed` | ожидает приёмки B-04 и отдельной Implementation Specification; application-test acceptance также зависит от runtime profile Task; spec/commit отсутствуют |
 
 Основной execution gate: `ADR-025 → B-03 → B-04 → TEST-DB-FOUNDATION → Task 9D-4A-5A`.
 Параллельная ветвь: `ADR-025 → RUNTIME-LEGACY-COMPATIBILITY-PROFILE → canonical application
-acceptance / TEST-DB application tests`. Текущие статусы: B-03 — `planned`, designed,
-specification accepted; B-04 — `not_designed`; TEST-DB Foundation — `not_designed`;
+acceptance / TEST-DB application tests`. Текущие статусы: B-03 — `done`, closure
+verified 2026-07-22; B-04 — `not_designed`; TEST-DB Foundation — `not_designed`;
 Runtime profile — `not_designed`. Code fix запрещён без отдельной Implementation Specification
 и приёмки предыдущих зависимостей.
 

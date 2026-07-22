@@ -736,3 +736,63 @@ B-04 baseline и последующей TEST-DB Foundation. Поэтому depen
 
 Каждый commit выполняется только после отдельного разрешения пользователя. Настоящий этап
 не выполняет staging, commit или push.
+
+## 23. Closure Evidence
+
+Разделы 1–22 — исторический текст спецификации на дату подготовки (2026-07-22) и задним
+числом не переписываются (AGF §3.3). Настоящий раздел добавлен при закрытии Task и
+фиксирует фактическое исполнение.
+
+**Дата закрытия:** 2026-07-22.
+
+**Commit chain:**
+
+| Commit | Сообщение | Блок |
+|---|---|---|
+| `fc2faad` | `docs(migrations): add B-03 migration foundation spec` | спецификация |
+| `939ab1f` | `refactor(migrations): isolate canonical metadata` | B-03A |
+| `893707f` | `refactor(migrations): replace table whitelist with schema boundary` | B-03B |
+| `f584525` | `test(migrations): enforce metadata and migration contracts` | B-03C |
+| `5bee400` | `chore(migrations): fix canonical metadata whitespace` | B-03C |
+| `d73bea9` | `fix(migrations): normalize alembic comparison drift` | B-03D (remediation) |
+
+**Technical verification:**
+
+- `compileall` — PASS;
+- `migration_contract_tests` — 30 passed, 0 failed;
+- `python -m alembic heads` — PASS, один head;
+- `python -m alembic history` — PASS, один graph;
+- `python -m alembic current` — `20260721_24_disp_supersede` (historical head сохранён);
+- `python -m alembic check` — PASS, drift отсутствует;
+- database fingerprint before/after — идентичен.
+
+**Alembic comparison governance resolution.** Расхождение, обнаруженное на этапе B-03D,
+классифицировано как comparison artifact, а не как реальный drift модели или БД; DDL и
+данные не изменялись. Принятые технические решения (уровень Implementation Decision в
+рамках уже принятого ADR-025, поэтому в [[docs/project/DECISIONS|DECISIONS.md]] как
+отдельный ADR не вносятся — AGF §3.2):
+
+- table whitelist заменён canonical schema boundary (`hr`, `welding`, `project`,
+  `engineering`, `quality`);
+- FK drift возникал из-за того, что PostgreSQL reflection опускает referenced schema,
+  видимую через `search_path`; выбрана FK-aware comparison normalization с повторной
+  рефлексией `postgresql_ignore_search_path=True`, подавляющая только семантически
+  идентичные FK-пары (`migrations/canonical_boundary.py`, `make_include_object`);
+- historical partial index `uq_hr_worker_roles_active_scope` (`hr.worker_roles`) оставлен
+  как governed exception в `HISTORICAL_DB_ONLY_INDEXES`: исключается только как
+  reflected-only объект, метаданные и БД не меняются;
+- `project.lines.required_inspection_types` синхронизирован с фактическим `text[]`
+  (`PGARRAY(String)` → `PGARRAY(Text)`) — изменение только на уровне модели, физический
+  тип столбца совпадал изначально;
+- база данных не изменялась: `upgrade`, `downgrade`, `stamp`, baseline и создание revision
+  в рамках B-03 не выполнялись; version marker не переносился.
+
+**Границы closure.** B-03 закрыт по документационно-кодовому уровню приёмки (раздел 20):
+pure contract tests, static scope proof, read-only `current`/`check`, без мутации БД.
+Clean-install evidence, перенос `alembic_version`, baseline stamp и adoption остаются за
+B-04; изолированная тестовая БД — за TEST-DB Foundation; runtime composition — за
+Task RUNTIME-LEGACY-COMPATIBILITY-PROFILE. Настоящее закрытие ни одну из них не разрешает.
+
+**Final status:** `CLOSED`.
+
+Актуальный статус Task — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]] (AGF §3.3).
