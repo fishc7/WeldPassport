@@ -4065,3 +4065,36 @@ Implementation Decision не разрешает изменять реализа�
 (2026-07-21); отдельного файла Implementation Decision в том commit не существовало.
 Единственный полный канонический текст после переноса:
 [[docs/project/implementation-decisions/9D-4A-4-disposition-supersede-workflow|docs/project/implementation-decisions/9D-4A-4-disposition-supersede-workflow.md]].
+
+---
+
+## ADR-025. Migration Governance and Legacy Schema Boundary
+
+Дата: 2026-07-22
+
+Статус: **ACCEPTED**
+
+Полный текст решения:
+[[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 — Migration Governance and Legacy Schema Boundary]].
+
+Architecture Session:
+[[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 010 — Migration Governance and Legacy Boundary|Session 010]].
+
+Принят вариант **Canonical / Legacy Separation**. Canonical Alembic управляет целиком
+схемами `hr`, `welding`, `project`, `engineering`, `quality`; workforce, схема `test` и
+кириллические legacy-таблицы исключаются из canonical metadata и Alembic. Вводятся
+schema-level governance, self-contained migrations, `canonical_baseline_v1`, default
+canonical runtime profile и отдельный legacy compatibility profile.
+
+ADR-025 не отменяет ADR-005: deprecated-статус workforce, запрет новых функций и стратегия
+вывода сохраняются. Заменяются только технические последствия об участии workforce в
+canonical metadata/Alembic и безусловной runtime composition.
+
+Проект реализации декомпозирован в B-03 Migration Foundation, B-04 Canonical Baseline
+Adoption, TEST-DB Foundation и отдельную Task runtime compatibility profile. B-04 является
+единственным владельцем переноса `alembic_version` и adoption существующей БД. Первый
+независимый review завершён с `CHANGES REQUIRED`; после закрытия R-025-01…R-025-07
+[[docs/project/ARCHITECTURE_SESSIONS#I. Финальный независимый review|финальный review]]
+от 2026-07-22 завершён с `APPROVED`. B-03, B-04, TEST-DB Foundation и runtime profile
+ещё не реализованы. Настоящий архитектурный этап не изменяет backend, models, migrations,
+API или tests.

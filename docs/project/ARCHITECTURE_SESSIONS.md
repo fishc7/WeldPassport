@@ -2593,6 +2593,153 @@ effective `OTK_INSPECTOR`, `ACTIVATE` — только `CHIEF_WELDER`. Теку�
 
 ---
 
+## Architecture Session 010 — Migration Governance and Legacy Boundary
+
+| | |
+|---|---|
+| **Номер** | 010 |
+| **Дата** | 2026-07-22 |
+| **Тема** | Migration Governance and Legacy Boundary |
+| **Статус** | **Завершена / Accepted** — вариант B принят в [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (`ACCEPTED`)]]. Первый review: `CHANGES REQUIRED`; после закрытия R-025-01…R-025-07 финальный независимый review от 2026-07-22: `APPROVED`. Код, модели, миграции, API и тесты не изменялись |
+
+### A. Problem
+
+Аудит B-03/B-04 выявил три несовместимых представления схемы:
+
+- общая `Base.metadata` содержит 76 таблиц: 69 canonical и 7 workforce legacy;
+- табличный `include_object` допускает только 31 таблицу metadata и скрывает 45 canonical;
+- active historical chain содержит 28 revisions с root `20260702_02_hr_core` и head
+  `20260721_24_disp_supersede`; legacy дополнительно поддерживается отдельным
+  `create_tables.py` через `create_all`.
+
+Workforce смешан с canonical metadata и ломает сортировку графа из-за ссылки на отсутствующую
+legacy-таблицу `test.ОБЪЕКТЫ`. Исторические migrations импортируют изменяемый `app.*`,
+`alembic_version` находится в legacy boundary, а clean install из пустой PostgreSQL database
+не воспроизводится. Alembic не является доказуемым источником истины.
+
+### B. Рассмотренные варианты
+
+- **A — Full Alembic ownership:** canonical и legacy управляются одной историей. Отклонено:
+  закрепляет deprecated workforce и требует достраивать legacy metadata.
+- **B — Canonical / Legacy Separation:** Alembic управляет только canonical-схемами;
+  workforce и `test` изолированы в compatibility profile. **Выбрано и принято в ADR-025.**
+- **C — Two Alembic contexts:** отдельные истории canonical и legacy. Отклонено как
+  неоправданный долгоживущий migration lifecycle для выводимого контура.
+
+### C. Decision rationale
+
+Вариант B:
+
+- соответствует направлению ADR-005 и не отменяет deprecated-статус workforce;
+- не превращает legacy в часть целевого продукта;
+- восстанавливает canonical drift detection и автоматическую видимость новых таблиц;
+- позволяет создать self-contained baseline и безопасную TEST DB;
+- создаёт необходимые prerequisites для Task 9D-4A-5.
+
+Прямых зависимостей canonical-моделей `quality`/`engineering` от workforce или legacy FK
+не обнаружено. Безусловное подключение workforce router относится к runtime composition и
+заменяется явным legacy compatibility profile.
+
+### D. Принятое решение
+
+Canonical Alembic управляет целиком схемами `hr`, `welding`, `project`, `engineering`,
+`quality` и будущими canonical-схемами `identity`, `production`, `documents`, `audit` после
+их архитектурного введения. `target_metadata` содержит только canonical models;
+`include_object` использует schema-level allowlist; table-name whitelist запрещён.
+
+Workforce, схема `test` и кириллические legacy-таблицы остаются вне canonical metadata и
+Alembic. Default runtime profile не загружает workforce router или legacy metadata.
+Compatibility profile включается явно и только после preflight legacy schema.
+
+Все 28 current revisions и любые revisions, вошедшие в baseline cut, фиксируются полным
+frozen manifest (`revision ID`, `down_revision`, filename, checksum). После создания
+`canonical_baseline_v1` они сохраняются immutable в отдельном archive directory вне
+`version_locations` и любого automatic scan. Новые migrations являются self-contained и
+не импортируют `app.*`.
+
+Baseline cut выполняется после B-03 на точном source commit в коротком migration freeze и
+сохраняет canonical fingerprint. Task 9D-4A-5 в baseline не входит. B-04 является
+единственным владельцем физического переноса marker из `test.alembic_version` в
+`public.alembic_version`, baseline stamp и adoption существующей БД.
+
+Fingerprint включает schemas, tables, columns/types/nullability/defaults, PK/UNIQUE/FK/CHECK,
+обычные и partial indexes, sequences/identity и обязательные canonical seeds. Extra
+canonical objects запрещены вне утверждённого platform allowlist; drift обрабатывается
+fail closed без automatic repair. Rollback adoption выполняется восстановлением backup,
+а не downgrade.
+
+Runtime composition вынесена в отдельную Task `RUNTIME-LEGACY-COMPATIBILITY-PROFILE`;
+B-03 runtime не меняет. Эта Task владеет `main.py` composition, config/profile switch,
+preflight и условной загрузкой legacy router.
+
+### E. Consequences
+
+**Положительные:** canonical drift detection; воспроизводимый clean baseline; безопасная
+TEST DB; управляемый migration lifecycle; автоматическая видимость будущей quality
+idempotency table.
+
+**Отрицательные:** требуются B-03, B-04, maintenance adoption существующей БД, backup и
+отдельная реализация runtime compatibility profile с собственными тестами.
+
+### F. Зависимости
+
+```text
+ADR-025
+   ↓
+B-03 — Migration Foundation
+   ↓
+B-04 — Canonical Baseline Adoption
+   ↓
+TEST-DB Foundation
+   ↓
+Task 9D-4A-5A
+
+ADR-025
+   ↓
+RUNTIME-LEGACY-COMPATIBILITY-PROFILE
+   ↓
+canonical application acceptance / TEST-DB application tests
+```
+
+Ни один code fix B-03/B-04 настоящей сессией не выполняется. Для каждого блока обязательны
+отдельные Implementation Specification, diff, tests и приёмка.
+
+### G. Связанный ADR
+
+- [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 — Migration Governance and Legacy Schema Boundary]]
+- Частично заменяет только технические последствия
+  [[docs/project/ADR-005-legacy-workforce-deprecation|ADR-005]] об участии workforce в
+  canonical metadata/Alembic; остальные положения ADR-005 сохраняются.
+
+### H. Итог review и синхронизация
+
+Первый независимый review выявил R-025-01…R-025-07. В редакции этапа 4.1 уточнены:
+
+- полный состав historical chain и archive manifest;
+- baseline cut и migration freeze;
+- fingerprint и fail-closed adoption;
+- единственный владелец переноса `alembic_version` — B-04;
+- физическая изоляция archive;
+- отдельный владелец runtime profiles;
+- фактический статус ADR до повторного review.
+
+Конституция проверена и **не требует изменения**: она уже определяет AGF, иерархию
+источников истины и обязательность документального принятия до кода; Session 010 не меняет
+доменный канон, lifecycle центральной сущности или принципы Конституции. Синхронизированы
+Session 010, ADR-025, `DECISIONS.md`, `ARCHITECTURE.md` и `TASK_REGISTRY.md`.
+
+### I. Финальный независимый review
+
+Повторный финальный независимый review от 2026-07-22 завершён с вердиктом `APPROVED`:
+
+- R-025-01…R-025-07 закрыты;
+- вариант B — Canonical / Legacy Separation — подтверждён;
+- ADR-025 признан готовым к принятию;
+- реализация B-03, B-04, TEST-DB Foundation и runtime compatibility profile не выполнена;
+- начало B-03 code fix по-прежнему требует отдельной принятой Implementation Specification.
+
+---
+
 ## Шаблон новой сессии
 
 ```markdown
@@ -2624,7 +2771,7 @@ effective `OTK_INSPECTOR`, `ACTIVATE` — только `CHIEF_WELDER`. Теку�
 
 ---
 
-*Версия журнала: 2026-07-21. Записей: 10 (Session 008 завершена — блоки 008-01 —
+*Версия журнала: 2026-07-22. Записей: 11 (Session 008 завершена — блоки 008-01 —
 008-05, ADR-017: канон решений по качеству, дефектов, ремонта и документов качества;
 блок 008-06 «Печатные формы» завершён 2026-07-16 и принят в ADR-018: Electronic
 Documents and Printed Forms Canon; Session 008-07 завершена 2026-07-16 — ADR-019:
@@ -2634,4 +2781,5 @@ Documents and Printed Forms Canon; Session 008-07 завершена 2026-07-16 
 не начата. Session 007 завершена; Task 9C — ADR-016. Консолидация Task 9C — 2026-07-15;
 архитектурное согласование Task 9D-3 / ADR-022 — Defect Technical Model — 2026-07-20;
 Session 009 завершена 2026-07-21 — ADR-024: DefectDisposition Lifecycle and Authority
-Model, без изменений кода).*
+Model; Session 010 завершена 2026-07-22 — принят ADR-025: Migration Governance and Legacy
+Schema Boundary, вариант Canonical / Legacy Separation; без изменений кода).*

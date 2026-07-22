@@ -83,8 +83,9 @@ Tasks 1–4 выполнены до введения 2026-07-21 обязател
 | Task 9D-3B | Defect supersede workflow/services | ADR-022 + [[docs/project/ADR-022-ADDENDUM-DEFECT-SUPERSEDE-TIMING|ADR-022 Addendum D-3B-S01]] | `done` | `e9c6f7f` (2026-07-20) |
 | Task 9D-3C | Defect API и reference-сервисы | ADR-022 | `done` | `18f3899` (2026-07-20), тесты `6ae5abd` |
 | Task 9D-4A-2 | `DefectDisposition` — модель хранения (данные) | ADR-023 | `done` | входит в `dfaa87b` (2026-07-21) |
-| Task 9D-4A-3 | `DefectDisposition` — approve/activate authority | [[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024 (ACCEPTED)]] + [[docs/project/implementation-decisions/9D-4A-3-disposition-approve-activate-roles|Implementation Decision 9D-4A-3]] | `in_progress` | исходная реализация `dfaa87b` (2026-07-21); ADR принят, Implementation Spec отсутствует, bugfix не начат |
-| Task 9D-4A-4 | `DefectDisposition` — activate-time replacement | [[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024 (ACCEPTED)]] + [[docs/project/implementation-decisions/9D-4A-4-disposition-supersede-workflow|Implementation Decision 9D-4A-4]] | `in_progress` | исходная supersede-time реализация `d3a6d87` (2026-07-21); ADR принят, Implementation Spec отсутствует, bugfix не начат |
+| Task 9D-4A-3 | `DefectDisposition` — approve/activate authority | [[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024 (ACCEPTED)]] + [[docs/project/implementation-decisions/9D-4A-3-disposition-approve-activate-roles|Implementation Decision 9D-4A-3]] | `in_progress` | исходная реализация `dfaa87b` (2026-07-21); [[docs/project/TASK_9D-4A-5_DEFECT_DISPOSITION_ADR024_ALIGNMENT_SPEC|alignment spec 9D-4A-5]] — draft; bugfix не начат |
+| Task 9D-4A-4 | `DefectDisposition` — activate-time replacement | [[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024 (ACCEPTED)]] + [[docs/project/implementation-decisions/9D-4A-4-disposition-supersede-workflow|Implementation Decision 9D-4A-4]] | `in_progress` | исходная supersede-time реализация `d3a6d87` (2026-07-21); [[docs/project/TASK_9D-4A-5_DEFECT_DISPOSITION_ADR024_ALIGNMENT_SPEC|alignment spec 9D-4A-5]] — draft; bugfix не начат |
+| Task 9D-4A-5 | `DefectDisposition` — ADR-024 Alignment | [[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024 (ACCEPTED)]] + [[docs/project/TASK_9D-4A-5_DEFECT_DISPOSITION_ADR024_ALIGNMENT_SPEC|Implementation Specification 9D-4A-5]] | `planned` | spec `DRAFT — awaiting independent review`; execution blocked by B-03, B-04, TEST-DB-FOUNDATION and authentication boundary; implementation/commit pending |
 | Task 9D-4 (остаток) | `ProductionHold` / `ProductionHoldRelease`, вычисляемый quality state Joint | ADR-019 | `planned` | — |
 | Task 9D-5 | Customer Quality Decision | ADR-019 | `planned` | — |
 | Task 9D-6 | Corrective Action and Reinspection Links | ADR-019 | `planned` | — |
@@ -94,7 +95,23 @@ Tasks 1–4 выполнены до введения 2026-07-21 обязател
 Спецификации: [[docs/project/TASK_9D-2_ENGINEERING_EVALUATION_SPEC|TASK_9D-2_ENGINEERING_EVALUATION_SPEC.md]] ·
 [[docs/project/TASK_9D-2_CLAUDE_CODE_PROMPT|TASK_9D-2_CLAUDE_CODE_PROMPT.md]] ·
 [[docs/project/TASK_9D-3_DEFECT_TECHNICAL_MODEL_SPEC|TASK_9D-3_DEFECT_TECHNICAL_MODEL_SPEC.md]] ·
-[[docs/project/TASK_9D-3C_DEFECT_API_INTEGRATION_SPEC|TASK_9D-3C_DEFECT_API_INTEGRATION_SPEC.md]].
+[[docs/project/TASK_9D-3C_DEFECT_API_INTEGRATION_SPEC|TASK_9D-3C_DEFECT_API_INTEGRATION_SPEC.md]] ·
+[[docs/project/TASK_9D-4A-5_DEFECT_DISPOSITION_ADR024_ALIGNMENT_SPEC|TASK_9D-4A-5_DEFECT_DISPOSITION_ADR024_ALIGNMENT_SPEC.md]].
+
+## Infrastructure prerequisites — Migration Governance (ADR-025, Session 010)
+
+| Task | Название | Архитектурное основание | Статус | Ключевой commit |
+|---|---|---|---|---|
+| B-03 | Migration Foundation | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] | `not_designed` | ожидает отдельной Implementation Specification; готовит canonical migration environment, не переносит version marker и не меняет runtime; spec/commit отсутствуют |
+| B-04 | Canonical Baseline Adoption | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] | `not_designed` | ожидает приёмки B-03 и отдельной Implementation Specification; единственный владелец version marker transfer, baseline stamp и adoption; spec/commit отсутствуют |
+| RUNTIME-LEGACY-COMPATIBILITY-PROFILE | Canonical/Legacy Runtime Composition | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] | `not_designed` | ожидает отдельной Implementation Specification; владеет `main.py` composition, config/profile switch, preflight и legacy router loading; spec/commit отсутствуют |
+| TEST-DB-FOUNDATION | Isolated PostgreSQL Test Database Foundation | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] | `not_designed` | ожидает приёмки B-04 и отдельной Implementation Specification; application-test acceptance также зависит от runtime profile Task; spec/commit отсутствуют |
+
+Основной execution gate: `ADR-025 → B-03 → B-04 → TEST-DB-FOUNDATION → Task 9D-4A-5A`.
+Параллельная ветвь: `ADR-025 → RUNTIME-LEGACY-COMPATIBILITY-PROFILE → canonical application
+acceptance / TEST-DB application tests`. После принятия ADR все четыре Tasks остаются
+`not_designed`; code fix запрещён без отдельной Implementation Specification и приёмки
+предыдущих зависимостей.
 
 ## Electronic Documentation Layer (ADR-018, Session 008-06)
 

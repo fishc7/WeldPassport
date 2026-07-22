@@ -1248,6 +1248,30 @@ frontend/
 > Роль «СМР» здесь новая относительно `05_Роли_и_права/WeldPassport_Роли_пользователей_v0.1.md` —
 > при следующей проработке ролей сверить и привести к единому списку.
 
+## Migration governance и Canonical / Legacy boundary
+
+Принятый [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025]]
+фиксирует вариант **Canonical / Legacy Separation**. Решение принято 2026-07-22 после
+финального независимого review; его реализация требует отдельных спецификаций и приёмки
+B-03, B-04, TEST-DB Foundation и runtime compatibility profile.
+
+Canonical Alembic управляет целиком схемами `hr`, `welding`, `project`, `engineering` и
+`quality`; будущие `identity`, `production`, `documents`, `audit` входят в эту boundary
+после их архитектурного введения. `target_metadata` содержит только canonical models,
+фильтрация выполняется на уровне схем, а table-name whitelist canonical-таблиц запрещён.
+
+`app.workforce`, схема `test` и кириллические legacy-таблицы не входят в canonical metadata
+или Alembic. Default canonical runtime profile не загружает workforce router и legacy
+metadata; временный compatibility profile включается явно после preflight legacy schema.
+ADR-025 не отменяет deprecated-статус и стратегию вывода workforce по ADR-005.
+
+Clean PostgreSQL foundation создаётся отдельным self-contained
+`canonical_baseline_v1`. Реализация разделена на B-03 Migration Foundation, B-04 Canonical
+Baseline Adoption и TEST-DB Foundation; настоящий архитектурный этап не реализует эти
+задачи и не описывает их implementation diff. B-04 является единственным владельцем физического
+переноса `alembic_version` и adoption. Runtime composition/profile switch вынесены в
+отдельную Task `RUNTIME-LEGACY-COMPATIBILITY-PROFILE`; B-03 runtime не меняет.
+
 ## 16. Статус backend-кода (обновлено 2026-07-06)
 
 `09_Разработка/backend` — основная архитектурная база MVP.
