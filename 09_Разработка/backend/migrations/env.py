@@ -4,11 +4,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from alembic import context
-from sqlalchemy import create_engine, event, pool
+from sqlalchemy import create_engine, event, inspect, pool
 
 from app.shared.canonical_metadata import canonical_metadata
 from app.shared.config import settings
-from migrations.canonical_boundary import include_name, include_object
+from migrations.canonical_boundary import (
+    include_name,
+    include_object,
+    make_include_object,
+)
 
 config = context.config
 # ConfigParser трактует '%' как синтаксис интерполяции, поэтому экранируем его.
@@ -51,13 +55,14 @@ def run_migrations_online() -> None:
         cursor.close()
 
     with connectable.connect() as connection:
+        fk_aware_include_object = make_include_object(inspect(connection))
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
             include_schemas=True,
             version_table_schema=settings.postgres_schema,
             include_name=include_name,
-            include_object=include_object,
+            include_object=fk_aware_include_object,
         )
         with context.begin_transaction():
             context.run_migrations()

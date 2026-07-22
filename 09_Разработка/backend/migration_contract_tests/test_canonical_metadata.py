@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+from sqlalchemy import Text
+
 from app.shared.db import Base
 
 
@@ -105,3 +107,13 @@ def test_metadata_004_foreign_keys_resolve_inside_canonical_metadata() -> None:
                 f"{table.key}: FK target {target_table.key} is absent from metadata"
             )
             assert target_table.metadata is metadata
+
+
+def test_metadata_006_project_line_inspection_types_use_text_array() -> None:
+    """TEST-B03-METADATA-006."""
+    provider = _provider()
+    column_type = provider.canonical_metadata.tables[
+        "project.lines"
+    ].c.required_inspection_types.type
+
+    assert type(column_type.item_type) is Text

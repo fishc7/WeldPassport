@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     func,
     text,
@@ -216,7 +217,7 @@ class Line(Base):
         String(20), nullable=False, server_default="draft"
     )
     required_inspection_types: Mapped[list[str]] = mapped_column(
-        PGARRAY(String),
+        PGARRAY(Text),
         nullable=False,
         server_default=text("'{}'::text[]"),
     )
