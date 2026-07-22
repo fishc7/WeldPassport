@@ -52,6 +52,30 @@
 - WPS/PQR как полноценный модуль `engineering` — после стабилизации стыков;
 - интеграция с 1С, Active Directory.
 
+### AI Data Access & Analytics Layer (ADR-026, PROPOSED / FUTURE)
+
+Отложенное направление: **будущий слой** управляемого доступа к данным WeldPassport для
+аналитических и AI-потребителей. Решение **не принято** —
+[[docs/project/ADR-026-ai-data-access-analytics-layer|ADR-026]] имеет статус
+`PROPOSED / FUTURE`, прорабатывается в
+[[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 011 — AI Data Access & Analytics Layer|Architecture Session 011]]
+(`IN PROGRESS`). Реализация **требует отдельного архитектурного решения**; Implementation
+Task не создаётся.
+
+Направление рассматривается **только после стабилизации** контуров:
+
+- HR;
+- Admissions (допуски);
+- Joint lifecycle;
+- WeldOperation;
+- Heat Treatment;
+- Inspection;
+- Defect / Disposition / Repair;
+- RBAC.
+
+Направление не входит в текущий MVP, не заменяет `reporting` и не является частью
+Project Control Center.
+
 ## Правило изменения архитектуры
 
 Нельзя менять ключевую архитектуру без записи в `docs/project/DECISIONS.md` и

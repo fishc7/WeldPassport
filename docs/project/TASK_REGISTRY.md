@@ -126,6 +126,20 @@ Runtime profile — `not_designed`. Code fix запрещён без отдел�
 |---|---|---|---|---|
 | — | Первый рабочий срез (`09_Разработка/project_control/`) | ADR-020 | `in_progress` | `e793104` (мерж `5aceb0d`) |
 
+## Будущее архитектурное направление — AI Data Access & Analytics Layer (ADR-026)
+
+Раздел фиксирует **архитектурный элемент**, а не Task. Implementation Task **не создаётся**
+и не планируется до принятия решения.
+
+| Архитектурный элемент | Название | Архитектурное основание | Статус | Ключевой commit |
+|---|---|---|---|---|
+| ADR-026 | AI Data Access & Analytics Layer | [[docs/project/ADR-026-ai-data-access-analytics-layer\|ADR-026 (`PROPOSED / FUTURE`)]] + [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 011 — AI Data Access & Analytics Layer\|Architecture Session 011 (`IN PROGRESS`)]] | `not_designed` | — (решение не принято; Implementation Task отсутствует; код, миграции, API и схема БД не изменялись) |
+
+Статус `not_designed` означает, что архитектурное решение ещё не принято. Направление не
+входит в MVP, не заменяет `reporting` и не является частью Project Control Center. Переход к
+проектированию и реализации требует принятого ADR и отдельной Task Implementation
+Specification.
+
 ## Правило ведения реестра
 
 1. Новая строка добавляется **в тот же коммит**, где Task переходит в `done` (правило

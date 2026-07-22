@@ -4098,3 +4098,42 @@ Adoption, TEST-DB Foundation и отдельную Task runtime compatibility pr
 от 2026-07-22 завершён с `APPROVED`. B-03, B-04, TEST-DB Foundation и runtime profile
 ещё не реализованы. Настоящий архитектурный этап не изменяет backend, models, migrations,
 API или tests.
+
+---
+
+## ADR-026. AI Data Access & Analytics Layer
+
+Дата подготовки: 2026-07-22
+
+Статус: **PROPOSED / FUTURE**
+
+Решение **не принято**. Запись фиксирует будущее архитектурное направление и **не является
+основанием для реализации**.
+
+Полный текст направления:
+[[docs/project/ADR-026-ai-data-access-analytics-layer|ADR-026 — AI Data Access & Analytics Layer]].
+
+Architecture Session:
+[[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 011 — AI Data Access & Analytics Layer|Session 011]]
+(`IN PROGRESS`).
+
+Предмет: управляемая граница доступа к данным WeldPassport для аналитических и
+AI-потребителей. Рассмотрены варианты прямого доступа к рабочей PostgreSQL (A),
+расширения `reporting` (B), отдельного будущего read-only слоя с явными аналитическими
+контрактами (C) и выгрузки во внешнее аналитическое хранилище (D). Предлагаемое
+направление — вариант C; выбор подлежит подтверждению на Session 011.
+
+Предлагаемые инварианты: read-only; источник истины остаётся в доменных модулях;
+модульные границы ADR-006 сохраняются; RBAC и scope применяются в backend к каждому
+запросу; произвольный SQL от модели запрещён; показатели вычисляет система
+детерминированно; AI-вывод не является доменным решением (допуском, приёмкой,
+`EngineeringEvaluation`, `Defect`, `DefectDisposition`, `ProductionHold`) и не заменяет
+официальный документ; обязателен полный audit обращений; границы canonical/legacy по
+ADR-025 соблюдаются.
+
+Направление относится к этапу после стабилизации HR, Admissions, Joint lifecycle,
+WeldOperation, Heat Treatment, Inspection, Defect/Disposition/Repair и RBAC. Оно не входит
+в MVP, не заменяет `reporting` и не является частью Project Control Center (ADR-020).
+Implementation Task не создаётся. Настоящий документационный этап не изменяет backend,
+models, migrations, API, схему БД, зависимости или tests; переход к реализации требует
+отдельного принятого ADR и Task Implementation Specification.

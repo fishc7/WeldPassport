@@ -2740,6 +2740,76 @@ Session 010, ADR-025, `DECISIONS.md`, `ARCHITECTURE.md` и `TASK_REGISTRY.md`.
 
 ---
 
+## Architecture Session 011 — AI Data Access & Analytics Layer
+
+| | |
+|---|---|
+| **Номер** | 011 |
+| **Дата** | Открыта 2026-07-22 |
+| **Тема** | AI Data Access & Analytics Layer (будущее направление) |
+| **Статус** | **IN PROGRESS** — решения не приняты. Входной материал: [[docs/project/ADR-026-ai-data-access-analytics-layer\|ADR-026 (`PROPOSED / FUTURE`)]]. Независимый review не проводился. Код, модели, миграции, API, схема БД и тесты не изменялись |
+
+### Краткое описание
+
+Сессия открыта для проработки будущей управляемой границы доступа к данным WeldPassport
+для аналитических и AI-потребителей. Причина открытия: в архитектуре отсутствует описанный
+способ отвечать на аналитические вопросы по производственным данным, из-за чего первая
+практическая интеграция рискует закрепить случайную архитектуру — прямой доступ внешнего
+инструмента к рабочей PostgreSQL в обход RBAC, scope, модульных границ и audit.
+
+Сессия рассматривает **будущий слой**. Она не проектирует реализацию, не создаёт
+Implementation Task и не разрешает изменение кода.
+
+### Рассматриваемые варианты (без выбора)
+
+- **A — прямой доступ AI к рабочей PostgreSQL** (произвольный SQL, read-only роль БД);
+- **B — расширение `reporting`** отчётными endpoint'ами для AI-потребителя;
+- **C — отдельный будущий read-only слой** с явными версионируемыми аналитическими
+  контрактами; модель формирует намерение и формулировку, но не выполняет SQL и не
+  вычисляет показатели;
+- **D — выгрузка во внешнее аналитическое хранилище / BI** с собственным AI.
+
+Предлагаемое направление ADR-026 — вариант C. Выбор **не сделан** и подлежит подтверждению
+в рамках сессии.
+
+### Принятые решения
+
+Отсутствуют. На дату записи сессия решений не приняла; ADR-026 остаётся
+`PROPOSED / FUTURE`.
+
+### Открытые вопросы
+
+Перечень открытых вопросов (граница с `reporting`, форма описания контрактов, владение
+семантическим слоем, применение scope к агрегатам, допустимость внешнего LLM-провайдера,
+обращение с ПДн, статус AI-ответа в документообороте, необходимость read-реплики, роли
+RBAC, критерии приёмки и условия перехода в `ACCEPTED`) — см.
+[[docs/project/ADR-026-ai-data-access-analytics-layer#L. Открытые вопросы для Architecture Session 011|ADR-026 §L]].
+
+### Зависимости
+
+Направление относится к этапу после стабилизации HR, Admissions, Joint lifecycle,
+WeldOperation, Heat Treatment, Inspection, Defect/Disposition/Repair и RBAC, а также после
+инфраструктурных prerequisites [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025]]
+(B-04, TEST-DB Foundation, runtime compatibility profile).
+
+### Связанные ADR
+
+- [[docs/project/ADR-026-ai-data-access-analytics-layer|ADR-026 — AI Data Access & Analytics Layer]] (`PROPOSED / FUTURE`)
+- [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025]] — canonical/legacy boundary, которую будущий слой обязан соблюдать
+- [[docs/project/ADR-006-domain-ownership-matrix|ADR-006]] — модульные границы и владение данными
+- [[docs/project/DECISIONS#ADR-020. Отдельный Project Control Center для контроля реализации|ADR-020]] — отдельный служебный контур, не является частью направления
+
+### Синхронизированные документы
+
+- `docs/project/ADR-026-ai-data-access-analytics-layer.md` (создан)
+- `docs/project/DECISIONS.md` (запись ADR-026, `PROPOSED / FUTURE`)
+- `docs/ARCHITECTURE.md` (будущий контур, вне MVP)
+- `docs/project/ROADMAP.md` (отложенное направление)
+- `docs/project/PROJECT_SUMMARY.md` (краткая запись)
+- `docs/project/TASK_REGISTRY.md` (архитектурный элемент, `not_designed`, без Implementation Task)
+
+---
+
 ## Шаблон новой сессии
 
 ```markdown
@@ -2771,7 +2841,7 @@ Session 010, ADR-025, `DECISIONS.md`, `ARCHITECTURE.md` и `TASK_REGISTRY.md`.
 
 ---
 
-*Версия журнала: 2026-07-22. Записей: 11 (Session 008 завершена — блоки 008-01 —
+*Версия журнала: 2026-07-22. Записей: 12 (Session 008 завершена — блоки 008-01 —
 008-05, ADR-017: канон решений по качеству, дефектов, ремонта и документов качества;
 блок 008-06 «Печатные формы» завершён 2026-07-16 и принят в ADR-018: Electronic
 Documents and Printed Forms Canon; Session 008-07 завершена 2026-07-16 — ADR-019:
@@ -2782,4 +2852,6 @@ Documents and Printed Forms Canon; Session 008-07 завершена 2026-07-16 
 архитектурное согласование Task 9D-3 / ADR-022 — Defect Technical Model — 2026-07-20;
 Session 009 завершена 2026-07-21 — ADR-024: DefectDisposition Lifecycle and Authority
 Model; Session 010 завершена 2026-07-22 — принят ADR-025: Migration Governance and Legacy
-Schema Boundary, вариант Canonical / Legacy Separation; без изменений кода).*
+Schema Boundary, вариант Canonical / Legacy Separation; без изменений кода. Session 011
+открыта 2026-07-22 — AI Data Access & Analytics Layer, статус `IN PROGRESS`, решения не
+приняты, ADR-026 — `PROPOSED / FUTURE`, без изменений кода).*

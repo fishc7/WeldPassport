@@ -368,3 +368,22 @@ Project Control Center не является производственным м
 `09_Разработка/project_control/`; штатное подключение PostgreSQL и автоматические
 снимки остаются следующим рубежом. Канон: [[docs/project/DECISIONS#ADR-020. Отдельный Project Control Center для контроля реализации|ADR-020]];
 детальный дизайн: [[docs/superpowers/specs/2026-07-19-project-control-center-design|проектное предложение]].
+
+## Будущее направление — AI Data Access & Analytics Layer (ADR-026, PROPOSED / FUTURE)
+
+**Статус: решение не принято.** 22.07.2026 оформлено будущее архитектурное направление —
+управляемая граница доступа к данным WeldPassport для аналитических и AI-потребителей:
+[[docs/project/ADR-026-ai-data-access-analytics-layer|ADR-026]] (`PROPOSED / FUTURE`),
+[[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 011 — AI Data Access & Analytics Layer|Architecture Session 011]]
+(`IN PROGRESS`).
+
+Предлагаемое направление — **будущий отдельный read-only слой** с явными аналитическими
+контрактами: RBAC и scope применяются в backend, произвольный SQL от модели не выполняется,
+показатели вычисляет система, каждое обращение попадает в аудит, а AI-вывод не является
+доменным решением и не заменяет официальный документ.
+
+Направление **не входит в MVP**, **не заменяет `reporting`** и **не является частью
+Project Control Center**. Оно рассматривается только после стабилизации HR, Admissions,
+Joint lifecycle, WeldOperation, Heat Treatment, Inspection, Defect/Disposition/Repair и
+RBAC. Реализация **требует отдельного архитектурного решения**; Implementation Task не
+создаётся, код и схема БД не изменяются.
