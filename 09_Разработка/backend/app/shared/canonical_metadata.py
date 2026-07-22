@@ -77,4 +77,3 @@ def validate_canonical_metadata() -> None:
 
 validate_canonical_metadata()
 canonical_metadata: MetaData = Base.metadata
-
