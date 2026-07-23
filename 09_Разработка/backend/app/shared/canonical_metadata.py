@@ -26,9 +26,10 @@ CANONICAL_MODEL_MODULES: tuple[str, ...] = (
     "app.quality.engineering_evaluation_models",
     "app.quality.defect_models",
     "app.quality.defect_disposition_models",
+    "app.quality.quality_decision_models",
 )
 
-_CURRENT_CANONICAL_TABLE_COUNT = 69
+_CURRENT_CANONICAL_TABLE_COUNT = 72
 
 
 for _module_name in CANONICAL_MODEL_MODULES:

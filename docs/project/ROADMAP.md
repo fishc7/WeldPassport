@@ -1,37 +1,50 @@
 # WeldPassport — дорожная карта
 
 > Связанные документы: [[docs/project/CONSTITUTION|Конституция]] · [[docs/project/DECISIONS|Решения (ADR)]] ·
-> [[docs/ARCHITECTURE|Архитектура]] · [[docs/project/PROJECT_EXECUTION_MAP|Карта выполнения]].
+> [[docs/ARCHITECTURE|Архитектура]] · [[docs/project/PROJECT_EXECUTION_MAP|Карта выполнения]] ·
+> [[docs/project/TASK_REGISTRY|Реестр Tasks]].
 > Производственные узлы: [[02_Процессы/Сварочные_операции|Сварочные операции]] · [[02_Процессы/Неразрушающий_контроль|НК]].
 
 ## Назначение
 
-План развития WeldPassport. Состояние выполнения — `docs/project/PROJECT_STATUS.yaml`.
+План развития WeldPassport. Машиночитаемое состояние выполнения —
+`docs/project/PROJECT_STATUS.yaml`; постатейный статус — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]].
 
-## Текущий этап (2026-07-06)
+## Текущий этап (обновлено 2026-07-21)
 
-**Стабилизация архитектуры ОК/ОГС завершена.**
+**Инженерный контур, WeldOperation, термообработка и ядро контроля качества (Tasks 1–7,
+8A–8F, 9A–9C) реализованы.** Идёт **Task 9D — Quality / Defect Management**: блоки
+9D-1 (`QualityFinding`), 9D-2 (`EngineeringEvaluation`, ADR-021), 9D-3 (`Defect`, ADR-022)
+и 9D-4A (`DefectDisposition`, ADR-023) реализованы и закоммичены.
 
-Реализовано и задокументировано:
+Реализовано и задокументировано (полный перечень — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]):
 
 - `hr.workers`, `hr.worker_roles` — ОК (`/api/v1/hr`);
 - `welding.welders`, `welding.welder_admissions` — ОГС (`/api/v1/ogs`);
-- Конституция, ADR-004, ADR-005;
+- `Company/Project/project_companies/Line/EngineeringDocument/Joint` — инженерный контур
+  (`/api/v1/projects`, `/api/v1/engineering`, ADR-010/011);
+- `WeldOperation` и термическая обработка — СМР/ОГС (ADR-012/013/014);
+- `Inspection`, Method Assignment/Execution, `LaboratoryConclusion` — ОТК/НК (ADR-015/016);
+- `QualityFinding`, `EngineeringEvaluation`, `Defect`, `DefectDisposition` — Task 9D-1…9D-4A
+  (ADR-019/021/022/023);
+- Конституция, AGF, ADR-004/005 и весь журнал ADR;
 - deprecated `workforce` (legacy).
 
 ## Следующий этап
 
-### 1. Production / joints (СМР)
+### 1. Завершить Task 9D (Quality / Defect Management)
 
-- спроектировать `production.joints`;
-- жизненный цикл стыка;
-- назначение и факт сварки;
-- реализовать ADR-002 (двойной учёт сварщика) в `weld_operations`.
+- остаток блока **9D-4** — `ProductionHold` / `ProductionHoldRelease`, вычисляемый quality
+  state `Joint`;
+- **9D-5** — Customer Quality Decision;
+- **9D-6** — Corrective Action and Reinspection Links;
+- **9D-7** — API, permissions и интеграционные тесты контура 9D;
+- **9D-8** — Architecture consolidation Task 9D.
 
-### 2. ОГС v0.2 (по необходимости)
+### 2. Электронная документация (ADR-018)
 
-- `welding.stamps`, `welding.certifications`;
-- привязка допуска к `project_id`.
+- document lifecycle, versioning, snapshots, templates, official document issuance;
+- код, миграции и API пока не создавались.
 
 ### 3. Вывод legacy
 
@@ -39,12 +52,11 @@
 - ETL из `РАБОТНИКИ` / `СВАРЩИКИ`;
 - снятие роутера `workforce`.
 
-### 4. ПТО, ОТК, закрытие
+### 4. Закрытие истории стыка
 
-- исполнительная документация;
-- контроль качества и НК;
 - периодика КСС;
-- закрытие истории стыка.
+- сведение производственной, контрольной и документальной истории стыка в единую
+  итоговую запись (финальная цель системы).
 
 ## Отложено (backlog)
 

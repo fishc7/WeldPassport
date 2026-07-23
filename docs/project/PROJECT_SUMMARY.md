@@ -5,7 +5,8 @@
 > [[docs/project/ARCHITECTURE_GOVERNANCE|Architecture Governance (AGF)]] ·
 > [[docs/project/ARCHITECTURE_SESSIONS|Architecture Sessions]] ·
 > [[docs/project/UBIQUITOUS_LANGUAGE|Ubiquitous Language]] ·
-> [[docs/project/ROADMAP|Дорожная карта]] · [[docs/project/PROJECT_EXECUTION_MAP|Карта выполнения]].
+> [[docs/project/ROADMAP|Дорожная карта]] · [[docs/project/PROJECT_EXECUTION_MAP|Карта выполнения]] ·
+> [[docs/project/TASK_REGISTRY|Реестр Tasks]].
 
 ## Назначение
 
@@ -69,7 +70,7 @@ WeldPassport — внутренняя система для отдела гла�
 [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017: решения по качеству, дефекты, ремонт и документы качества]] (`PARTIALLY_SUPERSEDED_BY_ADR-019`) ·
 [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019: Quality Finding и Engineering Evaluation (углублённая архитектура Task 9D)]].
 
-## Текущий статус архитектуры (2026-07-15)
+## Текущий статус архитектуры (обновлено 2026-07-21)
 
 - **Architecture Session 003 завершена** — доменная модель Production/Joints MVP
   (ADR-008, решения 003-A — 003-AM).
@@ -94,19 +95,24 @@ WeldPassport — внутренняя система для отдела гла�
   FindingDisposition → ProductionHold → Corrective Action / Reinspection →
   CustomerQualityDecision → Closure`. Ранее единое `Quality Decision` разделено на
   три решения (evaluation / acceptance / disposition) и **более не является доменной
-  сущностью** (008-07-BQ). **Архитектурный канон Task 9D принят; реализация не начата**
-  (planned / not implemented). Действующая реализационная структура — **9D-1 … 9D-8**
-  (решение 008-07-BO); историческая разбивка Session 008 на **9E — 9K** —
+  сущностью** (008-07-BQ). **Архитектурный канон Task 9D принят** (на момент завершения
+  сессии, 2026-07-16, реализация ещё не начата). Действующая реализационная структура —
+  **9D-1 … 9D-8** (решение 008-07-BO); историческая разбивка Session 008 на **9E — 9K** —
   `SUPERSEDED_BY_TASK_9D`. Роль `OTK_INSPECTOR` — опциональная проектная роль, fallback —
-  `CHIEF_WELDER` (008-07-BP). Модели, миграции и API **не создавались**.
-- **Task 9D — реализация начата (2026-07-20).** Блоки **9D-1** (`QualityFinding` Core) и
-  **9D-2** (`EngineeringEvaluation`, ADR-021; блоки 9D-2A — 9D-2E) — **реализованы**. Блок
-  **9D-3 — Defect Technical Model** зафиксирован как **ADR-022** (Accepted, 2026-07-20):
-  `Defect` — самостоятельная техническая запись, происхождение только из `CONFIRMED_DEFECT`,
-  lifecycle `DRAFT → ACTIVE → SUPERSEDED` (+ `CANCELLED`) без `REPAIRED`/`CLOSED`, исправление
-  через supersede, граница с `FindingDisposition` и Repair/Reweld/Reinspection. **Task 9D-3
-  на стадии подготовки Implementation Spec; реализация `Defect` ещё не начата** (модели,
-  миграции, API и тесты не создавались).
+  `CHIEF_WELDER` (008-07-BP). Прогресс реализации после этой даты — следующий пункт и
+  [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]].
+- **Task 9D — реализация в процессе (обновлено 2026-07-21; актуальный статус по подблокам —
+  [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]).** Блоки **9D-1** (`QualityFinding` Core),
+  **9D-2** (`EngineeringEvaluation`, ADR-021; блоки 9D-2A — 9D-2E), **9D-3** (`Defect Technical
+  Model`, ADR-022; блоки 9D-3A — 9D-3C) и **9D-4A** (`DefectDisposition`, ADR-023;
+  подблоки 9D-4A-2/4A-3/4A-4) — **реализованы**: модели, миграции, API, workflow и тесты
+  созданы и закоммичены. `Defect` — самостоятельная техническая запись, происхождение
+  только из `CONFIRMED_DEFECT`, lifecycle `DRAFT → ACTIVE → SUPERSEDED` (+ `CANCELLED`) без
+  `REPAIRED`/`CLOSED`, исправление через supersede. Официальное исполняемое решение по
+  дефекту реализовано под именем `DefectDisposition` (терминология `FindingDisposition` из
+  ADR-019/021/022 в реализации не используется — см. ADR-023, раздел «Терминология»).
+  **Остаток блока 9D-4** (`ProductionHold`/`ProductionHoldRelease`) и блоки **9D-5 — 9D-8** —
+  **planned / not implemented**.
 - **Инженерный контур реализован** (Tasks 1–7):
   `Project → Line → EngineeringDocument → DocumentRevision → Joint` (ADR-010/011).
 - **WeldOperation реализован** — Tasks **8A — 8E** (ADR-012, импорт — ADR-013).
@@ -147,15 +153,19 @@ and Printed Forms Canon, 2026-07-16). Управление официальны�
 Канон: [[docs/project/DECISIONS#ADR-018. Electronic Documents and Printed Forms Canon (Session 008-06)|ADR-018]] ·
 [[docs/project/ARCHITECTURE_SESSIONS#Блок 008-06 — Электронные документы и печатные формы (Electronic Documents and Printed Forms)|Session 008-06]].
 
-## Текущее состояние backend (2026-07-06)
+## Текущее состояние backend (обновлено 2026-07-21)
 
-| API | Модуль | Статус |
+| API (`/api/v1/...`) | Модуль | Статус |
 |-----|--------|--------|
-| `/api/v1/hr` | `app.hr` | активный |
-| `/api/v1/ogs` | `app.welding` | активный |
+| `hr` | `app.hr` | активный |
+| `ogs` | `app.welding` | активный |
+| `projects` | `app.projects` | активный |
+| `engineering`, `engineering/heat-treatment`, `engineering/imports` | `app.engineering` | активный |
+| `quality/*` (inspections, execution, findings, engineering-evaluation-revisions, defects, defect-dispositions) | `app.quality` | активный (Task 9D-4 остаток и 9D-5…9D-8 — не реализованы) |
 | `/api/v1` (workers, welders) | `app.workforce` | deprecated |
 
-Схемы БД: `hr` (ОК), `welding` (ОГС). Legacy-таблицы — переходный контур.
+Схемы БД: `hr`, `welding`, `projects`/`engineering`, `quality`. Legacy-таблицы `app.workforce` —
+переходный контур. Полный реестр Tasks с коммитами — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]].
 
 ## Модель организаций и проектов
 
@@ -248,7 +258,7 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 > этапы `ROOT`/`FILL`/`COVER`, блокировка при отсутствии допуска,
 > `replaces_operation_id`, ремонт как часть `WeldOperation`) **замещены ADR-012**.
 
-## Контроль качества и НК (ADR-015/016; Tasks 9A–9C: Execution Core; Task 9D-1 … 9D-8 planned)
+## Контроль качества и НК (ADR-015/016; Tasks 9A–9C: Execution Core; Task 9D-1…9D-4A: реализованы; остаток 9D-4, 9D-5…9D-8: planned)
 
 Канон зафиксирован в
 [[docs/project/ARCHITECTURE_SESSIONS#Architecture Session 007|Architecture Session 007]]
@@ -266,8 +276,8 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 | Состояние Joint | Вычисляемое `inspection_state`; основной lifecycle `Joint` не переписывается |
 | Связь с ТО | Обязательный контроль после термообработки — связь `Inspection ↔ HeatTreatmentOperation` (ADR-014) |
 | После результата (Session 008, ADR-017 — `PARTIALLY_SUPERSEDED_BY_ADR-019`) | `Inspection Result → Quality Finding → Engineering Evaluation → Defect → Quality Decision → Repair → Reinspection → Defect Closure`; Result ≠ Finding ≠ Defect; единая сущность `Quality Document`. `Quality Decision` декомпозировано в ADR-019 (см. строку ниже) |
-| Углублённая архитектура Task 9D (Session 008-07, ADR-019) | `QualityFinding → EngineeringEvaluation → Defect / DefectAcceptanceAssessment → FindingDisposition → ProductionHold → Corrective Action / Reinspection → CustomerQualityDecision → Closure`; `Quality Decision` разделено на evaluation / acceptance / disposition (более не доменная сущность); `Confirmed Severity`; `Defect` — только после `CONFIRMED_DEFECT`; `OTK_INSPECTOR` — опциональная роль (fallback `CHIEF_WELDER`). **Канон принят, реализация не начата** |
-| Реализация | Tasks **9A — 9C — DONE** (ядро выполнения контроля и лабораторных заключений); канон качества post-9C (Session 008 / ADR-017, Session 008-07 / ADR-019) — planned / not implemented. Действующая структура — **9D-1 … 9D-8** (решение 008-07-BO); историческая разбивка 9E — 9K — `SUPERSEDED_BY_TASK_9D`, непоглощённый остаток (9H/9I/9K) — будущие задачи |
+| Углублённая архитектура Task 9D (Session 008-07, ADR-019) | `QualityFinding → EngineeringEvaluation → Defect / DefectAcceptanceAssessment → FindingDisposition → ProductionHold → Corrective Action / Reinspection → CustomerQualityDecision → Closure`; `Quality Decision` разделено на evaluation / acceptance / disposition (более не доменная сущность); `Confirmed Severity`; `Defect` — только после `CONFIRMED_DEFECT`; `OTK_INSPECTOR` — опциональная роль (fallback `CHIEF_WELDER`); в реализации `FindingDisposition` названо `DefectDisposition` (ADR-023). **Канон принят; 9D-1…9D-4A реализованы, остаток — planned** (детали — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]) |
+| Реализация | Tasks **9A — 9C — DONE** (ядро выполнения контроля и лабораторных заключений); Task 9D: **9D-1, 9D-2, 9D-3, 9D-4A — DONE** (ADR-019/021/022/023); остаток **9D-4** (`ProductionHold`), **9D-5 … 9D-8** — planned / not implemented. Историческая разбивка 9E — 9K — `SUPERSEDED_BY_TASK_9D`. Актуальный статус по подблокам — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]] |
 
 > **Граница по импорту и печатным формам.** Импорт результатов контроля (XLSX, CSV,
 > PDF, API лаборатории) зафиксирован **только как интеграционное требование верхнего

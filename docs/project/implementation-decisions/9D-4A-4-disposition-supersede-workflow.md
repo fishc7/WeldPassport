@@ -11,7 +11,7 @@ Task: `Task 9D-4A-4` · [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]].
 [[docs/project/ADR-024-defect-disposition-lifecycle-authority-model|ADR-024 (ACCEPTED) — DefectDisposition Lifecycle and Authority Model]].
 Модель хранения: [[docs/project/DECISIONS#ADR-023. DefectDisposition — модель хранения уровня данных (Task 9D-4A-2)|ADR-023]].
 
-Task Implementation Specification: **не создана**. Этот файл не разрешает изменение
+Task Implementation Specification: [[docs/project/TASK_9D-4A-5_DEFECT_DISPOSITION_ADR024_ALIGNMENT_SPEC|создана, DRAFT — awaiting independent review]]. Этот файл не разрешает изменение
 backend, моделей, миграций, API или тестов.
 
 Контур: Quality / DefectDisposition version replacement.

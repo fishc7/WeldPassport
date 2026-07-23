@@ -9,8 +9,8 @@ from pathlib import Path
 
 VERSIONS_DIR = Path(__file__).resolve().parents[1] / "migrations" / "versions"
 EXPECTED_ROOT = "20260702_02_hr_core"
-EXPECTED_HEAD = "20260721_24_disp_supersede"
-EXPECTED_REVISION_COUNT = 28
+EXPECTED_HEAD = "20260723_25_qd_core"
+EXPECTED_REVISION_COUNT = 29
 
 
 @dataclass(frozen=True)
@@ -93,7 +93,7 @@ def test_graph_002_has_exactly_one_expected_head() -> None:
     assert heads == {EXPECTED_HEAD}
 
 
-def test_graph_003_has_28_unique_revision_ids() -> None:
+def test_graph_003_has_29_unique_revision_ids() -> None:
     """TEST-B03-GRAPH-003."""
     revisions = _revisions()
     revision_ids = [node.revision for node in revisions]

@@ -4137,3 +4137,49 @@ WeldOperation, Heat Treatment, Inspection, Defect/Disposition/Repair и RBAC. О
 Implementation Task не создаётся. Настоящий документационный этап не изменяет backend,
 models, migrations, API, схему БД, зависимости или tests; переход к реализации требует
 отдельного принятого ADR и Task Implementation Specification.
+
+---
+
+## ADR-027. QualityDecision Core Canon (Task 10A)
+
+Дата подготовки: 2026-07-23 (v1) / 2026-07-23 (v2) / 2026-07-23 (ACCEPTED)
+
+Статус: **ACCEPTED**
+
+Принято владельцем 2026-07-23 непосредственно перед стартом Task 10A Implementation
+Block 1 (Models + Migration), вне формального цикла «архитектурная сессия → ADR»
+(принцип №0, [[docs/project/CONSTITUTION#2. Архитектурный принцип №0. Сначала архитектурная сессия — потом код|Конституция §2]]).
+Открытые точки §K, необходимые для схемы БД Block 1, разрешены явно: Q-D1 (да,
+EFFECTIVE-ревизия обязательна), Q-D2 (ограничение количества на `Joint` — только для
+`DECIDED`; `DRAFT`/`UNDER_REVIEW` не ограничены — уточнено Block 1 Correction 2026-07-23
+после архитектурного review; исходная редакция ACCEPTED ошибочно вводила ограничение и
+для `DRAFT`/`UNDER_REVIEW`), Q-D8 (атомарный `RETURN`, 4 персистентных статуса). Q-D5
+(Idempotency-Key) и Q-D9 (правка `DRAFT`) не относятся к моделям/миграции и остаются
+открытыми до Block 2 (Services/API).
+
+Полный текст решения:
+[[docs/project/ADR-027-quality-decision-core-canon|ADR-027 — QualityDecision Core Canon]].
+
+Уточняет границу [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019]]
+(решение 008-07-BQ), **не отменяя** декомпозицию исторического термина «Quality Decision»
+ADR-017/019. `QualityDecision` — новая, отдельно поименованная сущность: официальное решение
+по результатам одной или нескольких `EngineeringEvaluationRevision` конкретного `Joint`,
+отсутствовавшее в каноне ADR-019/021/022/024 как самостоятельный шаг. Не является
+переименованием `DefectDisposition`, не заменяет `EngineeringEvaluation`, не возвращает модель
+ADR-017.
+
+Ключевые положения v2: связь с основанием — через `DecisionBasis` → конкретная
+`EngineeringEvaluationRevision` (не M:N и не header `EngineeringEvaluation`); одна ревизия не
+может быть основанием более чем одного `DECIDED` `QualityDecision`; lifecycle `DRAFT →
+UNDER_REVIEW → DECIDED → SUPERSEDED` (+ `RETURN`: `UNDER_REVIEW → DRAFT`, без персистентного
+статуса `RETURNED`); `APPROVED` не используется как статус, approval — отдельными полями;
+роли `WELDING_ENGINEER`/`OTK_INSPECTOR`, `CHIEF_WELDER` не участвует (осознанное локальное
+исключение из fallback-правила 008-07-BP, по прецеденту `ADR-024`); supersede без статуса
+`ACTIVE` — при новом `DECIDED` для того же `Joint` старый `DECIDED` атомарно → `SUPERSEDED` в
+одной транзакции; аудит — существующая полиморфная `quality_audit_events`, без отдельной
+таблицы событий, закрытый список из пяти `event_type`.
+
+Полный список открытых точек и их разрешение при `ACCEPTED` — ADR-027, раздел «Решение по
+открытым точкам ACCEPTED» и обновлённая таблица §K. Task 10A реализуется по блокам;
+Implementation Block 1 (Models + Migration) не разрешает переходить к Services/API без
+отдельного подтверждения.

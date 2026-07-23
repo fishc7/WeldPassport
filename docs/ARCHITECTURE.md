@@ -818,6 +818,58 @@ supersede, отмена ошибочных записей, override; `OTK_INSPEC
 изменения классификации; НК/лаборатория — только просмотр. Окончательная RBAC-матрица — в
 Implementation Spec.
 
+### 5.11. QualityDecision Core (Task 10A, ADR-027, ACCEPTED)
+
+Канон: [[docs/project/ADR-027-quality-decision-core-canon|ADR-027]]. **Статус: ACCEPTED**
+(2026-07-23). Task 10A реализуется по блокам; на данный момент выполнен **Implementation
+Block 1 — Models + Migration** (таблицы `quality_decisions`, `quality_decision_bases`,
+`quality_decision_sequences`, CHECK/UNIQUE/partial unique, расширение
+`quality_audit_events`). Services/API/workflow (Block 2+) не реализованы и требуют
+отдельного подтверждения перед стартом.
+
+`ADR-027` уточняет границу ADR-019 (008-07-BQ), не отменяя её: исторический термин «Quality
+Decision» Session 008 (ADR-017) остаётся декомпозированным, а `QualityDecision` — это **новая**,
+отдельно поименованная сущность, отсутствовавшая в каноне ADR-019/021/022/024 как
+самостоятельный шаг «официальное решение по результатам инженерной оценки»:
+
+```text
+EngineeringEvaluation → EngineeringEvaluationRevision (что установлено)
+  → QualityDecision (официальное решение, основание — ≥1 EE-ревизия через DecisionBasis)
+  → Defect (если DEFECT_CONFIRMED) → DefectDisposition (ADR-024) → Repair
+```
+
+`QualityDecision` не переименовывает `DefectDisposition`, не заменяет `EngineeringEvaluation`
+и не возвращает модель ADR-017. Связь с основанием — не M:N напрямую, а через промежуточный
+`DecisionBasis`, ссылающийся на конкретную `EngineeringEvaluationRevision`; одна ревизия не
+может быть основанием более чем одного `DECIDED` `QualityDecision` одновременно.
+
+Lifecycle: `DRAFT → UNDER_REVIEW → DECIDED → SUPERSEDED` — ровно четыре персистентных
+статуса (возврат `UNDER_REVIEW → DRAFT` — атомарная команда `RETURN`, без отдельного
+персистентного статуса `RETURNED`). `APPROVED` как статус не используется; факт
+утверждения хранится отдельно (`approved_by_worker_id`/`approved_at`/`approved_role`).
+Результат: `ACCEPTED` / `NOT_CONFIRMED` / `DEFECT_CONFIRMED`. Роли: `WELDING_ENGINEER`
+готовит и отправляет на review, `OTK_INSPECTOR` возвращает или принимает решение;
+`CHIEF_WELDER` в `QualityDecision` **не участвует** ни в штатном режиме, ни как fallback
+(осознанное локальное исключение из правила 008-07-BP, по прецеденту `ADR-024`). Supersede
+— без статуса `ACTIVE`: при новом `DECIDED` для того же `Joint` старый `DECIDED` атомарно
+переходит в `SUPERSEDED` в той же транзакции (реализация — Block 2). Аудит — через
+существующую полиморфную `quality_audit_events` (`entity_type = 'QUALITY_DECISION'`,
+закрытый список из пяти `event_type`), без отдельной таблицы событий.
+
+БД-инварианты Block 1 (Q-D2 уточнено Block 1 Correction 2026-07-23 после архитектурного
+review): `UNIQUE(system_code)`; не более одного `DECIDED` на `Joint` (partial unique) —
+**единственное** ограничение количества по `Joint`; `DRAFT`/`UNDER_REVIEW` количеством на
+`Joint` не ограничиваются (несколько `DRAFT` и/или `UNDER_REVIEW` на один `Joint`
+одновременно — допустимо); не более одного `DECIDED` `QualityDecision`, опирающегося на
+одну и ту же `EngineeringEvaluationRevision` (partial unique по `is_basis_of_decided`,
+ADR-027 §F.3).
+
+Вне рамок Block 1 (Services/API, требуют отдельного подтверждения): валидация
+`EFFECTIVE`-статуса основания и «минимум одно основание» (Q-D1, service-level), команды
+lifecycle, RBAC, supersede-механизм, Idempotency-Key (Q-D5), правка `DRAFT` (Q-D9),
+создание `Defect` по результату `DEFECT_CONFIRMED` (только сохранение `result`),
+`DefectDisposition`, `Repair`, `Reinspection`, печатные формы, импорт, аналитика.
+
 ## 6. Ключевые правила модели данных
 
 ### Разделять человека и системного пользователя

@@ -1,12 +1,15 @@
 project: WeldPassport
-current_stage: ok_ogs_architecture_stabilized
-current_branch: feature/ogs-welder-admissions-mvp
-updated_at: 2026-07-06
+current_stage: quality_defect_management_9d_in_progress
+current_branch: feature/engineering-joints-mvp
+updated_at: 2026-07-21
+
+# Источник фактического статуса Tasks с коммитами — docs/project/TASK_REGISTRY.md.
+# Этот файл — машиночитаемая сводка по модулям для панелей/скриптов.
 
 summary:
-  total_progress: 45
-  current_focus: "Стабилизация архитектуры ОК/ОГС завершена"
-  next_action: "Спроектировать production.joints и жизненный цикл стыка"
+  total_progress: 72
+  current_focus: "Task 9D — Quality / Defect Management: блок 9D-4A (DefectDisposition workflow) завершён"
+  next_action: "9D-4 — ProductionHold/ProductionHoldRelease, затем 9D-5 (Customer Quality Decision)"
 
 modules:
   - code: constitution
@@ -18,12 +21,12 @@ modules:
     note: "docs/project/CONSTITUTION.md — главный архитектурный документ."
 
   - code: architecture
-    name: "Архитектура"
+    name: "Архитектура и governance"
     owner: "Архитектура / план"
     status: stable
     progress: 100
     visible: true
-    note: "ADR-004, ADR-005; синхронизация ARCHITECTURE, ROADMAP, tracking."
+    note: "AGF (docs/project/ARCHITECTURE_GOVERNANCE.md), Architecture Sessions 001-008-07, ADR-004..023; TASK_REGISTRY.md — реестр Tasks."
 
   - code: hr_workers
     name: "ОК → Работники"
@@ -35,22 +38,13 @@ modules:
     note: "hr.workers, hr.worker_roles, API /api/v1/hr."
 
   - code: ogs_welders
-    name: "ОГС → Профиль сварщика"
+    name: "ОГС → Профиль сварщика и допуски"
     owner: "ОГС"
     status: done
     progress: 100
     branch: feature/ogs-welder-admissions-mvp
     visible: true
-    note: "welding.welders, API /api/v1/ogs/welders."
-
-  - code: ogs_welder_admissions
-    name: "ОГС → Допуски сварщика"
-    owner: "ОГС"
-    status: done
-    progress: 100
-    branch: feature/ogs-welder-admissions-mvp
-    visible: true
-    note: "welding.welder_admissions v0.1; правила create_admission по ADR-004."
+    note: "welding.welders, welding.welder_admissions, API /api/v1/ogs. ADR-004."
 
   - code: legacy_workforce
     name: "Legacy workforce"
@@ -60,29 +54,67 @@ modules:
     visible: false
     note: "ADR-005. Не расширять; вывод через desktop_ok и импортёры."
 
-  - code: smp_fact
-    name: "СМР → Факт выполнения"
-    owner: "Мастер / прораб"
-    status: planned
-    progress: 0
+  - code: engineering_projects
+    name: "Инженерный контур: Company/Project/Line/EngineeringDocument"
+    owner: "Инженерный / ПТО"
+    status: done
+    progress: 100
+    branch: feature/engineering-joints-mvp
     visible: true
-    note: "Следующий вертикальный этап после стабилизации ОК/ОГС."
+    note: "Tasks 1-4 (MASTER, Company/Project/project_companies, Line, EngineeringDocument/DocumentRevision)."
+
+  - code: engineering_joint
+    name: "Joint — жизненный цикл и bulk-импорт"
+    owner: "Инженерный / ПТО"
+    status: done
+    progress: 100
+    branch: feature/engineering-joints-mvp
+    visible: true
+    note: "Tasks 5A/5B/6/7. Joint core, review lifecycle, история ревизий РД, bulk-импорт (ADR-010/011)."
+
+  - code: weld_operation
+    name: "СМР → WeldOperation (производственный факт сварки)"
+    owner: "Мастер / прораб / ОГС"
+    status: done
+    progress: 100
+    branch: feature/engineering-joints-mvp
+    visible: true
+    note: "Tasks 8A-8E: core, допуск/WPS, review ОГС, корректировки/supersede, импорт (ADR-012/013)."
+
+  - code: heat_treatment
+    name: "Термическая обработка"
+    owner: "ОГС"
+    status: done
+    progress: 100
+    branch: feature/engineering-joints-mvp
+    visible: true
+    note: "Task 8F: HeatTreatmentBatch/HeatTreatmentOperation, влияние на готовность Joint (ADR-014)."
+
+  - code: quality_inspection
+    name: "ОТК → Контроль качества и НК (Execution Core)"
+    owner: "ОТК / НК"
+    status: done
+    progress: 100
+    branch: feature/engineering-joints-mvp
+    visible: true
+    note: "Tasks 9A-9C: Inspection lifecycle, Method Assignment/Execution, LaboratoryConclusion, Quality Audit (ADR-015/016)."
+
+  - code: quality_defect_management
+    name: "ОТК → Task 9D: Quality Finding / Evaluation / Defect / Disposition"
+    owner: "ОТК / ОГС"
+    status: in_progress
+    progress: 55
+    branch: feature/engineering-joints-mvp
+    visible: true
+    note: "9D-1 QualityFinding, 9D-2 EngineeringEvaluation, 9D-3 Defect, 9D-4A DefectDisposition — реализованы (ADR-019/021/022/023). Остаток 9D-4 (ProductionHold), 9D-5..9D-8 — planned. Детали — docs/project/TASK_REGISTRY.md."
 
   - code: pto_docs
-    name: "ПТО → Исполнительная"
+    name: "ПТО → Электронная документация"
     owner: "ПТО"
     status: planned
-    progress: 0
+    progress: 5
     visible: true
-    note: "Будущий этап: исполнительная документация."
-
-  - code: quality
-    name: "ОТК → Контроль качества"
-    owner: "ОТК / НК"
-    status: planned
-    progress: 0
-    visible: true
-    note: "Будущий этап: контроль, брак, НК, КСС."
+    note: "Канон принят (ADR-018, Session 008-06); код, миграции, API не создавались."
 
   - code: closure
     name: "Закрытие истории стыка"
@@ -90,4 +122,12 @@ modules:
     status: planned
     progress: 0
     visible: true
-    note: "Финальная цель: полная история стыка."
+    note: "Финальная цель: полная история стыка после завершения Task 9D."
+
+  - code: project_control_center
+    name: "Project Control Center (служебный контур)"
+    owner: "Владелец / разработка"
+    status: in_progress
+    progress: 20
+    visible: true
+    note: "Не производственный модуль (ADR-020). Первый срез — 09_Разработка/project_control/; штатное подключение PostgreSQL и авто-снимки — следующий рубеж."

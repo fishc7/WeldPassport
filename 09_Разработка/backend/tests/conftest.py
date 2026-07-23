@@ -9,6 +9,12 @@ from sqlalchemy import or_, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+# Импортируем первым, до app.main: там регистрируется legacy app.workforce.models
+# (schema=POSTGRES_SCHEMA, обычно "test"), что иначе загрязняет Base.metadata до
+# проверки validate_canonical_metadata() и валит её на схеме "test". Сам workforce
+# не трогаем (ADR-005, legacy) — только порядок импорта в тестовом бутстрапе.
+import app.shared.canonical_metadata  # noqa: F401
+
 from app.engineering.models import (
     DocumentRevision,
     EngineeringDocument,
@@ -58,6 +64,9 @@ from app.quality.models import (
     MethodExecutionResultItem,
     MethodExecutionStandard,
     QualityAuditEvent,
+    QualityDecision,
+    QualityDecisionBasis,
+    QualityDecisionSequence,
     QualityExternalPerson,
     QualityFinding,
     QualityFindingEvent,
@@ -268,6 +277,30 @@ def _purge_test_data(db: Session) -> None:
     db.query(DefectRoot).filter(
         DefectRoot.created_by_worker_id.in_(worker_ids)
     ).delete(synchronize_session=False)
+
+    # QualityDecision (Task 10A) удаляем ДО EngineeringEvaluationRevision/Joint: FK
+    # quality_decision_bases.engineering_evaluation_revision_id →
+    # engineering_evaluation_revisions RESTRICT и quality_decisions.joint_id → joints
+    # RESTRICT. Порядок: bases → self-FK supersedes_quality_decision_id (обнуляем) →
+    # decisions. quality_audit_events по QualityDecision уже покрыты общей чисткой
+    # QualityAuditEvent по actor_worker_id ниже (полиморфный журнал, без FK).
+    qd_ids = [
+        row[0]
+        for row in db.query(QualityDecision.id)
+        .filter(QualityDecision.created_by_worker_id.in_(worker_ids))
+        .all()
+    ]
+    if qd_ids:
+        db.query(QualityDecisionBasis).filter(
+            QualityDecisionBasis.quality_decision_id.in_(qd_ids)
+        ).delete(synchronize_session=False)
+        db.query(QualityDecision).filter(QualityDecision.id.in_(qd_ids)).update(
+            {QualityDecision.supersedes_quality_decision_id: None},
+            synchronize_session=False,
+        )
+        db.query(QualityDecision).filter(QualityDecision.id.in_(qd_ids)).delete(
+            synchronize_session=False
+        )
 
     # EngineeringEvaluation (Task 9D-2A) удаляем ДО finding: FK
     # engineering_evaluations.finding_id → quality_findings RESTRICT. Порядок дети →
@@ -517,6 +550,9 @@ def _purge_test_data(db: Session) -> None:
         ).delete(synchronize_session=False)
         db.query(EngineeringEvaluationSequence).filter(
             EngineeringEvaluationSequence.project_id.in_(project_ids)
+        ).delete(synchronize_session=False)
+        db.query(QualityDecisionSequence).filter(
+            QualityDecisionSequence.project_id.in_(project_ids)
         ).delete(synchronize_session=False)
 
     # Инженерные документы/ревизии удаляем раньше линий и проектов:

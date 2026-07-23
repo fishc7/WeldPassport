@@ -447,6 +447,15 @@ from app.quality.defect_disposition_models import (  # noqa: E402
     DefectDispositionEvent,
 )
 
+# ── Task 10A Block 1: реэкспорт моделей ядра QualityDecision ────────────────────
+# Вынесены в отдельный модуль (quality_decision_models); доступны через
+# app.quality.models для conftest, Alembic (metadata) и тестов.
+from app.quality.quality_decision_models import (  # noqa: E402
+    QualityDecision,
+    QualityDecisionBasis,
+    QualityDecisionSequence,
+)
+
 __all__ = [
     "QUALITY_SCHEMA",
     "Inspection",
@@ -480,4 +489,7 @@ __all__ = [
     "DefectEvent",
     "DefectDisposition",
     "DefectDispositionEvent",
+    "QualityDecision",
+    "QualityDecisionBasis",
+    "QualityDecisionSequence",
 ]
