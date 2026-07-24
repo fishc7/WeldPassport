@@ -32,23 +32,23 @@
 - Consumes: отсутствует.
 - Produces: контракт `assert_safe_test_database(...) -> None`.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Проверить отказ без opt-in, без confirmation, при mismatch, denylist и отсутствии
 test-маркера; проверить одну безопасную комбинацию.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 `python -m pytest migration_contract_tests/test_test_db_safety_interlock.py -q`
 
 Expected: collection error `ModuleNotFoundError: tests.test_db_safety`.
 
-- [ ] **Step 3: Implement minimal pure guard**
+- [x] **Step 3: Implement minimal pure guard**
 
 Создать `tests/test_db_safety.py` без импорта `app.shared.db`, SQLAlchemy или Alembic.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run:
 `python -m pytest migration_contract_tests/test_test_db_safety_interlock.py -q`
@@ -66,20 +66,20 @@ Expected: all tests pass.
 - Produces: `_test_database_safety_interlock` session fixture required by
   `_apply_migrations`.
 
-- [ ] **Step 1: Add static contract test**
+- [x] **Step 1: Add static contract test**
 
 AST-проверка должна доказать, что `_apply_migrations` зависит от interlock, а
 `_db_available` и module-level `pytestmark` отсутствуют.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Expected: assertions fail against original `conftest.py`.
 
-- [ ] **Step 3: Modify conftest minimally**
+- [x] **Step 3: Modify conftest minimally**
 
 Удалить import-time connection probe и подключить guard до Alembic.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Expected: focused pure suite passes without DB access.
 
@@ -94,24 +94,28 @@ Expected: focused pure suite passes without DB access.
 - Consumes: verified implementation evidence.
 - Produces: canonical project status for the accepted interlock.
 
-- [ ] **Step 1: Run pure migration contract suite**
+- [x] **Step 1: Run pure migration contract suite**
 
 Run: `python -m pytest migration_contract_tests -q`
 
 Expected: all tests pass without PostgreSQL.
 
-- [ ] **Step 2: Run compile and whitespace checks**
+- [x] **Step 2: Run compile and whitespace checks**
 
 Run:
 `python -m compileall tests/test_db_safety.py tests/conftest.py`
 
 Run: `git diff --check` in a Git-backed review environment.
 
-- [ ] **Step 3: Record exact evidence**
+- [x] **Step 3: Record exact evidence**
 
 Update registry/status only with actually observed counts and limitations.
 
-- [ ] **Step 4: Publish**
+- [x] **Step 4: Publish branch**
 
-Create branch `codex/test-db-safety` from `24790bc`, publish the verified files, and open
-a PR to the current integration branch. Do not merge without a separate acceptance check.
+Create branch `codex/test-db-safety` from `24790bc` and publish the verified files.
+
+- [ ] **Step 5: Open and accept PR**
+
+Open a PR to the current integration branch. Do not merge without a separate
+acceptance check.

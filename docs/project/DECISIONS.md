@@ -4223,7 +4223,7 @@ Resolver → Workflow → Service → API → Tests. План:
 
 Дата: 2026-07-24
 
-Статус: **ACCEPTED; implementation accepted_uncommitted**
+Статус: **ACCEPTED; implementation done / verified 2026-07-24**
 
 Полный текст:
 [[docs/project/ADR-029-test-db-safety-interlock|ADR-029 — Test DB Safety Interlock]].
@@ -4235,4 +4235,4 @@ TEST-DB Foundation ADR-025. Он не создаёт отдельную БД и 
 
 Pure contract suite подтверждён без PostgreSQL: focused `10 passed`, полный
 `migration_contract_tests` — `45 passed`. Application regression и Alembic в этом gate
-не запускались.
+не запускались. Реализация зафиксирована commit `2046384`.

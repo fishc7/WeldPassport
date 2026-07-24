@@ -42,11 +42,12 @@ warning прошли PostgreSQL-приёмку и полный backend regressio
 
 ## Следующий этап
 
-### 0. Test DB Safety Interlock — принят, публикация ожидается
+### 0. Test DB Safety Interlock — завершён
 
 - ADR-029 вводит fail-closed guard до первого подключения integration pytest и Alembic;
 - pure acceptance: focused `10 passed`, migration contracts `45 passed`;
 - application regression намеренно не запускался;
+- реализация опубликована в commit `2046384`;
 - interlock не заменяет полный TEST-DB Foundation и не меняет зависимость ADR-025:
   далее отдельно проектируются B-04 и runtime compatibility profile.
 
