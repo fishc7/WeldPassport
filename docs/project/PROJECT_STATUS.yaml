@@ -1,6 +1,6 @@
 project: WeldPassport
-current_stage: as_02_done
-current_branch: docs/as-02-quality-decision-rbac-analysis
+current_stage: test_db_safety_interlock_accepted_uncommitted
+current_branch: codex/test-db-safety
 updated_at: 2026-07-24
 
 # Источник фактического статуса Tasks с коммитами — docs/project/TASK_REGISTRY.md.
@@ -8,8 +8,8 @@ updated_at: 2026-07-24
 
 summary:
   total_progress: 77
-  current_focus: "AS-02 — реализован и принят"
-  next_action: "Выбрать следующий отдельный архитектурный gate по ROADMAP"
+  current_focus: "TEST-DB-SAFETY-INTERLOCK — реализован и принят локальными pure checks"
+  next_action: "Опубликовать gate; затем отдельно спроектировать B-04 и runtime compatibility profile"
 
 modules:
   - code: constitution
@@ -26,7 +26,16 @@ modules:
     status: stable
     progress: 100
     visible: true
-    note: "AGF, Architecture Sessions, ADR-004..028; AS-02 Implementation Plan; TASK_REGISTRY.md — реестр Tasks."
+    note: "AGF, Architecture Sessions, ADR-004..029; AS-02 и Test DB Safety Interlock; TASK_REGISTRY.md — реестр Tasks."
+
+  - code: test_db_safety_interlock
+    name: "Fail-closed защита integration pytest"
+    owner: "Архитектура / тестовая инфраструктура"
+    status: accepted_uncommitted
+    progress: 95
+    branch: codex/test-db-safety
+    visible: true
+    note: "ADR-029: guard до PostgreSQL/Alembic; focused 10 passed, migration contracts 45 passed. Полный TEST-DB Foundation остаётся после B-04."
 
   - code: hr_workers
     name: "ОК → Работники"
