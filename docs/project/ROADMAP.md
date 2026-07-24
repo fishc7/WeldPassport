@@ -10,12 +10,17 @@
 План развития WeldPassport. Машиночитаемое состояние выполнения —
 `docs/project/PROJECT_STATUS.yaml`; постатейный статус — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]].
 
-## Текущий этап (обновлено 2026-07-21)
+## Текущий этап (обновлено 2026-07-24)
 
 **Инженерный контур, WeldOperation, термообработка и ядро контроля качества (Tasks 1–7,
 8A–8F, 9A–9C) реализованы.** Идёт **Task 9D — Quality / Defect Management**: блоки
 9D-1 (`QualityFinding`), 9D-2 (`EngineeringEvaluation`, ADR-021), 9D-3 (`Defect`, ADR-022)
 и 9D-4A (`DefectDisposition`, ADR-023) реализованы и закоммичены.
+
+Параллельно завершена приёмка **Task 10A-R — QualityDecision Core Governance Recovery**
+(ADR-027): Models/Migration, correcting revision 26, Workflow/Repository/Service,
+idempotency remediation и command API приняты в рабочем дереве 2026-07-24. Статус
+`accepted_uncommitted` сохраняется до выполнения commit.
 
 Реализовано и задокументировано (полный перечень — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]):
 
@@ -32,7 +37,13 @@
 
 ## Следующий этап
 
-### 1. Завершить Task 9D (Quality / Defect Management)
+### 1. Зафиксировать принятую реализацию Task 10A
+
+- 10A-R/10A-1/10A-1R/10A-2/10A-2R/10A-3 реализованы и приняты;
+- следующий gate — локальный commit;
+- AS-02 не включён и остаётся самостоятельной архитектурной задачей.
+
+### 2. Завершить Task 9D (Quality / Defect Management)
 
 - остаток блока **9D-4** — `ProductionHold` / `ProductionHoldRelease`, вычисляемый quality
   state `Joint`;
@@ -41,18 +52,18 @@
 - **9D-7** — API, permissions и интеграционные тесты контура 9D;
 - **9D-8** — Architecture consolidation Task 9D.
 
-### 2. Электронная документация (ADR-018)
+### 3. Электронная документация (ADR-018)
 
 - document lifecycle, versioning, snapshots, templates, official document issuance;
 - код, миграции и API пока не создавались.
 
-### 3. Вывод legacy
+### 4. Вывод legacy
 
 - миграция `desktop_ok` на `hr` + `welding`;
 - ETL из `РАБОТНИКИ` / `СВАРЩИКИ`;
 - снятие роутера `workforce`.
 
-### 4. Закрытие истории стыка
+### 5. Закрытие истории стыка
 
 - периодика КСС;
 - сведение производственной, контрольной и документальной истории стыка в единую

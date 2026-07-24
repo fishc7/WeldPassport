@@ -324,10 +324,43 @@ repository, service (state machine §D: `CREATE`/`SUBMIT_FOR_REVIEW`/`RETURN`/`D
 Q-D3 (supersede), Q-D4 (audit-таблица), Q-D6 (`CANCEL`), Q-D7 (roles) из v1 — закрыты
 решением владельца в v2, см. «Изменения v2» выше.
 
+## L. Governance Recovery Addendum (2026-07-24, ACCEPTED)
+
+Этот addendum фиксирует решения, принятые владельцем при восстановлении governance
+Task 10A. Он не изменяет исторический статус вопросов в §K на дату первоначального
+принятия ADR и не изображается документом, существовавшим до реализации Blocks 1–2.
+
+### L.1. Q-D9 закрыт
+
+`DRAFT` разрешено редактировать любому effective `WELDING_ENGINEER` в scope Joint:
+можно менять только `summary` и состав `DecisionBasis`, с обязательным
+`expected_version`. Отдельное audit-событие на каждое сохранение черновика не создаётся.
+Каждый `QUALITY_DECISION_SUBMITTED` обязан сохранять snapshot итоговой версии,
+`summary`, канонически упорядоченного состава оснований, actor worker и actor role.
+После `RETURN` новый `SUBMIT` создаёт новый snapshot.
+
+### L.2. Q-D5 закрыт
+
+`Idempotency-Key` обязателен для `CREATE`, `UPDATE_DRAFT`, `SUBMIT_FOR_REVIEW`,
+`RETURN` и `DECIDE`. Область уникальности:
+`actor_worker_id + command + target type + target id + key`. Тот же key с тем же
+нормализованным запросом возвращает сохранённый response snapshot без повторных
+state/audit/version/sequence/supersede effects; другой payload возвращает
+`409 QD_IDEMPOTENCY_CONFLICT`.
+
+Для нескольких команд одного агрегата требуется отдельное доменное хранилище
+idempotency records и новая корректирующая миграция после revision 25. Историческое
+предположение о том, что Q-D5 не влияет на модели/миграцию, признано неверным.
+Миграция 25 не переписывается.
+
+### L.3. Recovery и границы
+
+Полный контракт, provenance, этапы remediation и критерии приёмки:
+[[docs/project/TASK_10A_QUALITY_DECISION_CORE_RECOVERY_SPEC|Task 10A Recovery Specification]].
+AS-02 (person-level SoD, несовместимые роли, расширенный authorization snapshot) остаётся
+отдельным архитектурным контуром и этим addendum не принимается.
+
 ## Связанные документы
 
-После `ACCEPTED` — добавить строки в `docs/project/TASK_REGISTRY.md`,
-`docs/project/PROJECT_STATUS.yaml`, `docs/project/ROADMAP.md`, `docs/project/PROJECT_SUMMARY.md`
-и раздел `docs/ARCHITECTURE.md` (добавлен предварительный `PROPOSED`-раздел, см. §5 после
-раздела 5.10) — по правилу фиксации решений `AGENTS.md`. Запись-указатель в
-`docs/project/DECISIONS.md` — см. `## ADR-027`.
+Синхронизация после `ACCEPTED` выполняется в Task 10A-R по правилу фиксации решений
+`AGENTS.md`. Запись-указатель в `docs/project/DECISIONS.md` — см. `## ADR-027`.

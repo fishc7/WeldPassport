@@ -15,7 +15,10 @@ CHIEF_WELDER в контуре QualityDecision не участвует и не �
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Literal
+from uuid import UUID
 
 from app.quality import inspection_workflow as iw
 from app.quality import method_execution_workflow as mew
@@ -66,6 +69,10 @@ ACTION_DECIDE = "DECIDE"
 # Системное следствие DECIDE (ADR-027 §G) — не пользовательская команда/не входит в
 # QD_ACTIONS; запись нужна только чтобы pick_actor_role() работал единообразно.
 ACTION_SUPERSEDE = "SUPERSEDE"
+
+IDEMPOTENCY_TARGET_JOINT = "JOINT"
+IDEMPOTENCY_TARGET_QUALITY_DECISION = "QUALITY_DECISION"
+IDEMPOTENCY_KEY_MAX_LENGTH = 255
 
 # Действия-переходы состояния (потенциальный единый /transition в будущем API).
 QD_ACTIONS: tuple[str, ...] = (
@@ -197,6 +204,9 @@ QD_REVISION_WRONG_JOINT = "QD_REVISION_WRONG_JOINT"
 QD_REVISION_NOT_EFFECTIVE = "QD_REVISION_NOT_EFFECTIVE"
 QD_REVISION_ALREADY_DECIDED = "QD_REVISION_ALREADY_DECIDED"
 QD_VERSION_CONFLICT = "QD_VERSION_CONFLICT"
+QD_IDEMPOTENCY_KEY_REQUIRED = "QD_IDEMPOTENCY_KEY_REQUIRED"
+QD_IDEMPOTENCY_KEY_INVALID = "QD_IDEMPOTENCY_KEY_INVALID"
+QD_IDEMPOTENCY_CONFLICT = "QD_IDEMPOTENCY_CONFLICT"
 
 QD_ERROR_MESSAGES: dict[str, str] = {
     QD_NOT_FOUND: "QualityDecision не найден",
@@ -223,10 +233,74 @@ QD_ERROR_MESSAGES: dict[str, str] = {
     QD_VERSION_CONFLICT: (
         "Конфликт версии: перечитайте QualityDecision и повторите вручную"
     ),
+    QD_IDEMPOTENCY_KEY_REQUIRED: "Для мутирующей команды обязателен Idempotency-Key",
+    QD_IDEMPOTENCY_KEY_INVALID: (
+        "Idempotency-Key после trim должен содержать от 1 до 255 символов"
+    ),
+    QD_IDEMPOTENCY_CONFLICT: (
+        "Idempotency-Key уже использован для другого содержимого команды"
+    ),
 }
 
 
 # ── Валидация команд (pure; DB-проверки — на службе сервиса) ────────────────────
+
+
+def normalize_idempotency_key(value: str | None) -> str:
+    return value.strip() if value is not None else ""
+
+
+def validate_idempotency_key(value: str | None) -> str | None:
+    normalized = normalize_idempotency_key(value)
+    if not normalized:
+        return QD_IDEMPOTENCY_KEY_REQUIRED
+    if len(normalized) > IDEMPOTENCY_KEY_MAX_LENGTH:
+        return QD_IDEMPOTENCY_KEY_INVALID
+    return None
+
+
+def _canonical_json_value(value: object, *, field_name: str | None = None) -> object:
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, dict):
+        return {
+            str(key): _canonical_json_value(item, field_name=str(key))
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        items = [_canonical_json_value(item) for item in value]
+        if field_name == "basis_revision_ids":
+            return sorted(items, key=str)
+        return items
+    if isinstance(value, (set, frozenset)):
+        return sorted((_canonical_json_value(item) for item in value), key=str)
+    return value
+
+
+def idempotency_request_hash(
+    *,
+    command: str,
+    target_type: str,
+    target_id: UUID,
+    actor_worker_id: int,
+    payload: dict[str, object],
+) -> str:
+    canonical = _canonical_json_value(
+        {
+            "actor_worker_id": actor_worker_id,
+            "command": command,
+            "payload": payload,
+            "target_id": target_id,
+            "target_type": target_type,
+        }
+    )
+    encoded = json.dumps(
+        canonical,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def validate_create_request(

@@ -17,15 +17,17 @@
 * RBAC/scope — существующий механизм (`JointScopeContext`, `worker_role_codes_for_
   joint`), новый не вводится; скрытый по scope ресурс → 404 (паттерн
   DefectDisposition/EngineeringEvaluation);
-* API/FastAPI endpoints не создаются — входные данные передаются explicit kwargs
-  (как `DefectDispositionService`), не Pydantic-схемами.
+* HTTP-слой Task 10A-3 остаётся тонким: входные Pydantic-схемы преобразуются в
+  explicit kwargs сервиса; lifecycle/RBAC/idempotency решения в API не дублируются.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.engineering.models import Joint
@@ -38,7 +40,11 @@ from app.quality.engineering_evaluation_repository import (
 )
 from app.quality.engineering_evaluation_workflow import EVAL_EFFECTIVE
 from app.quality.execution_models import QualityAuditEvent
-from app.quality.quality_decision_models import QualityDecision, QualityDecisionBasis
+from app.quality.quality_decision_models import (
+    QualityDecision,
+    QualityDecisionBasis,
+    QualityDecisionIdempotencyRecord,
+)
 from app.quality.quality_decision_repository import QualityDecisionRepository
 from app.quality.quality_finding_repository import QualityFindingRepo
 from app.shared.errors import DomainError, RoleDeniedError
@@ -63,6 +69,7 @@ _CONFLICT_CODES: frozenset[str] = frozenset(
         qdw.QD_VERSION_CONFLICT,
         qdw.QD_REVISION_ALREADY_DECIDED,
         qdw.QD_REVISION_WRONG_JOINT,
+        qdw.QD_IDEMPOTENCY_CONFLICT,
     }
 )
 
@@ -167,6 +174,140 @@ class QualityDecisionService:
             )
         )
 
+    # ── idempotency (Task 10A Recovery Addendum L.2) ───────────────────────────
+
+    def _require_idempotency_key(self, value: str | None) -> str:
+        error = qdw.validate_idempotency_key(value)
+        if error is not None:
+            self._deny(error, qdw.QD_ERROR_MESSAGES[error])
+        return qdw.normalize_idempotency_key(value)
+
+    @staticmethod
+    def _decision_snapshot(decision: QualityDecision) -> dict[str, Any]:
+        return {
+            "id": str(decision.id),
+            "project_id": str(decision.project_id),
+            "joint_id": str(decision.joint_id),
+            "system_code": decision.system_code,
+            "status": decision.status,
+            "decision_result": decision.decision_result,
+            "summary": decision.summary,
+            "return_reason": decision.return_reason,
+            "supersedes_quality_decision_id": (
+                str(decision.supersedes_quality_decision_id)
+                if decision.supersedes_quality_decision_id is not None
+                else None
+            ),
+            "created_by_worker_id": decision.created_by_worker_id,
+            "created_at": decision.created_at.isoformat(),
+            "approved_by_worker_id": decision.approved_by_worker_id,
+            "approved_at": (
+                decision.approved_at.isoformat()
+                if decision.approved_at is not None
+                else None
+            ),
+            "approved_role": decision.approved_role,
+            "version": decision.version,
+        }
+
+    @staticmethod
+    def _decision_from_snapshot(snapshot: dict[str, Any]) -> QualityDecision:
+        return QualityDecision(
+            id=UUID(snapshot["id"]),
+            project_id=UUID(snapshot["project_id"]),
+            joint_id=UUID(snapshot["joint_id"]),
+            system_code=snapshot["system_code"],
+            status=snapshot["status"],
+            decision_result=snapshot.get("decision_result"),
+            summary=snapshot.get("summary"),
+            return_reason=snapshot.get("return_reason"),
+            supersedes_quality_decision_id=(
+                UUID(snapshot["supersedes_quality_decision_id"])
+                if snapshot.get("supersedes_quality_decision_id")
+                else None
+            ),
+            created_by_worker_id=snapshot["created_by_worker_id"],
+            created_at=datetime.fromisoformat(snapshot["created_at"]),
+            approved_by_worker_id=snapshot.get("approved_by_worker_id"),
+            approved_at=(
+                datetime.fromisoformat(snapshot["approved_at"])
+                if snapshot.get("approved_at")
+                else None
+            ),
+            approved_role=snapshot.get("approved_role"),
+            version=snapshot["version"],
+        )
+
+    def _idempotency_replay(
+        self,
+        *,
+        actor_worker_id: int,
+        command_type: str,
+        target_type: str,
+        target_id: UUID,
+        idempotency_key: str,
+        request_hash: str,
+    ) -> QualityDecision | None:
+        record = self._repo.get_idempotency(
+            actor_worker_id=actor_worker_id,
+            command_type=command_type,
+            target_type=target_type,
+            target_id=target_id,
+            idempotency_key=idempotency_key,
+        )
+        if record is None:
+            return None
+        if record.request_hash != request_hash:
+            self._deny(
+                qdw.QD_IDEMPOTENCY_CONFLICT,
+                qdw.QD_ERROR_MESSAGES[qdw.QD_IDEMPOTENCY_CONFLICT],
+            )
+        return self._decision_from_snapshot(record.response_snapshot)
+
+    def _store_idempotency(
+        self,
+        *,
+        decision: QualityDecision,
+        actor_worker_id: int,
+        command_type: str,
+        target_type: str,
+        target_id: UUID,
+        idempotency_key: str,
+        request_hash: str,
+        response_status: int,
+    ) -> QualityDecision | None:
+        try:
+            self._repo.add_idempotency(
+                QualityDecisionIdempotencyRecord(
+                    actor_worker_id=actor_worker_id,
+                    command_type=command_type,
+                    target_type=target_type,
+                    target_id=target_id,
+                    idempotency_key=idempotency_key,
+                    request_hash=request_hash,
+                    quality_decision_id=decision.id,
+                    response_status=response_status,
+                    response_snapshot=self._decision_snapshot(decision),
+                )
+            )
+        except IntegrityError:
+            # A concurrent identical command may win the unique-key race after
+            # this transaction has already produced its provisional effects.
+            # Roll all of them back, then replay only the committed winner.
+            self._db.rollback()
+            replay = self._idempotency_replay(
+                actor_worker_id=actor_worker_id,
+                command_type=command_type,
+                target_type=target_type,
+                target_id=target_id,
+                idempotency_key=idempotency_key,
+                request_hash=request_hash,
+            )
+            if replay is None:
+                raise
+            return replay
+        return None
+
     # ── основания (CREATE / UPDATE_DRAFT / DECIDE) ────────────────────────────────
 
     def _joint_id_for_revision(
@@ -246,7 +387,9 @@ class QualityDecisionService:
         basis_revision_ids: list[UUID],
         actor_worker_id: int,
         summary: str | None = None,
+        idempotency_key: str | None = None,
     ) -> QualityDecision:
+        idem_key = self._require_idempotency_key(idempotency_key)
         joint = self._require_joint(joint_id)
         granted = self._granted_roles(
             joint, actor_worker_id, qdw.QD_CREATE_ROLES, include_company=False
@@ -257,6 +400,28 @@ class QualityDecisionService:
         )
         if error is not None:
             self._deny(error, qdw.QD_ERROR_MESSAGES.get(error, error))
+
+        normalized_summary = summary.strip() if summary and summary.strip() else None
+        request_hash = qdw.idempotency_request_hash(
+            command=qdw.ACTION_CREATE,
+            target_type=qdw.IDEMPOTENCY_TARGET_JOINT,
+            target_id=joint.id,
+            actor_worker_id=actor_worker_id,
+            payload={
+                "basis_revision_ids": basis_revision_ids,
+                "summary": normalized_summary,
+            },
+        )
+        replay = self._idempotency_replay(
+            actor_worker_id=actor_worker_id,
+            command_type=qdw.ACTION_CREATE,
+            target_type=qdw.IDEMPOTENCY_TARGET_JOINT,
+            target_id=joint.id,
+            idempotency_key=idem_key,
+            request_hash=request_hash,
+        )
+        if replay is not None:
+            return replay
 
         revisions = self._resolve_basis_revisions(joint, basis_revision_ids)
 
@@ -274,7 +439,7 @@ class QualityDecisionService:
             joint_id=joint.id,
             system_code=system_code,
             status=qdw.QD_DRAFT,
-            summary=summary.strip() if summary and summary.strip() else None,
+            summary=normalized_summary,
             created_by_worker_id=actor_worker_id,
         )
         self._repo.add(decision)
@@ -300,9 +465,22 @@ class QualityDecisionService:
                 "basis_revision_ids": [str(r.id) for r in revisions],
             },
         )
+        race_replay = self._store_idempotency(
+            decision=decision,
+            actor_worker_id=actor_worker_id,
+            command_type=qdw.ACTION_CREATE,
+            target_type=qdw.IDEMPOTENCY_TARGET_JOINT,
+            target_id=joint.id,
+            idempotency_key=idem_key,
+            request_hash=request_hash,
+            response_status=201,
+        )
+        if race_replay is not None:
+            return race_replay
+        response = self._decision_from_snapshot(self._decision_snapshot(decision))
         self._repo.save()
         self._db.refresh(decision)
-        return decision
+        return response
 
     # ── чтение ────────────────────────────────────────────────────────────────────
 
@@ -338,9 +516,11 @@ class QualityDecisionService:
         actor_worker_id: int,
         summary: str | None = None,
         basis_revision_ids: list[UUID] | None = None,
+        idempotency_key: str | None = None,
     ) -> QualityDecision:
         """Правка `DRAFT`: `summary`/состав оснований. Не пишет audit event (§UPDATE
         DRAFT задания: изменения DRAFT не требуют отдельного audit event)."""
+        idem_key = self._require_idempotency_key(idempotency_key)
         decision = self._require_decision_for_update(decision_id)
         joint = self._require_joint(decision.joint_id)
         self._require_visible(joint, actor_worker_id)
@@ -348,6 +528,32 @@ class QualityDecisionService:
         granted = self._granted_roles(
             joint, actor_worker_id, qdw.QD_UPDATE_DRAFT_ROLES, include_company=False
         )
+        normalized_summary = (
+            summary.strip() if summary is not None and summary.strip() else None
+        )
+        request_hash = qdw.idempotency_request_hash(
+            command=qdw.ACTION_UPDATE_DRAFT,
+            target_type=qdw.IDEMPOTENCY_TARGET_QUALITY_DECISION,
+            target_id=decision.id,
+            actor_worker_id=actor_worker_id,
+            payload={
+                "basis_revision_ids": basis_revision_ids,
+                "expected_version": expected_version,
+                "summary": normalized_summary if summary is not None else None,
+                "summary_supplied": summary is not None,
+            },
+        )
+        replay = self._idempotency_replay(
+            actor_worker_id=actor_worker_id,
+            command_type=qdw.ACTION_UPDATE_DRAFT,
+            target_type=qdw.IDEMPOTENCY_TARGET_QUALITY_DECISION,
+            target_id=decision.id,
+            idempotency_key=idem_key,
+            request_hash=request_hash,
+        )
+        if replay is not None:
+            return replay
+
         error = qdw.validate_update_draft_request(
             current_status=decision.status, granted_roles=granted
         )
@@ -361,7 +567,7 @@ class QualityDecisionService:
             )
 
         if summary is not None:
-            decision.summary = summary.strip() if summary.strip() else None
+            decision.summary = normalized_summary
 
         if basis_revision_ids is not None:
             revisions = self._resolve_basis_revisions(joint, basis_revision_ids)
@@ -372,15 +578,34 @@ class QualityDecisionService:
             self._replace_bases(decision, revisions, actor_worker_id=actor_worker_id)
 
         decision.version += 1
+        race_replay = self._store_idempotency(
+            decision=decision,
+            actor_worker_id=actor_worker_id,
+            command_type=qdw.ACTION_UPDATE_DRAFT,
+            target_type=qdw.IDEMPOTENCY_TARGET_QUALITY_DECISION,
+            target_id=decision.id,
+            idempotency_key=idem_key,
+            request_hash=request_hash,
+            response_status=200,
+        )
+        if race_replay is not None:
+            return race_replay
+        response = self._decision_from_snapshot(self._decision_snapshot(decision))
         self._repo.save()
         self._db.refresh(decision)
-        return decision
+        return response
 
     # ── SUBMIT_FOR_REVIEW ─────────────────────────────────────────────────────────
 
     def submit_for_review(
-        self, decision_id: UUID, *, expected_version: int, actor_worker_id: int
+        self,
+        decision_id: UUID,
+        *,
+        expected_version: int,
+        actor_worker_id: int,
+        idempotency_key: str | None = None,
     ) -> QualityDecision:
+        idem_key = self._require_idempotency_key(idempotency_key)
         decision = self._require_decision_for_update(decision_id)
         joint = self._require_joint(decision.joint_id)
         self._require_visible(joint, actor_worker_id)
@@ -392,6 +617,23 @@ class QualityDecisionService:
             include_company=False,
         )
         bases = self._repo.list_bases(decision.id)
+        request_hash = qdw.idempotency_request_hash(
+            command=qdw.ACTION_SUBMIT_FOR_REVIEW,
+            target_type=qdw.IDEMPOTENCY_TARGET_QUALITY_DECISION,
+            target_id=decision.id,
+            actor_worker_id=actor_worker_id,
+            payload={"expected_version": expected_version},
+        )
+        replay = self._idempotency_replay(
+            actor_worker_id=actor_worker_id,
+            command_type=qdw.ACTION_SUBMIT_FOR_REVIEW,
+            target_type=qdw.IDEMPOTENCY_TARGET_QUALITY_DECISION,
+            target_id=decision.id,
+            idempotency_key=idem_key,
+            request_hash=request_hash,
+        )
+        if replay is not None:
+            return replay
 
         error = qdw.validate_submit_request(
             current_status=decision.status,
@@ -419,11 +661,34 @@ class QualityDecisionService:
             actor_worker_id=actor_worker_id,
             changed_fields={"actor_role": actor_role},
             previous_values={"status": previous_status},
-            new_values={"status": decision.status},
+            new_values={
+                "status": decision.status,
+                "version": decision.version,
+                "summary": decision.summary,
+                "basis_revision_ids": sorted(
+                    (
+                        str(basis.engineering_evaluation_revision_id)
+                        for basis in bases
+                    )
+                ),
+            },
         )
+        race_replay = self._store_idempotency(
+            decision=decision,
+            actor_worker_id=actor_worker_id,
+            command_type=qdw.ACTION_SUBMIT_FOR_REVIEW,
+            target_type=qdw.IDEMPOTENCY_TARGET_QUALITY_DECISION,
+            target_id=decision.id,
+            idempotency_key=idem_key,
+            request_hash=request_hash,
+            response_status=200,
+        )
+        if race_replay is not None:
+            return race_replay
+        response = self._decision_from_snapshot(self._decision_snapshot(decision))
         self._repo.save()
         self._db.refresh(decision)
-        return decision
+        return response
 
     # ── RETURN ────────────────────────────────────────────────────────────────────
 
@@ -434,7 +699,9 @@ class QualityDecisionService:
         expected_version: int,
         return_reason: str,
         actor_worker_id: int,
+        idempotency_key: str | None = None,
     ) -> QualityDecision:
+        idem_key = self._require_idempotency_key(idempotency_key)
         decision = self._require_decision_for_update(decision_id)
         joint = self._require_joint(decision.joint_id)
         self._require_visible(joint, actor_worker_id)
@@ -445,6 +712,27 @@ class QualityDecisionService:
             qdw.roles_for_action(qdw.ACTION_RETURN),
             include_company=False,
         )
+        normalized_reason = return_reason.strip()
+        request_hash = qdw.idempotency_request_hash(
+            command=qdw.ACTION_RETURN,
+            target_type=qdw.IDEMPOTENCY_TARGET_QUALITY_DECISION,
+            target_id=decision.id,
+            actor_worker_id=actor_worker_id,
+            payload={
+                "expected_version": expected_version,
+                "return_reason": normalized_reason,
+            },
+        )
+        replay = self._idempotency_replay(
+            actor_worker_id=actor_worker_id,
+            command_type=qdw.ACTION_RETURN,
+            target_type=qdw.IDEMPOTENCY_TARGET_QUALITY_DECISION,
+            target_id=decision.id,
+            idempotency_key=idem_key,
+            request_hash=request_hash,
+        )
+        if replay is not None:
+            return replay
 
         error = qdw.validate_return_request(
             current_status=decision.status,
@@ -462,7 +750,7 @@ class QualityDecisionService:
 
         previous_status = decision.status
         decision.status = qdw.QD_DRAFT
-        decision.return_reason = return_reason.strip()
+        decision.return_reason = normalized_reason
         decision.version += 1
 
         actor_role = qdw.pick_actor_role(qdw.ACTION_RETURN, granted)
@@ -475,9 +763,22 @@ class QualityDecisionService:
             previous_values={"status": previous_status},
             new_values={"status": decision.status},
         )
+        race_replay = self._store_idempotency(
+            decision=decision,
+            actor_worker_id=actor_worker_id,
+            command_type=qdw.ACTION_RETURN,
+            target_type=qdw.IDEMPOTENCY_TARGET_QUALITY_DECISION,
+            target_id=decision.id,
+            idempotency_key=idem_key,
+            request_hash=request_hash,
+            response_status=200,
+        )
+        if race_replay is not None:
+            return race_replay
+        response = self._decision_from_snapshot(self._decision_snapshot(decision))
         self._repo.save()
         self._db.refresh(decision)
-        return decision
+        return response
 
     # ── DECIDE (+ системный supersede, ADR-027 §G) ───────────────────────────────
 
@@ -488,6 +789,7 @@ class QualityDecisionService:
         expected_version: int,
         decision_result: str,
         actor_worker_id: int,
+        idempotency_key: str | None = None,
     ) -> QualityDecision:
         """`UNDER_REVIEW` → `DECIDED` (только OTK_INSPECTOR).
 
@@ -502,6 +804,7 @@ class QualityDecisionService:
         joint`, `uq_quality_decision_bases_one_decided_per_revision`) могут увидеть
         транзитный дубликат в рамках одного flush.
         """
+        idem_key = self._require_idempotency_key(idempotency_key)
         decision = self._require_decision_for_update(decision_id)
         joint = self._require_joint(decision.joint_id)
         self._require_visible(joint, actor_worker_id)
@@ -512,6 +815,26 @@ class QualityDecisionService:
             qdw.roles_for_action(qdw.ACTION_DECIDE),
             include_company=False,
         )
+        request_hash = qdw.idempotency_request_hash(
+            command=qdw.ACTION_DECIDE,
+            target_type=qdw.IDEMPOTENCY_TARGET_QUALITY_DECISION,
+            target_id=decision.id,
+            actor_worker_id=actor_worker_id,
+            payload={
+                "decision_result": decision_result,
+                "expected_version": expected_version,
+            },
+        )
+        replay = self._idempotency_replay(
+            actor_worker_id=actor_worker_id,
+            command_type=qdw.ACTION_DECIDE,
+            target_type=qdw.IDEMPOTENCY_TARGET_QUALITY_DECISION,
+            target_id=decision.id,
+            idempotency_key=idem_key,
+            request_hash=request_hash,
+        )
+        if replay is not None:
+            return replay
 
         # Сериализация относительно других QualityDecision того же Joint.
         self._repo.lock_joint_for_update(joint.id)
@@ -614,8 +937,21 @@ class QualityDecisionService:
                 new_values={"status": old.status},
             )
 
+        race_replay = self._store_idempotency(
+            decision=decision,
+            actor_worker_id=actor_worker_id,
+            command_type=qdw.ACTION_DECIDE,
+            target_type=qdw.IDEMPOTENCY_TARGET_QUALITY_DECISION,
+            target_id=decision.id,
+            idempotency_key=idem_key,
+            request_hash=request_hash,
+            response_status=200,
+        )
+        if race_replay is not None:
+            return race_replay
+        response = self._decision_from_snapshot(self._decision_snapshot(decision))
         self._repo.save()
         self._db.refresh(decision)
         if old is not None:
             self._db.refresh(old)
-        return decision
+        return response

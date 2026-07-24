@@ -23,6 +23,7 @@
 | Статус | Значение |
 |---|---|
 | `done` | код, миграции, тесты реализованы и закоммичены |
+| `accepted_uncommitted` | scoped Diff реализован и принят свежими проверками, но commit ещё отсутствует |
 | `in_progress` | часть подблоков реализована, часть — в работе |
 | `planned` | архитектурный канон принят (ADR), реализация не начата |
 | `not_designed` | архитектурное решение ещё не принято |
@@ -97,6 +98,23 @@ Tasks 1–4 выполнены до введения 2026-07-21 обязател
 [[docs/project/TASK_9D-3_DEFECT_TECHNICAL_MODEL_SPEC|TASK_9D-3_DEFECT_TECHNICAL_MODEL_SPEC.md]] ·
 [[docs/project/TASK_9D-3C_DEFECT_API_INTEGRATION_SPEC|TASK_9D-3C_DEFECT_API_INTEGRATION_SPEC.md]] ·
 [[docs/project/TASK_9D-4A-5_DEFECT_DISPOSITION_ADR024_ALIGNMENT_SPEC|TASK_9D-4A-5_DEFECT_DISPOSITION_ADR024_ALIGNMENT_SPEC.md]].
+
+## QualityDecision Core — Task 10A (ADR-027)
+
+| Task | Название | Архитектурное основание | Статус | Evidence / примечание |
+|---|---|---|---|---|
+| Task 10A-R | Governance Recovery | [[docs/project/ADR-027-quality-decision-core-canon|ADR-027 + Recovery Addendum]] + [[docs/project/TASK_10A_QUALITY_DECISION_CORE_RECOVERY_SPEC|Recovery Specification]] | `accepted_uncommitted` | recovery принят и синхронизирован 2026-07-24; commit отсутствует |
+| Task 10A-1 | Models + Migration | ADR-027 | `accepted_uncommitted` | модели и revision 25 приняты свежими contract/metadata/graph проверками 2026-07-24 |
+| Task 10A-1R | Idempotency Model + Correcting Migration | ADR-027 Addendum L.2 | `accepted_uncommitted` | отдельная таблица records и новая self-contained revision 26; migration 25 не изменена |
+| Task 10A-2 | Workflow + Repository + Service | ADR-027 | `accepted_uncommitted` | lifecycle/RBAC/scope/supersede/audit regression suite пройден 2026-07-24 |
+| Task 10A-2R | Submit Snapshot + Idempotency Orchestration | ADR-027 Addendum L.1/L.2 | `accepted_uncommitted` | два SUBMIT snapshot после RETURN, replay/conflict/rollback/concurrency и стабильный response snapshot проверены |
+| Task 10A-3 | Schemas + Command API + API Tests | ADR-027 + Recovery Specification | `accepted_uncommitted` | thin command API и OpenAPI-контракт реализованы; полный API lifecycle/replay/errors пройден |
+
+AS-02 (person-level SoD, несовместимые роли, authorization snapshot) в Task 10A
+не входит и требует отдельного архитектурного решения/Task.
+
+`accepted_uncommitted` означает: scoped Diff прошёл приёмку в рабочем дереве, но Task
+ещё не имеет commit и поэтому не отмечен `done`.
 
 ## Infrastructure prerequisites — Migration Governance (ADR-025, Session 010)
 

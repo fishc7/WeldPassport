@@ -10,6 +10,7 @@ QualityDecision; `ctx.otk` — OTK_INSPECTOR; `ctx.chief`/`ctx.norole` — от�
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from functools import wraps
 from typing import Callable
 from uuid import uuid4
 
@@ -20,7 +21,10 @@ from sqlalchemy.orm import Session
 from app.quality import quality_decision_workflow as qdw
 from app.quality.engineering_evaluation_models import EngineeringEvaluationRevision
 from app.quality.execution_models import QualityAuditEvent
-from app.quality.quality_decision_models import QualityDecision
+from app.quality.quality_decision_models import (
+    QualityDecision,
+    QualityDecisionIdempotencyRecord,
+)
 from app.quality.quality_decision_services import QualityDecisionService
 from app.shared.db import SessionLocal
 from app.shared.errors import DomainError, RoleDeniedError
@@ -31,6 +35,32 @@ from ._defect_support import DefectCtx
 @pytest.fixture
 def ctx(db: Session) -> DefectCtx:
     return DefectCtx(db, "Qd")
+
+
+@pytest.fixture(autouse=True)
+def _supply_keys_to_pre_recovery_service_scenarios(monkeypatch):
+    """Keep pre-Q-D5 tests focused on their original domain assertion.
+
+    New idempotency tests pass stable keys explicitly. Older tests receive a unique
+    key so the newly mandatory transport/service precondition does not mask the
+    lifecycle, RBAC or integrity behavior they were written to verify.
+    """
+
+    for method_name in (
+        "create",
+        "update_draft",
+        "submit_for_review",
+        "return_to_draft",
+        "decide",
+    ):
+        original = getattr(QualityDecisionService, method_name)
+
+        @wraps(original)
+        def with_key(self, *args, __original=original, __name=method_name, **kwargs):
+            kwargs.setdefault("idempotency_key", f"legacy-{__name}-{uuid4()}")
+            return __original(self, *args, **kwargs)
+
+        monkeypatch.setattr(QualityDecisionService, method_name, with_key)
 
 
 def _draft_revision(ctx: DefectCtx, joint) -> EngineeringEvaluationRevision:
@@ -70,9 +100,13 @@ def _create_under_review(
         basis_revision_ids=[rev.id],
         actor_worker_id=ctx.ogs.id,
         summary=summary,
+        idempotency_key=f"helper-create-{uuid4()}",
     )
     return svc.submit_for_review(
-        decision.id, expected_version=decision.version, actor_worker_id=ctx.ogs.id
+        decision.id,
+        expected_version=decision.version,
+        actor_worker_id=ctx.ogs.id,
+        idempotency_key=f"helper-submit-{uuid4()}",
     )
 
 
@@ -91,7 +125,281 @@ def _create_decided(
         expected_version=under_review.version,
         decision_result=result,
         actor_worker_id=ctx.otk.id,
+        idempotency_key=f"helper-decide-{uuid4()}",
     )
+
+
+class TestIdempotencyCommands:
+    def test_same_key_with_different_payload_is_conflict(
+        self, db: Session, ctx: DefectCtx
+    ):
+        joint = ctx.new_joint("J-QD-IDEM-CONFLICT")
+        rev = _effective_revision(ctx, joint)
+        svc = QualityDecisionService(db)
+        svc.create(
+            joint_id=joint.id,
+            basis_revision_ids=[rev.id],
+            actor_worker_id=ctx.ogs.id,
+            summary="first",
+            idempotency_key="create-conflict",
+        )
+
+        with pytest.raises(DomainError) as exc:
+            svc.create(
+                joint_id=joint.id,
+                basis_revision_ids=[rev.id],
+                actor_worker_id=ctx.ogs.id,
+                summary="different",
+                idempotency_key="create-conflict",
+            )
+
+        assert exc.value.status_code == 409
+        assert exc.value.code == qdw.QD_IDEMPOTENCY_CONFLICT
+
+    def test_failed_command_does_not_persist_idempotency_record(
+        self, db: Session, ctx: DefectCtx, monkeypatch
+    ):
+        joint = ctx.new_joint("J-QD-IDEM-ROLLBACK")
+        rev = _effective_revision(ctx, joint)
+        svc = QualityDecisionService(db)
+        draft = svc.create(
+            joint_id=joint.id,
+            basis_revision_ids=[rev.id],
+            actor_worker_id=ctx.ogs.id,
+            summary="rollback",
+            idempotency_key="rollback-create",
+        )
+
+        def boom() -> None:
+            raise RuntimeError("simulated commit failure")
+
+        monkeypatch.setattr(svc._repo, "save", boom)
+        with pytest.raises(RuntimeError):
+            svc.submit_for_review(
+                draft.id,
+                expected_version=draft.version,
+                actor_worker_id=ctx.ogs.id,
+                idempotency_key="rollback-submit",
+            )
+        db.rollback()
+
+        assert (
+            db.query(QualityDecisionIdempotencyRecord)
+            .filter(
+                QualityDecisionIdempotencyRecord.idempotency_key
+                == "rollback-submit"
+            )
+            .count()
+            == 0
+        )
+
+    def test_update_draft_replay_keeps_original_snapshot(
+        self, db: Session, ctx: DefectCtx
+    ):
+        joint = ctx.new_joint("J-QD-IDEM-UPDATE")
+        rev = _effective_revision(ctx, joint)
+        svc = QualityDecisionService(db)
+        draft = svc.create(
+            joint_id=joint.id,
+            basis_revision_ids=[rev.id],
+            actor_worker_id=ctx.ogs.id,
+            summary="before",
+            idempotency_key="update-create",
+        )
+        expected_version = draft.version
+        first = svc.update_draft(
+            draft.id,
+            expected_version=expected_version,
+            actor_worker_id=ctx.ogs.id,
+            summary="after",
+            idempotency_key="update-replay",
+        )
+        replay = svc.update_draft(
+            draft.id,
+            expected_version=expected_version,
+            actor_worker_id=ctx.ogs.id,
+            summary="after",
+            idempotency_key="update-replay",
+        )
+        assert replay.id == first.id
+        assert replay.version == first.version
+        assert replay.summary == "after"
+
+    def test_submit_replay_does_not_add_second_event(
+        self, db: Session, ctx: DefectCtx
+    ):
+        joint = ctx.new_joint("J-QD-IDEM-SUBMIT")
+        rev = _effective_revision(ctx, joint)
+        svc = QualityDecisionService(db)
+        draft = svc.create(
+            joint_id=joint.id,
+            basis_revision_ids=[rev.id],
+            actor_worker_id=ctx.ogs.id,
+            summary="submit",
+            idempotency_key="submit-create",
+        )
+        expected_version = draft.version
+        first = svc.submit_for_review(
+            draft.id,
+            expected_version=expected_version,
+            actor_worker_id=ctx.ogs.id,
+            idempotency_key="submit-replay",
+        )
+        replay = svc.submit_for_review(
+            draft.id,
+            expected_version=expected_version,
+            actor_worker_id=ctx.ogs.id,
+            idempotency_key="submit-replay",
+        )
+        assert replay.version == first.version
+        events = svc.list_audit_events(draft.id, actor_worker_id=ctx.ogs.id)
+        assert [event.event_type for event in events].count(qdw.EVENT_SUBMITTED) == 1
+
+    def test_return_replay_does_not_add_second_event(
+        self, db: Session, ctx: DefectCtx
+    ):
+        joint = ctx.new_joint("J-QD-IDEM-RETURN")
+        rev = _effective_revision(ctx, joint)
+        svc = QualityDecisionService(db)
+        under_review = _create_under_review(svc, ctx, joint, rev)
+        expected_version = under_review.version
+        first = svc.return_to_draft(
+            under_review.id,
+            expected_version=expected_version,
+            return_reason="fix",
+            actor_worker_id=ctx.otk.id,
+            idempotency_key="return-replay",
+        )
+        replay = svc.return_to_draft(
+            under_review.id,
+            expected_version=expected_version,
+            return_reason="fix",
+            actor_worker_id=ctx.otk.id,
+            idempotency_key="return-replay",
+        )
+        assert replay.version == first.version
+        events = svc.list_audit_events(first.id, actor_worker_id=ctx.otk.id)
+        assert [event.event_type for event in events].count(qdw.EVENT_RETURNED) == 1
+
+    def test_decide_replay_preserves_original_response(
+        self, db: Session, ctx: DefectCtx
+    ):
+        joint = ctx.new_joint("J-QD-IDEM-DECIDE")
+        rev = _effective_revision(ctx, joint)
+        svc = QualityDecisionService(db)
+        under_review = _create_under_review(svc, ctx, joint, rev)
+        expected_version = under_review.version
+        first = svc.decide(
+            under_review.id,
+            expected_version=expected_version,
+            decision_result=qdw.QD_RESULT_ACCEPTED,
+            actor_worker_id=ctx.otk.id,
+            idempotency_key="decide-replay",
+        )
+        replay = svc.decide(
+            under_review.id,
+            expected_version=expected_version,
+            decision_result=qdw.QD_RESULT_ACCEPTED,
+            actor_worker_id=ctx.otk.id,
+            idempotency_key="decide-replay",
+        )
+        assert replay.version == first.version
+        assert replay.status == qdw.QD_DECIDED
+        events = svc.list_audit_events(first.id, actor_worker_id=ctx.otk.id)
+        assert [event.event_type for event in events].count(qdw.EVENT_DECIDED) == 1
+
+    def test_submit_event_contains_final_content_snapshot(
+        self, db: Session, ctx: DefectCtx
+    ):
+        joint = ctx.new_joint("J-QD-SUBMIT-SNAPSHOT")
+        rev = _effective_revision(ctx, joint)
+        svc = QualityDecisionService(db)
+        draft = svc.create(
+            joint_id=joint.id,
+            basis_revision_ids=[rev.id],
+            actor_worker_id=ctx.ogs.id,
+            summary="final summary",
+            idempotency_key="snapshot-create",
+        )
+        submitted = svc.submit_for_review(
+            draft.id,
+            expected_version=draft.version,
+            actor_worker_id=ctx.ogs.id,
+            idempotency_key="snapshot-submit",
+        )
+        event = svc.list_audit_events(
+            submitted.id, actor_worker_id=ctx.ogs.id
+        )[-1]
+        assert event.new_values == {
+            "status": qdw.QD_UNDER_REVIEW,
+            "version": submitted.version,
+            "summary": "final summary",
+            "basis_revision_ids": [str(rev.id)],
+        }
+
+    def test_return_and_resubmit_keep_two_distinct_content_snapshots(
+        self, db: Session, ctx: DefectCtx
+    ):
+        joint = ctx.new_joint("J-QD-SUBMIT-HISTORY")
+        rev = _effective_revision(ctx, joint)
+        svc = QualityDecisionService(db)
+        draft = svc.create(
+            joint_id=joint.id,
+            basis_revision_ids=[rev.id],
+            actor_worker_id=ctx.ogs.id,
+            summary="first summary",
+            idempotency_key="history-create",
+        )
+        first_submit = svc.submit_for_review(
+            draft.id,
+            expected_version=draft.version,
+            actor_worker_id=ctx.ogs.id,
+            idempotency_key="history-submit-1",
+        )
+        first_submit_version = first_submit.version
+        returned = svc.return_to_draft(
+            draft.id,
+            expected_version=first_submit.version,
+            return_reason="revise",
+            actor_worker_id=ctx.otk.id,
+            idempotency_key="history-return",
+        )
+        updated = svc.update_draft(
+            draft.id,
+            expected_version=returned.version,
+            summary="second summary",
+            actor_worker_id=ctx.ogs.id,
+            idempotency_key="history-update",
+        )
+        second_submit = svc.submit_for_review(
+            draft.id,
+            expected_version=updated.version,
+            actor_worker_id=ctx.ogs.id,
+            idempotency_key="history-submit-2",
+        )
+        second_submit_version = second_submit.version
+
+        submitted_events = [
+            event
+            for event in svc.list_audit_events(
+                draft.id,
+                actor_worker_id=ctx.ogs.id,
+            )
+            if event.event_type == qdw.EVENT_SUBMITTED
+        ]
+        assert [event.new_values["summary"] for event in submitted_events] == [
+            "first summary",
+            "second summary",
+        ]
+        assert [event.new_values["version"] for event in submitted_events] == [
+            first_submit_version,
+            second_submit_version,
+        ]
+        assert all(
+            event.actor_worker_id == ctx.ogs.id
+            and event.changed_fields["actor_role"] == qdw.ROLE_WELDING_ENGINEER
+            for event in submitted_events
+        )
 
 
 # ── Pure workflow ────────────────────────────────────────────────────────────────
@@ -164,6 +472,69 @@ class TestWorkflowPure:
 
 
 class TestCreate:
+    def test_same_idempotency_key_replays_without_second_side_effect(
+        self, db: Session, ctx: DefectCtx
+    ):
+        joint = ctx.new_joint("J-QD-IDEM-CREATE")
+        rev = _effective_revision(ctx, joint)
+        svc = QualityDecisionService(db)
+
+        first = svc.create(
+            joint_id=joint.id,
+            basis_revision_ids=[rev.id],
+            actor_worker_id=ctx.ogs.id,
+            summary="Идемпотентное создание",
+            idempotency_key="create-replay",
+        )
+        replay = svc.create(
+            joint_id=joint.id,
+            basis_revision_ids=[rev.id],
+            actor_worker_id=ctx.ogs.id,
+            summary="Идемпотентное создание",
+            idempotency_key="create-replay",
+        )
+
+        assert replay.id == first.id
+        assert (
+            db.query(QualityDecision)
+            .filter(QualityDecision.joint_id == joint.id)
+            .count()
+            == 1
+        )
+        events = svc.list_audit_events(first.id, actor_worker_id=ctx.ogs.id)
+        assert [event.event_type for event in events] == [qdw.EVENT_CREATED]
+
+    def test_replay_returns_create_snapshot_after_aggregate_changes(
+        self, db: Session, ctx: DefectCtx
+    ):
+        joint = ctx.new_joint("J-QD-IDEM-CREATE-SNAPSHOT")
+        rev = _effective_revision(ctx, joint)
+        svc = QualityDecisionService(db)
+        created = svc.create(
+            joint_id=joint.id,
+            basis_revision_ids=[rev.id],
+            actor_worker_id=ctx.ogs.id,
+            summary="stable response",
+            idempotency_key="create-stable-snapshot",
+        )
+        svc.submit_for_review(
+            created.id,
+            expected_version=created.version,
+            actor_worker_id=ctx.ogs.id,
+            idempotency_key="create-stable-submit",
+        )
+
+        replay = svc.create(
+            joint_id=joint.id,
+            basis_revision_ids=[rev.id],
+            actor_worker_id=ctx.ogs.id,
+            summary="stable response",
+            idempotency_key="create-stable-snapshot",
+        )
+
+        assert replay.status == qdw.QD_DRAFT
+        assert replay.version == 1
+
     def test_happy_path(self, db: Session, ctx: DefectCtx):
         joint = ctx.new_joint("J-QD-1")
         rev = _effective_revision(ctx, joint)
@@ -755,6 +1126,44 @@ class TestIntegrity:
 
 
 class TestConcurrency:
+    def test_concurrent_create_same_key_replays_winner(self, db: Session):
+        ctx = DefectCtx(db, "Qci")
+        joint = ctx.new_joint("J-QD-IDEM-CONCURRENT")
+        rev = _effective_revision(ctx, joint)
+        joint_id, rev_id, actor_id = joint.id, rev.id, ctx.ogs.id
+        db.commit()
+
+        def create_worker():
+            session = SessionLocal()
+            try:
+                result = QualityDecisionService(session).create(
+                    joint_id=joint_id,
+                    basis_revision_ids=[rev_id],
+                    actor_worker_id=actor_id,
+                    summary="same concurrent request",
+                    idempotency_key="concurrent-create",
+                )
+                return ("ok", str(result.id), result.system_code)
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                return ("err", type(exc).__name__, "")
+            finally:
+                session.close()
+
+        results = _run_parallel([create_worker, create_worker])
+
+        assert [result[0] for result in results] == ["ok", "ok"], results
+        assert results[0][1:] == results[1][1:]
+        assert (
+            db.query(QualityDecisionIdempotencyRecord)
+            .filter(
+                QualityDecisionIdempotencyRecord.idempotency_key
+                == "concurrent-create"
+            )
+            .count()
+            == 1
+        )
+
     def test_concurrent_decide_two_decisions_same_joint(self, db: Session):
         """Два QualityDecision одного Joint, DECIDE параллельно: ровно один DECIDED."""
         ctx = DefectCtx(db, "Qc")

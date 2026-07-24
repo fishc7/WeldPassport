@@ -78,14 +78,14 @@ def test_metadata_002_excludes_workforce_and_test_schema() -> None:
     )
 
 
-def test_metadata_003_registry_matches_filesystem_and_has_72_tables() -> None:
+def test_metadata_003_registry_matches_filesystem_and_has_73_tables() -> None:
     """TEST-B03-METADATA-003."""
     provider = _provider()
 
     assert provider.CANONICAL_MODEL_MODULES == EXPECTED_CANONICAL_MODEL_MODULES
     assert len(provider.CANONICAL_MODEL_MODULES) == 12
     assert set(provider.CANONICAL_MODEL_MODULES) == _discover_model_modules()
-    assert len(provider.canonical_metadata.tables) == 72
+    assert len(provider.canonical_metadata.tables) == 73
     assert all(
         table.schema and table.key == f"{table.schema}.{table.name}"
         for table in provider.canonical_metadata.tables.values()

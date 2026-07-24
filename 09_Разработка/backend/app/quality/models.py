@@ -453,6 +453,7 @@ from app.quality.defect_disposition_models import (  # noqa: E402
 from app.quality.quality_decision_models import (  # noqa: E402
     QualityDecision,
     QualityDecisionBasis,
+    QualityDecisionIdempotencyRecord,
     QualityDecisionSequence,
 )
 
@@ -491,5 +492,6 @@ __all__ = [
     "DefectDispositionEvent",
     "QualityDecision",
     "QualityDecisionBasis",
+    "QualityDecisionIdempotencyRecord",
     "QualityDecisionSequence",
 ]

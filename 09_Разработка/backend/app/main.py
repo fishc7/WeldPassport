@@ -13,6 +13,7 @@ from app.quality.engineering_evaluation_api import (
 )
 from app.quality.execution_api import router as quality_execution_router
 from app.quality.quality_finding_api import router as quality_finding_router
+from app.quality.quality_decision_api import router as quality_decision_router
 from app.welding.api import router as ogs_router
 from app.workforce.api import router as workforce_router  # deprecated — ADR-005
 
@@ -32,6 +33,7 @@ app.include_router(engineering_import_router, prefix="/api/v1")
 app.include_router(quality_router, prefix="/api/v1")
 app.include_router(quality_execution_router, prefix="/api/v1")
 app.include_router(quality_finding_router, prefix="/api/v1")
+app.include_router(quality_decision_router, prefix="/api/v1")
 app.include_router(engineering_evaluation_router, prefix="/api/v1")
 app.include_router(defect_router, prefix="/api/v1")
 app.include_router(defect_disposition_router, prefix="/api/v1")

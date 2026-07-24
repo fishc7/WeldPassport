@@ -281,7 +281,8 @@ def _purge_test_data(db: Session) -> None:
     # QualityDecision (Task 10A) удаляем ДО EngineeringEvaluationRevision/Joint: FK
     # quality_decision_bases.engineering_evaluation_revision_id →
     # engineering_evaluation_revisions RESTRICT и quality_decisions.joint_id → joints
-    # RESTRICT. Порядок: bases → self-FK supersedes_quality_decision_id (обнуляем) →
+    # RESTRICT. Порядок: idempotency → bases → self-FK
+    # supersedes_quality_decision_id (обнуляем) →
     # decisions. quality_audit_events по QualityDecision уже покрыты общей чисткой
     # QualityAuditEvent по actor_worker_id ниже (полиморфный журнал, без FK).
     qd_ids = [
@@ -291,6 +292,13 @@ def _purge_test_data(db: Session) -> None:
         .all()
     ]
     if qd_ids:
+        from app.quality.quality_decision_models import (
+            QualityDecisionIdempotencyRecord,
+        )
+
+        db.query(QualityDecisionIdempotencyRecord).filter(
+            QualityDecisionIdempotencyRecord.quality_decision_id.in_(qd_ids)
+        ).delete(synchronize_session=False)
         db.query(QualityDecisionBasis).filter(
             QualityDecisionBasis.quality_decision_id.in_(qd_ids)
         ).delete(synchronize_session=False)

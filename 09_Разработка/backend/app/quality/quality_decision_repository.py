@@ -31,6 +31,7 @@ from app.quality.quality_decision_models import (
     QUALITY_SCHEMA,
     QualityDecision,
     QualityDecisionBasis,
+    QualityDecisionIdempotencyRecord,
 )
 
 
@@ -117,6 +118,36 @@ class QualityDecisionRepository:
         self.db.add(decision)
         self.db.flush()
         return decision
+
+    # ── Idempotency (Task 10A Recovery Addendum L.2) ───────────────────────────
+
+    def get_idempotency(
+        self,
+        *,
+        actor_worker_id: int,
+        command_type: str,
+        target_type: str,
+        target_id: UUID,
+        idempotency_key: str,
+    ) -> QualityDecisionIdempotencyRecord | None:
+        return (
+            self.db.query(QualityDecisionIdempotencyRecord)
+            .filter(
+                QualityDecisionIdempotencyRecord.actor_worker_id == actor_worker_id,
+                QualityDecisionIdempotencyRecord.command_type == command_type,
+                QualityDecisionIdempotencyRecord.target_type == target_type,
+                QualityDecisionIdempotencyRecord.target_id == target_id,
+                QualityDecisionIdempotencyRecord.idempotency_key == idempotency_key,
+            )
+            .first()
+        )
+
+    def add_idempotency(
+        self, record: QualityDecisionIdempotencyRecord
+    ) -> QualityDecisionIdempotencyRecord:
+        self.db.add(record)
+        self.db.flush()
+        return record
 
     # ── QualityDecisionBasis ─────────────────────────────────────────────────────
 

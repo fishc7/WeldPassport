@@ -1,6 +1,6 @@
 """ORM-модели ядра QualityDecision (Task 10A, Implementation Block 1; ADR-027 ACCEPTED).
 
-Три физические таблицы схемы `quality`:
+Четыре физические таблицы схемы `quality`:
 
 * `quality_decisions` — официальное решение по качеству, принятое на основании одной или
   нескольких `EngineeringEvaluationRevision` конкретного `Joint`. Не заменяет
@@ -13,6 +13,8 @@
   ревизии — service-level правила (Block 2), не CHECK;
 * `quality_decision_sequences` — проектный счётчик номера (per-project, как
   `EngineeringEvaluationSequence`).
+* `quality_decision_idempotency_records` — атомарный журнал успешных command
+  response snapshots для replay пяти мутирующих команд (Recovery Addendum L.2).
 
 Статусы (ADR-027 ACCEPTED, Q-D8): ровно четыре персистентных значения — `DRAFT`,
 `UNDER_REVIEW`, `DECIDED`, `SUPERSEDED`. `RETURNED` не является персистентным статусом:
@@ -58,6 +60,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.engineering.models import ENGINEERING_SCHEMA
@@ -71,6 +74,19 @@ QUALITY_SCHEMA = "quality"
 QUALITY_DECISIONS_TABLE = "quality_decisions"
 QUALITY_DECISION_BASES_TABLE = "quality_decision_bases"
 QUALITY_DECISION_SEQUENCES_TABLE = "quality_decision_sequences"
+QUALITY_DECISION_IDEMPOTENCY_TABLE = "quality_decision_idempotency_records"
+
+QUALITY_DECISION_IDEMPOTENT_COMMANDS: tuple[str, ...] = (
+    "CREATE",
+    "UPDATE_DRAFT",
+    "SUBMIT_FOR_REVIEW",
+    "RETURN",
+    "DECIDE",
+)
+QUALITY_DECISION_IDEMPOTENCY_TARGET_TYPES: tuple[str, ...] = (
+    "JOINT",
+    "QUALITY_DECISION",
+)
 
 # ── Статусы QualityDecision (ADR-027 ACCEPTED, Q-D8: ровно четыре значения) ─────
 QUALITY_DECISION_STATUSES: tuple[str, ...] = (
@@ -300,4 +316,66 @@ class QualityDecisionSequence(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+
+class QualityDecisionIdempotencyRecord(Base):
+    """Успешный command replay Task 10A (ADR-027 Addendum L.2).
+
+    Запись сохраняется в одной транзакции с state и audit. `target_id` указывает
+    на Joint для CREATE и на QualityDecision для остальных команд.
+    """
+
+    __tablename__ = QUALITY_DECISION_IDEMPOTENCY_TABLE
+    __table_args__ = (
+        CheckConstraint(
+            _in("command_type", QUALITY_DECISION_IDEMPOTENT_COMMANDS),
+            name="ck_qd_idem_command_type",
+        ),
+        CheckConstraint(
+            _in("target_type", QUALITY_DECISION_IDEMPOTENCY_TARGET_TYPES),
+            name="ck_qd_idem_target_type",
+        ),
+        CheckConstraint(
+            "length(trim(idempotency_key)) > 0",
+            name="ck_qd_idem_key_not_empty",
+        ),
+        CheckConstraint(
+            "response_status BETWEEN 200 AND 299",
+            name="ck_qd_idem_response_status",
+        ),
+        Index(
+            "uq_qd_idem_command_target_key",
+            "actor_worker_id",
+            "command_type",
+            "target_type",
+            "target_id",
+            "idempotency_key",
+            unique=True,
+        ),
+        Index("ix_qd_idem_quality_decision_id", "quality_decision_id"),
+        {"schema": QUALITY_SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    actor_worker_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    command_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    target_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    quality_decision_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            f"{QUALITY_SCHEMA}.{QUALITY_DECISIONS_TABLE}.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+    response_status: Mapped[int] = mapped_column(Integer, nullable=False)
+    response_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )

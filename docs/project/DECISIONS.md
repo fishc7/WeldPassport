@@ -4155,7 +4155,10 @@ EFFECTIVE-ревизия обязательна), Q-D2 (ограничение �
 после архитектурного review; исходная редакция ACCEPTED ошибочно вводила ограничение и
 для `DRAFT`/`UNDER_REVIEW`), Q-D8 (атомарный `RETURN`, 4 персистентных статуса). Q-D5
 (Idempotency-Key) и Q-D9 (правка `DRAFT`) не относятся к моделям/миграции и остаются
-открытыми до Block 2 (Services/API).
+открытыми до Block 2 (Services/API). Recovery Addendum от 2026-07-24 закрыл обе
+точки: Q-D9 — scoped-правка `summary`/оснований в `DRAFT` с `expected_version` и
+SUBMIT snapshot; Q-D5 — обязательный `Idempotency-Key` для пяти мутаций с
+PostgreSQL response snapshot и конфликтом повторного ключа при другом payload.
 
 Полный текст решения:
 [[docs/project/ADR-027-quality-decision-core-canon|ADR-027 — QualityDecision Core Canon]].
@@ -4182,4 +4185,5 @@ UNDER_REVIEW → DECIDED → SUPERSEDED` (+ `RETURN`: `UNDER_REVIEW → DRAFT`, 
 Полный список открытых точек и их разрешение при `ACCEPTED` — ADR-027, раздел «Решение по
 открытым точкам ACCEPTED» и обновлённая таблица §K. Task 10A реализуется по блокам;
 Implementation Block 1 (Models + Migration) не разрешает переходить к Services/API без
-отдельного подтверждения.
+отдельного подтверждения. Такое подтверждение получено; recovery/remediation/API прошли
+приёмку 2026-07-24 в рабочем дереве (`accepted_uncommitted`, commit отсутствует).

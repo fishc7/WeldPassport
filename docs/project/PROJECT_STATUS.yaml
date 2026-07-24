@@ -1,15 +1,15 @@
 project: WeldPassport
-current_stage: quality_defect_management_9d_in_progress
-current_branch: feature/engineering-joints-mvp
-updated_at: 2026-07-21
+current_stage: quality_decision_10a_acceptance_pending_commit
+current_branch: docs/as-02-quality-decision-rbac-analysis
+updated_at: 2026-07-24
 
 # Источник фактического статуса Tasks с коммитами — docs/project/TASK_REGISTRY.md.
 # Этот файл — машиночитаемая сводка по модулям для панелей/скриптов.
 
 summary:
-  total_progress: 72
-  current_focus: "Task 9D — Quality / Defect Management: блок 9D-4A (DefectDisposition workflow) завершён"
-  next_action: "9D-4 — ProductionHold/ProductionHoldRelease, затем 9D-5 (Customer Quality Decision)"
+  total_progress: 74
+  current_focus: "Task 10A — приёмка завершена, изменения не закоммичены"
+  next_action: "Выполнить локальный commit; AS-02 остаётся отдельной задачей"
 
 modules:
   - code: constitution
@@ -26,7 +26,7 @@ modules:
     status: stable
     progress: 100
     visible: true
-    note: "AGF (docs/project/ARCHITECTURE_GOVERNANCE.md), Architecture Sessions 001-008-07, ADR-004..023; TASK_REGISTRY.md — реестр Tasks."
+    note: "AGF, Architecture Sessions, ADR-004..027; Task 10A Recovery Specification; TASK_REGISTRY.md — реестр Tasks."
 
   - code: hr_workers
     name: "ОК → Работники"
@@ -107,6 +107,15 @@ modules:
     branch: feature/engineering-joints-mvp
     visible: true
     note: "9D-1 QualityFinding, 9D-2 EngineeringEvaluation, 9D-3 Defect, 9D-4A DefectDisposition — реализованы (ADR-019/021/022/023). Остаток 9D-4 (ProductionHold), 9D-5..9D-8 — planned. Детали — docs/project/TASK_REGISTRY.md."
+
+  - code: quality_decision_core
+    name: "ОГС / ОТК → Task 10A: QualityDecision Core"
+    owner: "ОГС / ОТК"
+    status: in_progress
+    progress: 95
+    branch: docs/as-02-quality-decision-rbac-analysis
+    visible: true
+    note: "ADR-027 + Recovery Addendum ACCEPTED; 10A-R/10A-1/10A-1R/10A-2/10A-2R/10A-3 приняты в рабочем дереве 2026-07-24, commit отсутствует. AS-02 вне Task 10A."
 
   - code: pto_docs
     name: "ПТО → Электронная документация"

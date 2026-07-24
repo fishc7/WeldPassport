@@ -821,11 +821,13 @@ Implementation Spec.
 ### 5.11. QualityDecision Core (Task 10A, ADR-027, ACCEPTED)
 
 Канон: [[docs/project/ADR-027-quality-decision-core-canon|ADR-027]]. **Статус: ACCEPTED**
-(2026-07-23). Task 10A реализуется по блокам; на данный момент выполнен **Implementation
-Block 1 — Models + Migration** (таблицы `quality_decisions`, `quality_decision_bases`,
-`quality_decision_sequences`, CHECK/UNIQUE/partial unique, расширение
-`quality_audit_events`). Services/API/workflow (Block 2+) не реализованы и требуют
-отдельного подтверждения перед стартом.
+(2026-07-23), recovery addendum Q-D9/Q-D5 принят 2026-07-24. Актуальный статус:
+**Task 10A `accepted_uncommitted`**. В рабочем дереве приняты Implementation Block 1
+(Models + Migration), correcting revision 26 с idempotency storage, Block 2
+(Workflow + Repository + Service), remediation Q-D9/Q-D5 и Block 3 (Pydantic schemas +
+command API + API tests). Свежая приёмка выполнена 2026-07-24; commit отсутствует,
+поэтому Task ещё не имеет статуса `done`. Контракт восстановления:
+[[docs/project/TASK_10A_QUALITY_DECISION_CORE_RECOVERY_SPEC|Task 10A Recovery Specification]].
 
 `ADR-027` уточняет границу ADR-019 (008-07-BQ), не отменяя её: исторический термин «Quality
 Decision» Session 008 (ADR-017) остаётся декомпозированным, а `QualityDecision` — это **новая**,
@@ -864,11 +866,17 @@ review): `UNIQUE(system_code)`; не более одного `DECIDED` на `Joi
 одну и ту же `EngineeringEvaluationRevision` (partial unique по `is_basis_of_decided`,
 ADR-027 §F.3).
 
-Вне рамок Block 1 (Services/API, требуют отдельного подтверждения): валидация
-`EFFECTIVE`-статуса основания и «минимум одно основание» (Q-D1, service-level), команды
-lifecycle, RBAC, supersede-механизм, Idempotency-Key (Q-D5), правка `DRAFT` (Q-D9),
-создание `Defect` по результату `DEFECT_CONFIRMED` (только сохранение `result`),
-`DefectDisposition`, `Repair`, `Reinspection`, печатные формы, импорт, аналитика.
+Recovery addendum 2026-07-24 разрешил Q-D9 и Q-D5. `DRAFT` редактируется
+`WELDING_ENGINEER` в scope с optimistic version; каждый `SUBMIT` сохраняет snapshot
+итогового содержания. `Idempotency-Key` обязателен для `CREATE`, `UPDATE_DRAFT`,
+`SUBMIT_FOR_REVIEW`, `RETURN`, `DECIDE`; хранение — отдельные
+`quality_decision_idempotency_records`, добавляемые корректирующей миграцией после
+revision 25. Эти remediation и API выполняются раздельными этапами и не считаются
+реализованными до свежей приёмки.
+
+По-прежнему вне рамок Task 10A: создание `Defect` по результату `DEFECT_CONFIRMED`
+(сохраняется только `result`), `DefectDisposition`, `Repair`, `Reinspection`, печатные
+формы, импорт, аналитика и AS-02 RBAC hardening.
 
 ## 6. Ключевые правила модели данных
 
