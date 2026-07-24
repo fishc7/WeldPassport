@@ -1364,6 +1364,12 @@ Baseline Adoption и TEST-DB Foundation; настоящий архитектур
 переноса `alembic_version` и adoption. Runtime composition/profile switch вынесены в
 отдельную Task `RUNTIME-LEGACY-COMPATIBILITY-PROFILE`; B-03 runtime не меняет.
 
+До полного TEST-DB Foundation действует предварительный
+[[docs/project/ADR-029-test-db-safety-interlock|Test DB Safety Interlock]]. Integration
+pytest по умолчанию fail-closed до первого соединения и запуска Alembic; оператор обязан
+явно подтвердить разрушительный запуск и точное имя отдельной БД с test-маркером. Этот
+interlock не создаёт тестовую БД, не заменяет B-04 и не разрешает fallback на рабочий DSN.
+
 ## 16. Статус backend-кода (обновлено 2026-07-06)
 
 `09_Разработка/backend` — основная архитектурная база MVP.

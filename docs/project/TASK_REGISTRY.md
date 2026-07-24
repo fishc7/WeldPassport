@@ -126,9 +126,13 @@ AS-02 в Task 10A не входит; отдельное архитектурно
 | Task | Название | Архитектурное основание | Статус | Ключевой commit |
 |---|---|---|---|---|
 | B-03 | Migration Foundation | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] + [[docs/project/TASK_B-03_MIGRATION_FOUNDATION_SPEC|Implementation Specification B-03]] | `done` | `fc2faad` → `939ab1f` → `893707f` → `f584525` → `5bee400` → `d73bea9` (2026-07-22); реализация, remediation и closure evidence завершены, closure verified 2026-07-22 (см. [[docs/project/TASK_B-03_MIGRATION_FOUNDATION_SPEC#23. Closure Evidence\|Closure Evidence]]); baseline, marker move и runtime changes не выполнялись; B-04 и TEST-DB Foundation не входят |
+| TEST-DB-SAFETY-INTERLOCK | Fail-closed защита integration pytest до подключения и Alembic | [[docs/project/ADR-029-test-db-safety-interlock|ADR-029 (ACCEPTED)]] + [[docs/project/TASK_TEST_DB_SAFETY_INTERLOCK_SPEC|Implementation Specification]] | `done` | `2046384` (2026-07-24); focused pure contracts `10 passed`; полный `migration_contract_tests` `45 passed`; PostgreSQL/Alembic/application tests не запускались; не заменяет TEST-DB Foundation |
 | B-04 | Canonical Baseline Adoption | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] | `not_designed` | ожидает приёмки B-03 и отдельной Implementation Specification; единственный владелец version marker transfer, baseline stamp и adoption; spec/commit отсутствуют |
 | RUNTIME-LEGACY-COMPATIBILITY-PROFILE | Canonical/Legacy Runtime Composition | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] | `not_designed` | ожидает отдельной Implementation Specification; владеет `main.py` composition, config/profile switch, preflight и legacy router loading; spec/commit отсутствуют |
 | TEST-DB-FOUNDATION | Isolated PostgreSQL Test Database Foundation | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] | `not_designed` | ожидает приёмки B-04 и отдельной Implementation Specification; application-test acceptance также зависит от runtime profile Task; spec/commit отсутствуют |
+
+Safety prerequisite: `ADR-029 → TEST-DB-SAFETY-INTERLOCK` блокирует опасный pytest,
+но не меняет основной execution gate.
 
 Основной execution gate: `ADR-025 → B-03 → B-04 → TEST-DB-FOUNDATION → Task 9D-4A-5A`.
 Параллельная ветвь: `ADR-025 → RUNTIME-LEGACY-COMPATIBILITY-PROFILE → canonical application

@@ -4216,3 +4216,23 @@ Resolver → Workflow → Service → API → Tests. План:
 Все gate завершены 2026-07-24. Revision `20260724_27_qd_rbac_sod` принята PostgreSQL;
 репетиция `27 → 26 → 27`, migration governance (`35 passed`), focused AS-02 regression
 (`100 passed`) и полный backend regression (`1590 passed`) успешны.
+
+---
+
+## ADR-029. Test DB Safety Interlock
+
+Дата: 2026-07-24
+
+Статус: **ACCEPTED; implementation done / verified 2026-07-24**
+
+Полный текст:
+[[docs/project/ADR-029-test-db-safety-interlock|ADR-029 — Test DB Safety Interlock]].
+
+После независимого аудита принят предварительный fail-closed interlock перед полным
+TEST-DB Foundation ADR-025. Он не создаёт отдельную БД и не меняет B-04 dependency:
+обычный integration pytest блокируется до первого соединения и Alembic, пока оператор
+явно не подтвердит разрушительный запуск и точное имя БД с test-маркером.
+
+Pure contract suite подтверждён без PostgreSQL: focused `10 passed`, полный
+`migration_contract_tests` — `45 passed`. Application regression и Alembic в этом gate
+не запускались. Реализация зафиксирована commit `2046384`.

@@ -2,11 +2,11 @@
 
 from collections.abc import Generator
 from datetime import date
+import os
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import or_, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 # Импортируем первым, до app.main: там регистрируется legacy app.workforce.models
@@ -72,33 +72,27 @@ from app.quality.models import (
     QualityFindingEvent,
     QualityFindingSequence,
 )
+from app.shared.config import settings
 from app.shared.db import SessionLocal, get_db
 from app.welding.models import Welder, WelderAdmission
-
-
-def _db_available() -> bool:
-    session = SessionLocal()
-    try:
-        session.execute(text("SELECT 1"))
-        return True
-    except OperationalError:
-        return False
-    finally:
-        session.close()
-
-
-pytestmark = pytest.mark.skipif(
-    not _db_available(),
-    reason="PostgreSQL недоступен (проверьте .env и запущенную БД)",
-)
+from tests.test_db_safety import assert_safe_test_database
 
 API_PREFIX = "/api/v1/ogs/welders"
 AUTH_HEADERS = {"X-User-Id": "1"}
 TEST_COMPANY_ID = 99_999
 
 
+@pytest.fixture(scope="session")
+def _test_database_safety_interlock() -> None:
+    assert_safe_test_database(
+        settings.postgres_db,
+        destructive_opt_in=os.getenv("WELDPASSPORT_ALLOW_DESTRUCTIVE_TESTS"),
+        confirmed_database_name=os.getenv("WELDPASSPORT_TEST_DB_CONFIRM"),
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
-def _apply_migrations() -> None:
+def _apply_migrations(_test_database_safety_interlock: None) -> None:
     from alembic import command
     from alembic.config import Config
 
