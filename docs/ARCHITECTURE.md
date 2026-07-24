@@ -875,7 +875,40 @@ revision 25. Эти remediation и API выполняются раздельны
 
 По-прежнему вне рамок Task 10A: создание `Defect` по результату `DEFECT_CONFIRMED`
 (сохраняется только `result`), `DefectDisposition`, `Repair`, `Reinspection`, печатные
-формы, импорт, аналитика и AS-02 RBAC hardening.
+формы, импорт и аналитика. AS-02 RBAC hardening принят отдельно в ADR-028.
+
+### 5.12. QualityDecision RBAC Consolidation (AS-02, ADR-028, ACCEPTED)
+
+Канон:
+[[docs/project/ADR-028-quality-decision-rbac-consolidation|ADR-028 — QualityDecision RBAC Consolidation]].
+Статус реализации: **done / verified 2026-07-24**. Реализована self-contained revision
+`20260724_27_qd_rbac_sod`; revisions 25/26 не изменены. PostgreSQL-приёмка и репетиция
+`27 → 26 → 27` выполнены на схеме `test`.
+
+Authority ADR-027 сохраняется: `OGS_ENGINEER` готовит и отправляет,
+`OTK_INSPECTOR` возвращает или принимает, `CHIEF_WELDER` не участвует. Дополняется
+person-level SoD: работник, выполнивший последний `SUBMIT` текущего review-cycle, не может
+сам выполнить `RETURN` или `DECIDE`. Текущий отправитель хранится в
+`quality_decisions.review_submitted_by_worker_id`; `RETURN` очищает поле, новый `SUBMIT`
+создаёт новый цикл, `DECIDE`/`SUPERSEDED` сохраняют отправителя.
+
+`shared.permissions` возвращает не только role code, но и конкретный effective
+`AuthorizationGrant`. Для нескольких назначений одной роли применяется детерминированный
+приоритет `ENGINEERING_DOCUMENT → LINE → PROJECT → GLOBAL`, затем минимальный
+`WorkerRole.id`. `COMPANY` и неразрешимый `SITE` не дают write-authority командам
+`QualityDecision`.
+
+Каждое событие `QUALITY_DECISION_*` получает отдельный JSONB
+`quality_audit_events.authorization_context` с assignment, ролью, scope, validity,
+server timestamp и результатом policy-check. Исторические события получают только
+`LEGACY_AUTHORIZATION_SNAPSHOT`; текущий HR scope не используется для реконструкции
+прошлого. Совмещение OGS/OTK разрешено, но отмечается
+`QD_DUAL_ROLE_ASSIGNMENT` и не отменяет запрет self-review.
+
+План реализации и раздельные gate:
+[[docs/project/TASK_AS_02_QUALITY_DECISION_RBAC_IMPLEMENTATION_PLAN|AS-02 Implementation Plan]].
+Финальное evidence: migration governance `35 passed`, AS-02 focused regression
+`100 passed`, полный backend regression `1590 passed`.
 
 ## 6. Ключевые правила модели данных
 

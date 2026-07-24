@@ -144,6 +144,27 @@ class JointScopeContext:
     company_ids: frozenset[int] = frozenset()
 
 
+@dataclass(frozen=True)
+class AuthorizationGrant:
+    """Доказуемое effective-назначение роли, покрывающее конкретный Joint."""
+
+    actor_worker_id: int
+    actor_role_code: str
+    worker_role_assignment_id: int
+    scope_type: str
+    scope_id: str | None
+    role_valid_from: date | None
+    role_valid_to: date | None
+
+
+_JOINT_SCOPE_PRIORITY: dict[str, int] = {
+    "ENGINEERING_DOCUMENT": 0,
+    "LINE": 1,
+    "PROJECT": 2,
+    "GLOBAL": 3,
+}
+
+
 def _uuid_equal(role_scope_id: str | None, target: UUID | None) -> bool:
     if role_scope_id is None or target is None:
         return False
@@ -175,6 +196,70 @@ def role_covers_joint(role: WorkerRole, ctx: JointScopeContext) -> bool:
     return False
 
 
+def worker_authorization_grants_for_joint(
+    db: Session,
+    worker_id: int,
+    role_codes: Iterable[str],
+    ctx: JointScopeContext,
+    *,
+    on_date: date | None = None,
+) -> tuple[AuthorizationGrant, ...]:
+    """Возвращает все effective role assignments, покрывающие Joint.
+
+    В отличие от совместимой code-only оболочки сохраняет assignment/scope/validity,
+    необходимые для immutable authorization evidence.
+    """
+    effective_date = on_date if on_date is not None else current_check_date()
+    repo = HrRepo(db)
+    grants: list[AuthorizationGrant] = []
+    for code in sorted(set(role_codes)):
+        roles = repo.find_active_roles(worker_id=worker_id, role_code=code)
+        for role in roles:
+            if not is_role_effective_on(role, effective_date):
+                continue
+            if not role_covers_joint(role, ctx):
+                continue
+            grants.append(
+                AuthorizationGrant(
+                    actor_worker_id=worker_id,
+                    actor_role_code=role.role_code,
+                    worker_role_assignment_id=role.id,
+                    scope_type=role.scope_type,
+                    scope_id=role.scope_id,
+                    role_valid_from=role.valid_from,
+                    role_valid_to=role.valid_to,
+                )
+            )
+    return tuple(
+        sorted(
+            grants,
+            key=lambda grant: (
+                grant.actor_role_code,
+                _JOINT_SCOPE_PRIORITY.get(grant.scope_type, 99),
+                grant.worker_role_assignment_id,
+            ),
+        )
+    )
+
+
+def select_preferred_authorization_grant(
+    grants: Iterable[AuthorizationGrant],
+    role_code: str,
+) -> AuthorizationGrant | None:
+    """Детерминированно выбирает наиболее узкое назначение указанной роли."""
+    matching = (
+        grant for grant in grants if grant.actor_role_code == role_code
+    )
+    return min(
+        matching,
+        key=lambda grant: (
+            _JOINT_SCOPE_PRIORITY.get(grant.scope_type, 99),
+            grant.worker_role_assignment_id,
+        ),
+        default=None,
+    )
+
+
 def worker_role_codes_for_joint(
     db: Session,
     worker_id: int,
@@ -189,15 +274,13 @@ def worker_role_codes_for_joint(
     Несколько активных ролей объединяют разрешённые scope. Неактивные/просроченные
     роли и роль без подходящего scope не учитываются (§19 ADR-011).
     """
-    effective_date = on_date if on_date is not None else current_check_date()
-    repo = HrRepo(db)
-    granted: set[str] = set()
-    for code in set(role_codes):
-        roles = repo.find_active_roles(worker_id=worker_id, role_code=code)
-        for role in roles:
-            if is_role_effective_on(role, effective_date) and role_covers_joint(
-                role, ctx
-            ):
-                granted.add(code)
-                break
-    return granted
+    return {
+        grant.actor_role_code
+        for grant in worker_authorization_grants_for_joint(
+            db,
+            worker_id,
+            role_codes,
+            ctx,
+            on_date=on_date,
+        )
+    }

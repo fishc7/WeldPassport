@@ -1,5 +1,5 @@
 project: WeldPassport
-current_stage: quality_decision_10a_done
+current_stage: as_02_done
 current_branch: docs/as-02-quality-decision-rbac-analysis
 updated_at: 2026-07-24
 
@@ -7,9 +7,9 @@ updated_at: 2026-07-24
 # Этот файл — машиночитаемая сводка по модулям для панелей/скриптов.
 
 summary:
-  total_progress: 74
-  current_focus: "Task 10A — QualityDecision Core завершён"
-  next_action: "Выбрать следующий отдельный Task; AS-02 остаётся самостоятельной задачей"
+  total_progress: 77
+  current_focus: "AS-02 — реализован и принят"
+  next_action: "Выбрать следующий отдельный архитектурный gate по ROADMAP"
 
 modules:
   - code: constitution
@@ -26,7 +26,7 @@ modules:
     status: stable
     progress: 100
     visible: true
-    note: "AGF, Architecture Sessions, ADR-004..027; Task 10A Recovery Specification; TASK_REGISTRY.md — реестр Tasks."
+    note: "AGF, Architecture Sessions, ADR-004..028; AS-02 Implementation Plan; TASK_REGISTRY.md — реестр Tasks."
 
   - code: hr_workers
     name: "ОК → Работники"
@@ -116,6 +116,15 @@ modules:
     branch: docs/as-02-quality-decision-rbac-analysis
     visible: true
     note: "ADR-027 + Recovery Addendum ACCEPTED; 10A-R/10A-1/10A-1R/10A-2/10A-2R/10A-3 завершены commit c1b551e от 2026-07-24. AS-02 вне Task 10A."
+
+  - code: quality_decision_rbac
+    name: "ОГС / ОТК → AS-02: QualityDecision RBAC Consolidation"
+    owner: "Архитектура / ОГС / ОТК"
+    status: done
+    progress: 100
+    branch: docs/as-02-quality-decision-rbac-analysis
+    visible: true
+    note: "ADR-028 реализован и принят 2026-07-24: revision 27, person-level SoD, evidence-bearing resolver/audit, dual-role warning, additive API; PostgreSQL rehearsal и 1590 backend tests успешны."
 
   - code: pto_docs
     name: "ПТО → Электронная документация"

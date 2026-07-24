@@ -48,7 +48,13 @@ from app.quality.quality_decision_models import (
 from app.quality.quality_decision_repository import QualityDecisionRepository
 from app.quality.quality_finding_repository import QualityFindingRepo
 from app.shared.errors import DomainError, RoleDeniedError
-from app.shared.permissions import JointScopeContext, worker_role_codes_for_joint
+from app.shared.permissions import (
+    AuthorizationGrant,
+    JointScopeContext,
+    select_preferred_authorization_grant,
+    worker_authorization_grants_for_joint,
+    worker_role_codes_for_joint,
+)
 
 # Коды 404 (скрытый/несуществующий ресурс — до проверки роли действия).
 _NOT_FOUND_CODES: frozenset[str] = frozenset(
@@ -70,8 +76,14 @@ _CONFLICT_CODES: frozenset[str] = frozenset(
         qdw.QD_REVISION_ALREADY_DECIDED,
         qdw.QD_REVISION_WRONG_JOINT,
         qdw.QD_IDEMPOTENCY_CONFLICT,
+        qdw.QD_SAME_ACTOR_REVIEW,
     }
 )
+
+_GOVERNANCE_ROLE_CODES: frozenset[str] = frozenset(
+    {qdw.ROLE_WELDING_ENGINEER, qdw.ROLE_OTK_INSPECTOR}
+)
+_DUAL_ROLE_WARNING = "QD_DUAL_ROLE_ASSIGNMENT"
 
 
 def _now() -> datetime:
@@ -125,6 +137,74 @@ class QualityDecisionService:
         ctx = self._joint_scope_ctx(joint, include_company=include_company)
         return set(worker_role_codes_for_joint(self._db, worker_id, allowed, ctx))
 
+    def _command_grants(
+        self,
+        joint: Joint,
+        worker_id: int,
+        allowed: frozenset[str],
+    ) -> tuple[set[str], tuple[AuthorizationGrant, ...]]:
+        """Resolve write authority and retain the concrete grants used as evidence."""
+        ctx = self._joint_scope_ctx(joint, include_company=False)
+        grants = worker_authorization_grants_for_joint(
+            self._db,
+            worker_id,
+            allowed | _GOVERNANCE_ROLE_CODES,
+            ctx,
+        )
+        granted_roles = {
+            grant.actor_role_code
+            for grant in grants
+            if grant.actor_role_code in allowed
+        }
+        return granted_roles, grants
+
+    def _authorization_context(
+        self,
+        *,
+        joint: Joint,
+        action: str,
+        actor_role: str,
+        grants: tuple[AuthorizationGrant, ...],
+        checked_at: datetime,
+    ) -> dict[str, Any]:
+        grant = select_preferred_authorization_grant(grants, actor_role)
+        if grant is None:
+            self._deny(
+                qdw.QD_PERMISSION_DENIED,
+                qdw.QD_ERROR_MESSAGES[qdw.QD_PERMISSION_DENIED],
+            )
+        effective_roles = {item.actor_role_code for item in grants}
+        warnings = (
+            [_DUAL_ROLE_WARNING]
+            if _GOVERNANCE_ROLE_CODES.issubset(effective_roles)
+            else []
+        )
+        return {
+            "schema_version": 1,
+            "authorization_snapshot_status": "VERIFIED",
+            "policy_result": "AUTHORIZED",
+            "action": action,
+            "actor_worker_id": grant.actor_worker_id,
+            "actor_role_code": grant.actor_role_code,
+            "worker_role_assignment_id": grant.worker_role_assignment_id,
+            "scope_type": grant.scope_type,
+            "scope_id": grant.scope_id,
+            "role_valid_from": (
+                grant.role_valid_from.isoformat()
+                if grant.role_valid_from is not None
+                else None
+            ),
+            "role_valid_to": (
+                grant.role_valid_to.isoformat()
+                if grant.role_valid_to is not None
+                else None
+            ),
+            "checked_at": checked_at.isoformat(),
+            "project_id": str(joint.project_id),
+            "joint_id": str(joint.id),
+            "governance_warnings": warnings,
+        }
+
     def _require_decision(self, decision_id: UUID) -> QualityDecision:
         decision = self._repo.get_by_id(decision_id)
         if decision is None:
@@ -160,6 +240,7 @@ class QualityDecisionService:
         changed_fields: dict | None = None,
         previous_values: dict | None = None,
         new_values: dict | None = None,
+        authorization_context: dict[str, Any],
     ) -> None:
         self._repo.append_audit_event(
             QualityAuditEvent(
@@ -171,6 +252,7 @@ class QualityDecisionService:
                 changed_fields=changed_fields,
                 previous_values=previous_values,
                 new_values=new_values,
+                authorization_context=authorization_context,
             )
         )
 
@@ -193,6 +275,7 @@ class QualityDecisionService:
             "decision_result": decision.decision_result,
             "summary": decision.summary,
             "return_reason": decision.return_reason,
+            "review_submitted_by_worker_id": decision.review_submitted_by_worker_id,
             "supersedes_quality_decision_id": (
                 str(decision.supersedes_quality_decision_id)
                 if decision.supersedes_quality_decision_id is not None
@@ -221,6 +304,9 @@ class QualityDecisionService:
             decision_result=snapshot.get("decision_result"),
             summary=snapshot.get("summary"),
             return_reason=snapshot.get("return_reason"),
+            review_submitted_by_worker_id=snapshot.get(
+                "review_submitted_by_worker_id"
+            ),
             supersedes_quality_decision_id=(
                 UUID(snapshot["supersedes_quality_decision_id"])
                 if snapshot.get("supersedes_quality_decision_id")
@@ -391,8 +477,8 @@ class QualityDecisionService:
     ) -> QualityDecision:
         idem_key = self._require_idempotency_key(idempotency_key)
         joint = self._require_joint(joint_id)
-        granted = self._granted_roles(
-            joint, actor_worker_id, qdw.QD_CREATE_ROLES, include_company=False
+        granted, grants = self._command_grants(
+            joint, actor_worker_id, qdw.QD_CREATE_ROLES
         )
 
         error = qdw.validate_create_request(
@@ -454,6 +540,13 @@ class QualityDecisionService:
             )
 
         actor_role = qdw.pick_actor_role(qdw.ACTION_CREATE, granted)
+        authorization_context = self._authorization_context(
+            joint=joint,
+            action=qdw.ACTION_CREATE,
+            actor_role=actor_role,
+            grants=grants,
+            checked_at=_now(),
+        )
         self._record_audit(
             decision,
             event_type=qdw.EVENT_CREATED,
@@ -464,6 +557,7 @@ class QualityDecisionService:
                 "joint_id": str(joint.id),
                 "basis_revision_ids": [str(r.id) for r in revisions],
             },
+            authorization_context=authorization_context,
         )
         race_replay = self._store_idempotency(
             decision=decision,
@@ -610,11 +704,10 @@ class QualityDecisionService:
         joint = self._require_joint(decision.joint_id)
         self._require_visible(joint, actor_worker_id)
 
-        granted = self._granted_roles(
+        granted, grants = self._command_grants(
             joint,
             actor_worker_id,
             qdw.roles_for_action(qdw.ACTION_SUBMIT_FOR_REVIEW),
-            include_company=False,
         )
         bases = self._repo.list_bases(decision.id)
         request_hash = qdw.idempotency_request_hash(
@@ -652,9 +745,17 @@ class QualityDecisionService:
 
         previous_status = decision.status
         decision.status = qdw.QD_UNDER_REVIEW
+        decision.review_submitted_by_worker_id = actor_worker_id
         decision.version += 1
 
         actor_role = qdw.pick_actor_role(qdw.ACTION_SUBMIT_FOR_REVIEW, granted)
+        authorization_context = self._authorization_context(
+            joint=joint,
+            action=qdw.ACTION_SUBMIT_FOR_REVIEW,
+            actor_role=actor_role,
+            grants=grants,
+            checked_at=_now(),
+        )
         self._record_audit(
             decision,
             event_type=qdw.EVENT_SUBMITTED,
@@ -671,7 +772,9 @@ class QualityDecisionService:
                         for basis in bases
                     )
                 ),
+                "review_submitted_by_worker_id": actor_worker_id,
             },
+            authorization_context=authorization_context,
         )
         race_replay = self._store_idempotency(
             decision=decision,
@@ -706,11 +809,10 @@ class QualityDecisionService:
         joint = self._require_joint(decision.joint_id)
         self._require_visible(joint, actor_worker_id)
 
-        granted = self._granted_roles(
+        granted, grants = self._command_grants(
             joint,
             actor_worker_id,
             qdw.roles_for_action(qdw.ACTION_RETURN),
-            include_company=False,
         )
         normalized_reason = return_reason.strip()
         request_hash = qdw.idempotency_request_hash(
@@ -748,20 +850,46 @@ class QualityDecisionService:
                 f"Ожидалась версия {expected_version}, текущая {decision.version}",
             )
 
+        separation_error = qdw.validate_review_separation(
+            actor_worker_id=actor_worker_id,
+            review_submitted_by_worker_id=decision.review_submitted_by_worker_id,
+        )
+        if separation_error is not None:
+            self._deny(
+                separation_error,
+                qdw.QD_ERROR_MESSAGES[separation_error],
+            )
+
         previous_status = decision.status
+        previous_submitter = decision.review_submitted_by_worker_id
         decision.status = qdw.QD_DRAFT
         decision.return_reason = normalized_reason
+        decision.review_submitted_by_worker_id = None
         decision.version += 1
 
         actor_role = qdw.pick_actor_role(qdw.ACTION_RETURN, granted)
+        authorization_context = self._authorization_context(
+            joint=joint,
+            action=qdw.ACTION_RETURN,
+            actor_role=actor_role,
+            grants=grants,
+            checked_at=_now(),
+        )
         self._record_audit(
             decision,
             event_type=qdw.EVENT_RETURNED,
             actor_worker_id=actor_worker_id,
             reason=decision.return_reason,
             changed_fields={"actor_role": actor_role},
-            previous_values={"status": previous_status},
-            new_values={"status": decision.status},
+            previous_values={
+                "status": previous_status,
+                "review_submitted_by_worker_id": previous_submitter,
+            },
+            new_values={
+                "status": decision.status,
+                "review_submitted_by_worker_id": None,
+            },
+            authorization_context=authorization_context,
         )
         race_replay = self._store_idempotency(
             decision=decision,
@@ -809,11 +937,10 @@ class QualityDecisionService:
         joint = self._require_joint(decision.joint_id)
         self._require_visible(joint, actor_worker_id)
 
-        granted = self._granted_roles(
+        granted, grants = self._command_grants(
             joint,
             actor_worker_id,
             qdw.roles_for_action(qdw.ACTION_DECIDE),
-            include_company=False,
         )
         request_hash = qdw.idempotency_request_hash(
             command=qdw.ACTION_DECIDE,
@@ -856,6 +983,16 @@ class QualityDecisionService:
                 f"Ожидалась версия {expected_version}, текущая {decision.version}",
             )
 
+        separation_error = qdw.validate_review_separation(
+            actor_worker_id=actor_worker_id,
+            review_submitted_by_worker_id=decision.review_submitted_by_worker_id,
+        )
+        if separation_error is not None:
+            self._deny(
+                separation_error,
+                qdw.QD_ERROR_MESSAGES[separation_error],
+            )
+
         revision_ids = [b.engineering_evaluation_revision_id for b in bases]
         locked_revisions = {
             r.id: r for r in self._repo.lock_revisions_for_update(revision_ids)
@@ -889,6 +1026,13 @@ class QualityDecisionService:
         previous_status = decision.status
         actor_role = qdw.pick_actor_role(qdw.ACTION_DECIDE, granted)
         now = _now()
+        authorization_context = self._authorization_context(
+            joint=joint,
+            action=qdw.ACTION_DECIDE,
+            actor_role=actor_role,
+            grants=grants,
+            checked_at=now,
+        )
 
         old_previous_status: str | None = None
         if old is not None:
@@ -923,6 +1067,7 @@ class QualityDecisionService:
                 "status": decision.status,
                 "decision_result": decision.decision_result,
             },
+            authorization_context=authorization_context,
         )
         if old is not None:
             self._record_audit(
@@ -935,6 +1080,7 @@ class QualityDecisionService:
                 },
                 previous_values={"status": old_previous_status},
                 new_values={"status": old.status},
+                authorization_context=authorization_context,
             )
 
         race_replay = self._store_idempotency(

@@ -48,6 +48,7 @@ class QualityDecisionRead(BaseModel):
     decision_result: str | None
     summary: str | None
     return_reason: str | None
+    review_submitted_by_worker_id: int | None = None
     supersedes_quality_decision_id: UUID | None
     created_by_worker_id: int
     created_at: datetime
@@ -81,3 +82,4 @@ class QualityDecisionEventRead(BaseModel):
     reason: str | None
     actor_worker_id: int
     occurred_at: datetime
+    authorization_context: dict | None = None

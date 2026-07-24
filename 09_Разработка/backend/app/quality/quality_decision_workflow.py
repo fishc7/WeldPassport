@@ -204,6 +204,7 @@ QD_REVISION_WRONG_JOINT = "QD_REVISION_WRONG_JOINT"
 QD_REVISION_NOT_EFFECTIVE = "QD_REVISION_NOT_EFFECTIVE"
 QD_REVISION_ALREADY_DECIDED = "QD_REVISION_ALREADY_DECIDED"
 QD_VERSION_CONFLICT = "QD_VERSION_CONFLICT"
+QD_SAME_ACTOR_REVIEW = "QD_SAME_ACTOR_REVIEW"
 QD_IDEMPOTENCY_KEY_REQUIRED = "QD_IDEMPOTENCY_KEY_REQUIRED"
 QD_IDEMPOTENCY_KEY_INVALID = "QD_IDEMPOTENCY_KEY_INVALID"
 QD_IDEMPOTENCY_CONFLICT = "QD_IDEMPOTENCY_CONFLICT"
@@ -233,6 +234,10 @@ QD_ERROR_MESSAGES: dict[str, str] = {
     QD_VERSION_CONFLICT: (
         "Конфликт версии: перечитайте QualityDecision и повторите вручную"
     ),
+    QD_SAME_ACTOR_REVIEW: (
+        "Сотрудник, отправивший решение на рассмотрение, не может вернуть "
+        "или принять его в том же цикле проверки"
+    ),
     QD_IDEMPOTENCY_KEY_REQUIRED: "Для мутирующей команды обязателен Idempotency-Key",
     QD_IDEMPOTENCY_KEY_INVALID: (
         "Idempotency-Key после trim должен содержать от 1 до 255 символов"
@@ -244,6 +249,19 @@ QD_ERROR_MESSAGES: dict[str, str] = {
 
 
 # ── Валидация команд (pure; DB-проверки — на службе сервиса) ────────────────────
+
+
+def validate_review_separation(
+    actor_worker_id: int,
+    review_submitted_by_worker_id: int | None,
+) -> str | None:
+    """Запрещает отправителю текущего review-cycle проверять свою отправку."""
+    if (
+        review_submitted_by_worker_id is not None
+        and actor_worker_id == review_submitted_by_worker_id
+    ):
+        return QD_SAME_ACTOR_REVIEW
+    return None
 
 
 def normalize_idempotency_key(value: str | None) -> str:

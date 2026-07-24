@@ -10,6 +10,7 @@ QualityDecision; `ctx.otk` — OTK_INSPECTOR; `ctx.chief`/`ctx.norole` — от�
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from functools import wraps
 from typing import Callable
 from uuid import uuid4
@@ -18,6 +19,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.hr.models import WorkerRole
 from app.quality import quality_decision_workflow as qdw
 from app.quality.engineering_evaluation_models import EngineeringEvaluationRevision
 from app.quality.execution_models import QualityAuditEvent
@@ -84,6 +86,28 @@ def _draft_revision(ctx: DefectCtx, joint) -> EngineeringEvaluationRevision:
 def _effective_revision(ctx: DefectCtx, joint) -> EngineeringEvaluationRevision:
     ev = ctx.new_confirmed_evaluation(joint)
     return ctx.db.get(EngineeringEvaluationRevision, ev.effective_revision_id)
+
+
+def _assign_role(
+    db: Session,
+    *,
+    worker_id: int,
+    role_code: str,
+    scope_type: str = "GLOBAL",
+    scope_id: str | None = None,
+) -> WorkerRole:
+    role = WorkerRole(
+        worker_id=worker_id,
+        role_code=role_code,
+        scope_type=scope_type,
+        scope_id=scope_id,
+        is_active=True,
+        valid_from=date.today(),
+    )
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+    return role
 
 
 def _run_parallel(fns: list[Callable]) -> list:
@@ -335,6 +359,7 @@ class TestIdempotencyCommands:
             "version": submitted.version,
             "summary": "final summary",
             "basis_revision_ids": [str(rev.id)],
+            "review_submitted_by_worker_id": ctx.ogs.id,
         }
 
     def test_return_and_resubmit_keep_two_distinct_content_snapshots(
@@ -780,6 +805,7 @@ class TestSubmitAndReturn:
             actor_worker_id=ctx.ogs.id,
         )
         assert submitted.status == qdw.QD_UNDER_REVIEW
+        assert submitted.review_submitted_by_worker_id == ctx.ogs.id
         events = svc.list_audit_events(decision.id, actor_worker_id=ctx.ogs.id)
         assert [e.event_type for e in events] == [
             qdw.EVENT_CREATED,
@@ -845,6 +871,7 @@ class TestSubmitAndReturn:
         )
         assert returned.status == qdw.QD_DRAFT
         assert returned.return_reason == "Недостаточно обоснования"
+        assert returned.review_submitted_by_worker_id is None
 
         events = svc.list_audit_events(decision.id, actor_worker_id=ctx.ogs.id)
         assert [e.event_type for e in events] == [
@@ -853,9 +880,36 @@ class TestSubmitAndReturn:
             qdw.EVENT_RETURNED,
         ]
         assert events[-1].reason == "Недостаточно обоснования"
+        assert events[-1].previous_values["review_submitted_by_worker_id"] == ctx.ogs.id
+        assert events[-1].new_values["review_submitted_by_worker_id"] is None
 
         # RETURNED не является персистентным статусом (только промежуточный audit).
         assert returned.status != "RETURNED"
+
+    def test_submitter_with_dual_role_cannot_return_own_review(
+        self, db: Session, ctx: DefectCtx
+    ):
+        joint = ctx.new_joint("J-QD-R4")
+        rev = _effective_revision(ctx, joint)
+        _assign_role(db, worker_id=ctx.ogs.id, role_code="OTK_INSPECTOR")
+        svc = QualityDecisionService(db)
+        decision = self._draft(svc, ctx, joint, rev)
+        submitted = svc.submit_for_review(
+            decision.id,
+            expected_version=decision.version,
+            actor_worker_id=ctx.ogs.id,
+        )
+
+        with pytest.raises(DomainError) as exc:
+            svc.return_to_draft(
+                submitted.id,
+                expected_version=submitted.version,
+                return_reason="Самопроверка запрещена",
+                actor_worker_id=ctx.ogs.id,
+            )
+
+        assert exc.value.status_code == 409
+        assert exc.value.code == qdw.QD_SAME_ACTOR_REVIEW
 
 
 # ── DECIDE ────────────────────────────────────────────────────────────────────────
@@ -907,6 +961,7 @@ class TestDecide:
         assert decided.approved_at is not None
         assert decided.approved_role == "OTK_INSPECTOR"
         assert decided.supersedes_quality_decision_id is None
+        assert decided.review_submitted_by_worker_id == ctx.ogs.id
 
         bases = svc.list_bases(decided.id, actor_worker_id=ctx.otk.id)
         assert all(b.is_basis_of_decided for b in bases)
@@ -916,6 +971,60 @@ class TestDecide:
             qdw.EVENT_CREATED,
             qdw.EVENT_SUBMITTED,
             qdw.EVENT_DECIDED,
+        ]
+        for event in events:
+            context = event.authorization_context
+            assert context["schema_version"] == 1
+            assert context["authorization_snapshot_status"] == "VERIFIED"
+            assert context["policy_result"] == "AUTHORIZED"
+            assert context["actor_worker_id"] == event.actor_worker_id
+            assert context["worker_role_assignment_id"] > 0
+            assert context["scope_type"] == "GLOBAL"
+            assert context["project_id"] == str(ctx.project.id)
+            assert context["joint_id"] == str(joint.id)
+            assert context["governance_warnings"] == []
+
+    def test_submitter_with_dual_role_cannot_decide_own_review(
+        self, db: Session, ctx: DefectCtx
+    ):
+        joint = ctx.new_joint("J-QD-D7")
+        rev = _effective_revision(ctx, joint)
+        _assign_role(db, worker_id=ctx.ogs.id, role_code="OTK_INSPECTOR")
+        svc = QualityDecisionService(db)
+        under_review = _create_under_review(svc, ctx, joint, rev)
+
+        with pytest.raises(DomainError) as exc:
+            svc.decide(
+                under_review.id,
+                expected_version=under_review.version,
+                decision_result=qdw.QD_RESULT_ACCEPTED,
+                actor_worker_id=ctx.ogs.id,
+            )
+
+        assert exc.value.status_code == 409
+        assert exc.value.code == qdw.QD_SAME_ACTOR_REVIEW
+
+    def test_dual_role_warning_is_recorded_on_successful_command(
+        self, db: Session, ctx: DefectCtx
+    ):
+        joint = ctx.new_joint("J-QD-D8")
+        rev = _effective_revision(ctx, joint)
+        _assign_role(db, worker_id=ctx.otk.id, role_code="OGS_ENGINEER")
+        svc = QualityDecisionService(db)
+        under_review = _create_under_review(svc, ctx, joint, rev)
+
+        decided = svc.decide(
+            under_review.id,
+            expected_version=under_review.version,
+            decision_result=qdw.QD_RESULT_ACCEPTED,
+            actor_worker_id=ctx.otk.id,
+        )
+
+        event = svc.list_audit_events(
+            decided.id, actor_worker_id=ctx.otk.id
+        )[-1]
+        assert event.authorization_context["governance_warnings"] == [
+            "QD_DUAL_ROLE_ASSIGNMENT"
         ]
 
     def test_decide_requires_effective_revision_still(

@@ -22,6 +22,11 @@
 idempotency remediation и command API приняты в рабочем дереве 2026-07-24. Статус
 Task 10A завершён commit `c1b551e` от 2026-07-24.
 
+**AS-02 — QualityDecision RBAC Consolidation** завершён:
+[[docs/project/ADR-028-quality-decision-rbac-consolidation|ADR-028]] принят и реализован
+2026-07-24. Revision 27, person-level SoD, evidence-bearing grant/snapshot и dual-role
+warning прошли PostgreSQL-приёмку и полный backend regression (`1590 passed`).
+
 Реализовано и задокументировано (полный перечень — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]):
 
 - `hr.workers`, `hr.worker_roles` — ОК (`/api/v1/hr`);
@@ -40,9 +45,18 @@ Task 10A завершён commit `c1b551e` от 2026-07-24.
 ### 1. Task 10A — завершён
 
 - 10A-R/10A-1/10A-1R/10A-2/10A-2R/10A-3 реализованы, приняты и зафиксированы (`c1b551e`);
-- AS-02 не включён и остаётся самостоятельной архитектурной задачей.
+- AS-02 не включён в Task 10A; архитектура AS-02 принята отдельно в ADR-028.
 
-### 2. Завершить Task 9D (Quality / Defect Management)
+### 2. AS-02 — завершён
+
+- person-level SoD для `SUBMIT → RETURN/DECIDE`;
+- evidence-bearing `AuthorizationGrant` и immutable `authorization_context`;
+- dual-role governance warning без HR blocking;
+- все раздельные gate из
+  [[docs/project/TASK_AS_02_QUALITY_DECISION_RBAC_IMPLEMENTATION_PLAN|Implementation Plan]]
+  завершены; PostgreSQL rehearsal `27 → 26 → 27` и полный regression успешны.
+
+### 3. Завершить Task 9D (Quality / Defect Management)
 
 - остаток блока **9D-4** — `ProductionHold` / `ProductionHoldRelease`, вычисляемый quality
   state `Joint`;
@@ -51,18 +65,18 @@ Task 10A завершён commit `c1b551e` от 2026-07-24.
 - **9D-7** — API, permissions и интеграционные тесты контура 9D;
 - **9D-8** — Architecture consolidation Task 9D.
 
-### 3. Электронная документация (ADR-018)
+### 4. Электронная документация (ADR-018)
 
 - document lifecycle, versioning, snapshots, templates, official document issuance;
 - код, миграции и API пока не создавались.
 
-### 4. Вывод legacy
+### 5. Вывод legacy
 
 - миграция `desktop_ok` на `hr` + `welding`;
 - ETL из `РАБОТНИКИ` / `СВАРЩИКИ`;
 - снятие роутера `workforce`.
 
-### 5. Закрытие истории стыка
+### 6. Закрытие истории стыка
 
 - периодика КСС;
 - сведение производственной, контрольной и документальной истории стыка в единую

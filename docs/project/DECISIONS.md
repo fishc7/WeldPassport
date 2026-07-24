@@ -4187,3 +4187,32 @@ UNDER_REVIEW → DECIDED → SUPERSEDED` (+ `RETURN`: `UNDER_REVIEW → DRAFT`, 
 Implementation Block 1 (Models + Migration) не разрешает переходить к Services/API без
 отдельного подтверждения. Такое подтверждение получено; recovery/remediation/API прошли
 приёмку и зафиксированы commit `c1b551e` от 2026-07-24 (Task 10A: `done`).
+
+---
+
+## ADR-028. QualityDecision RBAC Consolidation (AS-02)
+
+Дата: 2026-07-24
+
+Статус: **ACCEPTED; implementation done / verified 2026-07-24**
+
+Полный текст:
+[[docs/project/ADR-028-quality-decision-rbac-consolidation|ADR-028 — QualityDecision RBAC Consolidation]].
+
+После завершения Task 10A принят отдельный AS-02 hardening-контур без изменения
+authority-модели ADR-027. Отправитель последнего `SUBMIT` текущего review-cycle не может
+сам выполнить ни `RETURN`, ни `DECIDE`; текущий отправитель хранится в
+`review_submitted_by_worker_id`, а нарушение возвращает `409 QD_SAME_ACTOR_REVIEW`.
+
+Совмещение `OGS_ENGINEER` и `OTK_INSPECTOR` не блокируется, но фиксируется предупреждением
+`QD_DUAL_ROLE_ASSIGNMENT`. Общий permission resolver возвращает конкретный
+`AuthorizationGrant`; каждое новое событие `QualityDecision` получает immutable
+`authorization_context` с ролью, assignment, scope, validity и временем проверки.
+Исторические события маркируются `LEGACY_AUTHORIZATION_SNAPSHOT` без выдуманного scope.
+
+Реализация разделена на отдельные gate Domain Model → Migration → Shared Authorization
+Resolver → Workflow → Service → API → Tests. План:
+[[docs/project/TASK_AS_02_QUALITY_DECISION_RBAC_IMPLEMENTATION_PLAN|AS-02 Implementation Plan]].
+Все gate завершены 2026-07-24. Revision `20260724_27_qd_rbac_sod` принята PostgreSQL;
+репетиция `27 → 26 → 27`, migration governance (`35 passed`), focused AS-02 regression
+(`100 passed`) и полный backend regression (`1590 passed`) успешны.

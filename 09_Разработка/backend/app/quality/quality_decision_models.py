@@ -159,6 +159,12 @@ class QualityDecision(Base):
             "(approved_at IS NULL) = (approved_by_worker_id IS NULL)",
             name="ck_quality_decisions_approved_pair",
         ),
+        CheckConstraint(
+            "(status = 'DRAFT' AND review_submitted_by_worker_id IS NULL) OR "
+            "(status IN ('UNDER_REVIEW', 'DECIDED', 'SUPERSEDED') "
+            "AND review_submitted_by_worker_id IS NOT NULL)",
+            name="ck_quality_decisions_review_submitter_state",
+        ),
         Index(
             "uq_quality_decisions_system_code", "system_code", unique=True
         ),
@@ -217,6 +223,7 @@ class QualityDecision(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    review_submitted_by_worker_id: Mapped[int | None] = mapped_column(Integer)
     approved_by_worker_id: Mapped[int | None] = mapped_column(Integer)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     approved_role: Mapped[str | None] = mapped_column(String(40))

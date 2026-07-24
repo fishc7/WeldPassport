@@ -110,8 +110,16 @@ Tasks 1–4 выполнены до введения 2026-07-21 обязател
 | Task 10A-2R | Submit Snapshot + Idempotency Orchestration | ADR-027 Addendum L.1/L.2 | `done` | SUBMIT history, replay/conflict/rollback/concurrency и stable response snapshot проверены; `c1b551e` |
 | Task 10A-3 | Schemas + Command API + API Tests | ADR-027 + Recovery Specification | `done` | thin command API и полный API lifecycle/replay/errors пройдены; `c1b551e` |
 
-AS-02 (person-level SoD, несовместимые роли, authorization snapshot) в Task 10A
-не входит и требует отдельного архитектурного решения/Task.
+AS-02 в Task 10A не входит; отдельное архитектурное решение принято в ADR-028.
+
+## QualityDecision RBAC Consolidation — AS-02 (ADR-028)
+
+| Task | Название | Архитектурное основание | Статус | Evidence / примечание |
+|---|---|---|---|---|
+| AS-02A | Architecture and implementation planning | [[docs/project/ADR-028-quality-decision-rbac-consolidation|ADR-028]] | `done` | person-level SoD, AuthorizationGrant, audit context, dual-role warning, migration/backfill contract и exact implementation prompt приняты 2026-07-24 |
+| AS-02B | Domain Model + Correcting Migration | ADR-028 + [[docs/project/TASK_AS_02_QUALITY_DECISION_RBAC_IMPLEMENTATION_PLAN|Implementation Plan]] | `done` | Domain Model и self-contained revision 27 приняты; revisions 25/26 не изменены; migration governance `35 passed` |
+| AS-02C | Resolver + Workflow + Service + API | ADR-028 + Implementation Plan | `done` | evidence-bearing resolver, SoD, audit context, dual-role warning и additive API реализованы TDD; focused regression `100 passed` |
+| AS-02D | PostgreSQL acceptance + regression + documentation closure | ADR-028 + Implementation Plan | `done` | схема `test` на head 27; rehearsal `27 → 26 → 27`; полный backend regression `1590 passed`; документация синхронизирована 2026-07-24 |
 
 ## Infrastructure prerequisites — Migration Governance (ADR-025, Session 010)
 

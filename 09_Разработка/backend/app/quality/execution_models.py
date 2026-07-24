@@ -898,6 +898,11 @@ class QualityAuditEvent(Base):
             _in("event_type", mew.QUALITY_AUDIT_EVENT_TYPES),
             name="ck_quality_audit_event_type",
         ),
+        CheckConstraint(
+            "entity_type <> 'QUALITY_DECISION' "
+            "OR authorization_context IS NOT NULL",
+            name="ck_quality_audit_qd_authorization_context",
+        ),
         Index("ix_quality_audit_entity", "entity_type", "entity_id"),
         Index("ix_quality_audit_occurred_at", "occurred_at"),
         {"schema": QUALITY_SCHEMA},
@@ -912,6 +917,7 @@ class QualityAuditEvent(Base):
     changed_fields: Mapped[dict | None] = mapped_column(JSONB)
     previous_values: Mapped[dict | None] = mapped_column(JSONB)
     new_values: Mapped[dict | None] = mapped_column(JSONB)
+    authorization_context: Mapped[dict | None] = mapped_column(JSONB)
     reason: Mapped[str | None] = mapped_column(Text)
     actor_worker_id: Mapped[int] = mapped_column(Integer, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(

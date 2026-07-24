@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.hr.models import WorkerRole
 from app.quality.engineering_evaluation_models import EngineeringEvaluationRevision
 
 from ._defect_support import DefectCtx
@@ -174,6 +177,7 @@ def test_command_api_runs_full_quality_decision_lifecycle(
     assert submitted_response.status_code == 200, submitted_response.text
     submitted = submitted_response.json()
     assert submitted["status"] == "UNDER_REVIEW"
+    assert submitted["review_submitted_by_worker_id"] == ctx.ogs.id
     submit_replay = client.post(
         f"{base}/{decision_id}/submit-for-review",
         headers={
@@ -198,6 +202,7 @@ def test_command_api_runs_full_quality_decision_lifecycle(
     assert returned_response.status_code == 200, returned_response.text
     returned = returned_response.json()
     assert returned["status"] == "DRAFT"
+    assert returned["review_submitted_by_worker_id"] is None
     return_replay = client.post(
         f"{base}/{decision_id}/return",
         headers={
@@ -250,6 +255,7 @@ def test_command_api_runs_full_quality_decision_lifecycle(
     )
     assert resubmitted_response.status_code == 200, resubmitted_response.text
     resubmitted = resubmitted_response.json()
+    assert resubmitted["review_submitted_by_worker_id"] == ctx.ogs.id
     resubmit_replay = client.post(
         f"{base}/{decision_id}/submit-for-review",
         headers={
@@ -275,6 +281,7 @@ def test_command_api_runs_full_quality_decision_lifecycle(
     decided = decided_response.json()
     assert decided["status"] == "DECIDED"
     assert decided["decision_result"] == "ACCEPTED"
+    assert decided["review_submitted_by_worker_id"] == ctx.ogs.id
     decide_replay = client.post(
         f"{base}/{decision_id}/decide",
         headers={
@@ -315,3 +322,63 @@ def test_command_api_runs_full_quality_decision_lifecycle(
         "QUALITY_DECISION_SUBMITTED",
         "QUALITY_DECISION_DECIDED",
     ]
+    assert all(
+        event["authorization_context"]["authorization_snapshot_status"]
+        == "VERIFIED"
+        for event in events_response.json()
+    )
+
+
+def test_api_rejects_same_actor_review_even_with_dual_role(
+    client: TestClient,
+    db: Session,
+) -> None:
+    ctx = DefectCtx(db, "Qas")
+    joint = ctx.new_joint("J-QD-API-SOD")
+    revision = _effective_revision(ctx, joint)
+    db.add(
+        WorkerRole(
+            worker_id=ctx.ogs.id,
+            role_code="OTK_INSPECTOR",
+            scope_type="GLOBAL",
+            is_active=True,
+            valid_from=date.today(),
+        )
+    )
+    db.commit()
+    base = "/api/v1/quality/quality-decisions"
+
+    created = client.post(
+        base,
+        headers={
+            "X-User-Id": str(ctx.ogs.id),
+            "Idempotency-Key": "same-actor-create",
+        },
+        json={
+            "joint_id": str(joint.id),
+            "basis_revision_ids": [str(revision.id)],
+            "summary": "Проверка SoD",
+        },
+    ).json()
+    submitted = client.post(
+        f"{base}/{created['id']}/submit-for-review",
+        headers={
+            "X-User-Id": str(ctx.ogs.id),
+            "Idempotency-Key": "same-actor-submit",
+        },
+        json={"expected_version": created["version"]},
+    ).json()
+    conflict = client.post(
+        f"{base}/{created['id']}/decide",
+        headers={
+            "X-User-Id": str(ctx.ogs.id),
+            "Idempotency-Key": "same-actor-decide",
+        },
+        json={
+            "expected_version": submitted["version"],
+            "decision_result": "ACCEPTED",
+        },
+    )
+
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"]["code"] == "QD_SAME_ACTOR_REVIEW"
