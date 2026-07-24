@@ -105,8 +105,8 @@ WeldPassport — внутренняя система для отдела гла�
   официальное внутреннее решение над `EngineeringEvaluationRevision` и перед `Defect`.
   Это не возврат исторической единой сущности ADR-017 и не отмена декомпозиции ADR-019.
   На 2026-07-24 Governance Recovery, migration/service remediation и command API
-  прошли отдельную приёмку в рабочем дереве (`accepted_uncommitted`); commit отсутствует,
-  поэтому Task ещё не отмечен `done`. Канон и provenance —
+  прошли отдельную приёмку и зафиксированы commit `c1b551e`; Task имеет статус `done`.
+  Канон и provenance —
   [[docs/project/TASK_10A_QUALITY_DECISION_CORE_RECOVERY_SPEC|Task 10A Recovery Specification]].
 - **Task 9D — реализация в процессе (обновлено 2026-07-21; актуальный статус по подблокам —
   [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]).** Блоки **9D-1** (`QualityFinding` Core),
@@ -284,7 +284,7 @@ RepairOperation, ExecutiveDocumentation — привязаны к Joint; мод�
 | Связь с ТО | Обязательный контроль после термообработки — связь `Inspection ↔ HeatTreatmentOperation` (ADR-014) |
 | После результата (Session 008, ADR-017 — `PARTIALLY_SUPERSEDED_BY_ADR-019`) | `Inspection Result → Quality Finding → Engineering Evaluation → Defect → Quality Decision → Repair → Reinspection → Defect Closure`; Result ≠ Finding ≠ Defect; единая сущность `Quality Document`. `Quality Decision` декомпозировано в ADR-019 (см. строку ниже) |
 | Углублённая архитектура Task 9D (Session 008-07, ADR-019) | `QualityFinding → EngineeringEvaluation → Defect / DefectAcceptanceAssessment → FindingDisposition → ProductionHold → Corrective Action / Reinspection → CustomerQualityDecision → Closure`; `Quality Decision` разделено на evaluation / acceptance / disposition (более не доменная сущность); `Confirmed Severity`; `Defect` — только после `CONFIRMED_DEFECT`; `OTK_INSPECTOR` — опциональная роль (fallback `CHIEF_WELDER`); в реализации `FindingDisposition` названо `DefectDisposition` (ADR-023). **Канон принят; 9D-1…9D-4A реализованы, остаток — planned** (детали — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]) |
-| Новый `QualityDecision` Task 10A (ADR-027) | Официальное внутреннее решение по ≥1 конкретной `EngineeringEvaluationRevision`; находится перед `Defect`, не заменяет evaluation/disposition и не восстанавливает историческую сущность ADR-017. Lifecycle `DRAFT → UNDER_REVIEW → DECIDED → SUPERSEDED`, роли OGS→OTK. Recovery/remediation/API приняты 2026-07-24 в рабочем дереве; статус `accepted_uncommitted` до отдельного commit |
+| Новый `QualityDecision` Task 10A (ADR-027) | Официальное внутреннее решение по ≥1 конкретной `EngineeringEvaluationRevision`; находится перед `Defect`, не заменяет evaluation/disposition и не восстанавливает историческую сущность ADR-017. Lifecycle `DRAFT → UNDER_REVIEW → DECIDED → SUPERSEDED`, роли OGS→OTK. Recovery/remediation/API приняты и зафиксированы commit `c1b551e` от 2026-07-24; статус `done` |
 | Реализация | Tasks **9A — 9C — DONE** (ядро выполнения контроля и лабораторных заключений); Task 9D: **9D-1, 9D-2, 9D-3, 9D-4A — DONE** (ADR-019/021/022/023); остаток **9D-4** (`ProductionHold`), **9D-5 … 9D-8** — planned / not implemented. Историческая разбивка 9E — 9K — `SUPERSEDED_BY_TASK_9D`. Актуальный статус по подблокам — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]] |
 
 > **Граница по импорту и печатным формам.** Импорт результатов контроля (XLSX, CSV,

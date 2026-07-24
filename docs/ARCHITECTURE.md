@@ -822,11 +822,10 @@ Implementation Spec.
 
 Канон: [[docs/project/ADR-027-quality-decision-core-canon|ADR-027]]. **Статус: ACCEPTED**
 (2026-07-23), recovery addendum Q-D9/Q-D5 принят 2026-07-24. Актуальный статус:
-**Task 10A `accepted_uncommitted`**. В рабочем дереве приняты Implementation Block 1
+**Task 10A `done`** (`c1b551e`, 2026-07-24). Реализованы и приняты Implementation Block 1
 (Models + Migration), correcting revision 26 с idempotency storage, Block 2
 (Workflow + Repository + Service), remediation Q-D9/Q-D5 и Block 3 (Pydantic schemas +
-command API + API tests). Свежая приёмка выполнена 2026-07-24; commit отсутствует,
-поэтому Task ещё не имеет статуса `done`. Контракт восстановления:
+command API + API tests). Контракт восстановления:
 [[docs/project/TASK_10A_QUALITY_DECISION_CORE_RECOVERY_SPEC|Task 10A Recovery Specification]].
 
 `ADR-027` уточняет границу ADR-019 (008-07-BQ), не отменяя её: исторический термин «Quality

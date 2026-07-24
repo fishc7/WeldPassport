@@ -1,5 +1,5 @@
 project: WeldPassport
-current_stage: quality_decision_10a_acceptance_pending_commit
+current_stage: quality_decision_10a_done
 current_branch: docs/as-02-quality-decision-rbac-analysis
 updated_at: 2026-07-24
 
@@ -8,8 +8,8 @@ updated_at: 2026-07-24
 
 summary:
   total_progress: 74
-  current_focus: "Task 10A — приёмка завершена, изменения не закоммичены"
-  next_action: "Выполнить локальный commit; AS-02 остаётся отдельной задачей"
+  current_focus: "Task 10A — QualityDecision Core завершён"
+  next_action: "Выбрать следующий отдельный Task; AS-02 остаётся самостоятельной задачей"
 
 modules:
   - code: constitution
@@ -111,11 +111,11 @@ modules:
   - code: quality_decision_core
     name: "ОГС / ОТК → Task 10A: QualityDecision Core"
     owner: "ОГС / ОТК"
-    status: in_progress
-    progress: 95
+    status: done
+    progress: 100
     branch: docs/as-02-quality-decision-rbac-analysis
     visible: true
-    note: "ADR-027 + Recovery Addendum ACCEPTED; 10A-R/10A-1/10A-1R/10A-2/10A-2R/10A-3 приняты в рабочем дереве 2026-07-24, commit отсутствует. AS-02 вне Task 10A."
+    note: "ADR-027 + Recovery Addendum ACCEPTED; 10A-R/10A-1/10A-1R/10A-2/10A-2R/10A-3 завершены commit c1b551e от 2026-07-24. AS-02 вне Task 10A."
 
   - code: pto_docs
     name: "ПТО → Электронная документация"

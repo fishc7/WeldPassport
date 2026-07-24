@@ -257,7 +257,7 @@ Repository не принимает бизнес-решений. API только
 
 ## 14. Acceptance evidence (2026-07-24)
 
-Статус scoped Diff: `accepted_uncommitted`.
+Статус: `done` (`c1b551e`, 2026-07-24).
 
 - migration/canonical/graph/offline/pure-policy: `22 passed`;
 - QualityDecision service + command API: `55 passed`;
@@ -270,7 +270,7 @@ Repository не принимает бизнес-решений. API только
 - migration 25 не изменена; revision 26 self-contained;
 - AS-02, B-04, baseline/stamp, runtime profile, TEST-DB Foundation и
   Defect/Disposition/Repair/Reinspection side effects не включены;
-- staging, commit и push не выполнялись.
+- реализация зафиксирована commit `c1b551e`; push не выполнялся.
 
 Application-тесты запускались с test-only заглушкой legacy `workforce` router,
 поскольку штатная композиция `app.main` сейчас блокируется известным, отдельным

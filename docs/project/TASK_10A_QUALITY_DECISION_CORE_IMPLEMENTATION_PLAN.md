@@ -13,10 +13,10 @@ store immutable command response snapshots, and expose thin command endpoints.
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2, Alembic, Pydantic v2,
 PostgreSQL 16, pytest.
 
-**Execution status (2026-07-24):** plan executed and accepted in the working
-tree. Evidence is recorded in the Recovery Specification §14 and Task Registry.
-The checklists below preserve the original execution sequence; canonical status
-is `accepted_uncommitted` until commit.
+**Execution status (2026-07-24):** plan executed, accepted and committed as
+`c1b551e`. Evidence is recorded in the Recovery Specification §14 and Task
+Registry. The checklists below preserve the original execution sequence;
+canonical status is `done`.
 
 ## Global Constraints
 

@@ -20,7 +20,7 @@
 Параллельно завершена приёмка **Task 10A-R — QualityDecision Core Governance Recovery**
 (ADR-027): Models/Migration, correcting revision 26, Workflow/Repository/Service,
 idempotency remediation и command API приняты в рабочем дереве 2026-07-24. Статус
-`accepted_uncommitted` сохраняется до выполнения commit.
+Task 10A завершён commit `c1b551e` от 2026-07-24.
 
 Реализовано и задокументировано (полный перечень — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]):
 
@@ -37,10 +37,9 @@ idempotency remediation и command API приняты в рабочем дере
 
 ## Следующий этап
 
-### 1. Зафиксировать принятую реализацию Task 10A
+### 1. Task 10A — завершён
 
-- 10A-R/10A-1/10A-1R/10A-2/10A-2R/10A-3 реализованы и приняты;
-- следующий gate — локальный commit;
+- 10A-R/10A-1/10A-1R/10A-2/10A-2R/10A-3 реализованы, приняты и зафиксированы (`c1b551e`);
 - AS-02 не включён и остаётся самостоятельной архитектурной задачей.
 
 ### 2. Завершить Task 9D (Quality / Defect Management)

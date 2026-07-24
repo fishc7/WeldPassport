@@ -4186,4 +4186,4 @@ UNDER_REVIEW → DECIDED → SUPERSEDED` (+ `RETURN`: `UNDER_REVIEW → DRAFT`, 
 открытым точкам ACCEPTED» и обновлённая таблица §K. Task 10A реализуется по блокам;
 Implementation Block 1 (Models + Migration) не разрешает переходить к Services/API без
 отдельного подтверждения. Такое подтверждение получено; recovery/remediation/API прошли
-приёмку 2026-07-24 в рабочем дереве (`accepted_uncommitted`, commit отсутствует).
+приёмку и зафиксированы commit `c1b551e` от 2026-07-24 (Task 10A: `done`).
