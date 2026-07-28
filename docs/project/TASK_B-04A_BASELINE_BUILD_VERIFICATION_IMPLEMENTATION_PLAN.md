@@ -673,12 +673,12 @@ Do not commit without separate confirmation.
 - Consumes accepted B-04A evidence.
 - Produces canonical status `B-04A done; B-04B blocked pending maintenance readiness`.
 
-- [ ] **Step 1: Record only observed evidence**
+- [x] **Step 1: Record only observed evidence**
 
 Include exact commits, test counts, fingerprint digests, PostgreSQL version, source SHA
 and explicit statement that active graph/marker/working DB were not changed.
 
-- [ ] **Step 2: Verify documentation consistency**
+- [x] **Step 2: Verify documentation consistency**
 
 ```powershell
 rg -n "B-04|canonical_baseline_v1|migration freeze" `
@@ -692,7 +692,7 @@ git diff --check
 
 Expected: no contradictory statuses; freeze remains active.
 
-- [ ] **Step 3: Final B-04A review checkpoint**
+- [x] **Step 3: Final B-04A review checkpoint**
 
 Do not activate the baseline and do not start B-04B until B-04A receives a separate
 acceptance verdict.

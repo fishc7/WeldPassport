@@ -1363,8 +1363,9 @@ Baseline Adoption и TEST-DB Foundation. B-04 является единстве�
 переноса `alembic_version` и adoption. Runtime composition/profile switch вынесены в
 отдельную Task `RUNTIME-LEGACY-COMPATIBILITY-PROFILE`; B-03 runtime не меняет.
 
-По состоянию на 2026-07-28 B-04A Canonical Baseline Build & Verification технически
-завершён и принят без Git commit (`accepted_uncommitted`). Для source commit
+По состоянию на 2026-07-28 B-04A Canonical Baseline Build & Verification
+завершён и зафиксирован implementation commit
+`4487127a3042cf6a8ba003b85cffd143dc920f0e` (`done`). Для source commit
 `6c56f99edbd4e7346264ee14658d2076b5fd0775` на PostgreSQL 16.14 подтверждена
 эквивалентность historical, clean baseline и re-upgrade: 73 canonical tables,
 15 governed seeds и единый fingerprint

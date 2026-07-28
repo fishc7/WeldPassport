@@ -27,8 +27,9 @@ Task 10A завершён commit `c1b551e` от 2026-07-24.
 2026-07-24. Revision 27, person-level SoD, evidence-bearing grant/snapshot и dual-role
 warning прошли PostgreSQL-приёмку и полный backend regression (`1590 passed`).
 
-**B-04A — Canonical Baseline Build & Verification** технически завершён и принят
-без Git commit (`accepted_uncommitted`). Для source commit
+**B-04A — Canonical Baseline Build & Verification** завершён и зафиксирован
+implementation commit `4487127a3042cf6a8ba003b85cffd143dc920f0e`
+(`done`). Для source commit
 `6c56f99edbd4e7346264ee14658d2076b5fd0775` на PostgreSQL 16.14 доказана
 эквивалентность historical, clean baseline и re-upgrade: 73 canonical tables,
 15 governed seeds, fingerprint
@@ -50,12 +51,12 @@ pure suite — `246 passed, 1 skipped`.
 
 ## Следующий этап
 
-### 0. B-04A — принят без commit; B-04B — blocked
+### 0. B-04A — завершён; B-04B — blocked
 
 - B-04A evidence опубликовано вне активного `migrations/versions`;
+- implementation commit: `4487127a3042cf6a8ba003b85cffd143dc920f0e`;
 - active migration graph, version marker и рабочая БД не изменены;
 - migration freeze остаётся активным;
-- следующий Git-шаг — отдельное подтверждение commit B-04A;
 - B-04B repository cut, marker transfer и adoption не начинать до maintenance
   readiness и отдельного решения.
 

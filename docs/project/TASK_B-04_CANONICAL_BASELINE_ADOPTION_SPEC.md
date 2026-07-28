@@ -542,12 +542,14 @@ B-04A-0 source verification + freeze
 
 Дата фиксации: **2026-07-28**.
 
-Статус блока: **B-04A технически завершён и принят свежими проверками; Git commit
-отсутствует (`accepted_uncommitted`). B-04B заблокирован до отдельной maintenance
-readiness и отдельного решения о старте.**
+Статус блока: **B-04A завершён и зафиксирован implementation commit
+`4487127a3042cf6a8ba003b85cffd143dc920f0e` (`done`). B-04B заблокирован до
+отдельной maintenance readiness и отдельного решения о старте.**
 
 Наблюдаемое evidence:
 
+- implementation commit:
+  `4487127a3042cf6a8ba003b85cffd143dc920f0e`;
 - source commit: `6c56f99edbd4e7346264ee14658d2076b5fd0775`;
 - frozen graph: root `20260702_02_hr_core`, head
   `20260724_27_qd_rbac_sod`, 31 revision;
