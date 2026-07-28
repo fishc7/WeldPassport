@@ -339,6 +339,12 @@ B-04A-R18 повторяет указанный verification flow на двух 
 PostgreSQL 18.x, не изменяя baseline candidate или frozen history. Обязательное
 равенство для fingerprint format v2:
 
+Детализация этапа:
+
+- [[docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_SPEC|B-04A-R18 specification]];
+- [[docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_IMPLEMENTATION_PLAN|B-04A-R18 implementation plan]];
+- [[docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_CLAUDE_CODE_PROMPT|B-04A-R18 Claude Code prompt]].
+
 ```text
 historical fingerprint v2
     == baseline fingerprint v2

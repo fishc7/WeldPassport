@@ -64,6 +64,11 @@ pure suite — `246 passed, 1 skipped`.
 - migration freeze остаётся активным;
 - следующий отдельный блок — B-04A-R18: fingerprint v2, две disposable PostgreSQL 18.x,
   immutable PG18 evidence и отдельная приёмка;
+- B-04A-R18
+  [[docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_SPEC|specification]],
+  [[docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_IMPLEMENTATION_PLAN|implementation plan]]
+  и [[docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_CLAUDE_CODE_PROMPT|execution prompt]]
+  подготовлены для отдельной документальной приёмки;
 - B-04B repository cut, marker transfer и adoption не начинать до maintenance
   readiness `READY`, возможного только после принятия B-04A-R18.
 

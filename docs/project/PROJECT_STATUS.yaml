@@ -8,8 +8,8 @@ updated_at: 2026-07-28
 
 summary:
   total_progress: 77
-  current_focus: "ADR-030 принят; B-04A-R18 — следующий отдельный gate"
-  next_action: "Подготовить отдельные spec/plan/prompt B-04A-R18; B-04B не начинать"
+  current_focus: "B-04A-R18 spec/plan/prompt подготовлены для отдельной приёмки"
+  next_action: "Провести документальную приёмку B-04A-R18; implementation не начинать"
 
 modules:
   - code: constitution
@@ -53,7 +53,7 @@ modules:
     progress: 0
     branch: codex/b04b-maintenance-readiness-review
     visible: true
-    note: "ADR-030 ACCEPTED. Требуются отдельные spec/plan/prompt, fingerprint v2, две owned disposable PG18.x, immutable PG18 evidence и отдельная приёмка. Working DB запрещена."
+    note: "ADR-030 ACCEPTED. Spec/plan/prompt имеют статус docs_review; implementation и PG18 evidence отсутствуют. После документальной приёмки требуются fingerprint v2, две owned disposable PG18.x и отдельная evidence-приёмка. Working DB запрещена."
 
   - code: canonical_baseline_b04b
     name: "B-04B → Repository Cut, Maintenance and Adoption"
