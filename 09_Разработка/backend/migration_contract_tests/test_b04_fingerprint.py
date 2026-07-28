@@ -1,4 +1,4 @@
-"""Pure, strict B-04 PostgreSQL 16 fingerprint contracts."""
+"""Pure, strict B-04 PostgreSQL 18 fingerprint-v2 contracts."""
 
 from __future__ import annotations
 
@@ -9,7 +9,9 @@ import pytest
 
 from migrations.b04.fingerprint import (
     CANONICAL_SCHEMAS,
+    FINGERPRINT_FORMAT_VERSION,
     FingerprintError,
+    SUPPORTED_POSTGRES_MAJOR,
     assert_supported_catalog,
     canonicalize_fingerprint,
     extract_fingerprint,
@@ -41,7 +43,7 @@ class _RowsResult:
 class StrictFakeConnection:
     """A route-exact catalog fixture: unmatched, duplicate, and unused routes fail."""
 
-    def __init__(self, routes: Mapping[str, list[Mapping[str, object]]], *, version: str = "160002") -> None:
+    def __init__(self, routes: Mapping[str, list[Mapping[str, object]]], *, version: str = "180003") -> None:
         self.routes = {key: list(value) for key, value in routes.items()}
         self.version = version
         self.used: list[str] = []
@@ -103,11 +105,41 @@ def _base_routes() -> dict[str, list[Mapping[str, object]]]:
     }
 
 
-def _extract(routes: Mapping[str, list[Mapping[str, object]]], *, version: str = "160002") -> tuple[dict[str, object], StrictFakeConnection]:
+def _extract(routes: Mapping[str, list[Mapping[str, object]]], *, version: str = "180003") -> tuple[dict[str, object], StrictFakeConnection]:
     connection = StrictFakeConnection(routes, version=version)
     value = extract_fingerprint(connection)  # type: ignore[arg-type]
     connection.assert_consumed()
     return value, connection
+
+
+def test_b04_r18_fingerprint_001_emits_v2_on_postgresql_18() -> None:
+    value, _ = _extract(_base_routes(), version="180003")
+
+    assert FINGERPRINT_FORMAT_VERSION == 2
+    assert SUPPORTED_POSTGRES_MAJOR == 18
+    assert value["format_version"] == 2
+
+
+def test_b04_r18_fingerprint_002_rejects_pg16() -> None:
+    with pytest.raises(FingerprintError, match="B04-FP-POSTGRES-MAJOR"):
+        _extract(_base_routes(), version="160014")
+
+
+def test_b04_r18_fingerprint_003_is_deterministic_for_named_collection_order() -> None:
+    value, _ = _extract(_base_routes())
+    reordered = json.loads(json.dumps(value))
+    reordered["sequences"].reverse()
+    for key in ("primary_keys_uniques", "foreign_keys", "checks", "indexes"):
+        reordered["tables"][0][key].reverse()
+
+    assert canonicalize_fingerprint(reordered) == canonicalize_fingerprint(value)
+
+
+def test_b04_r18_fingerprint_004_is_canonicalization_idempotent() -> None:
+    value, _ = _extract(_base_routes())
+    canonical = canonicalize_fingerprint(value)
+
+    assert canonicalize_fingerprint(json.loads(canonical)) == canonical
 
 
 @pytest.mark.parametrize(
@@ -230,6 +262,10 @@ def test_b04_fp_009_rejects_duplicate_sequence_ownership_and_catalog_shape_error
     with pytest.raises(FingerprintError, match="B04-FP-SCHEMAS"):
         assert_supported_catalog(bad)
     bad = dict(fingerprint)
+    bad["unknown"] = True
+    with pytest.raises(FingerprintError, match="B04-FP-UNKNOWN"):
+        assert_supported_catalog(bad)
+    bad = dict(fingerprint)
     bad["tables"] = [dict(fingerprint["tables"][0], columns=[dict(fingerprint["tables"][0]["columns"][0], ordinal=True)])]
     with pytest.raises(FingerprintError, match="B04-FP-COLUMN"):
         canonicalize_fingerprint(bad)
@@ -307,7 +343,7 @@ def test_b04_fp_014_strict_semantics_reject_bad_attributes_and_unicode_dollar_ta
     with pytest.raises(FingerprintError, match="B04-FP-COLUMN"):
         canonicalize_fingerprint(bad)
     with pytest.raises(FingerprintError, match="B04-FP-POSTGRES-MAJOR"):
-        _extract(_base_routes(), version="150001")
+        _extract(_base_routes(), version="170009")
     routes = _base_routes()
     routes["columns"][0] = dict(routes["columns"][0], default="'unclosed")
     with pytest.raises(FingerprintError, match="B04-FP-EXPRESSION"):

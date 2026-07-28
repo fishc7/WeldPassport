@@ -9,17 +9,18 @@ from sqlalchemy.exc import ArgumentError
 
 from migrations.b04.disposable import (
     DatabaseIdentity,
+    PostgresVersion,
     assert_disposable_database,
-    assert_postgresql_16,
+    assert_postgresql_18,
 )
 
 
 VALID_URL = (
     "postgresql+psycopg://b04_runner:database-password@"
-    "db.example.test:5432/wp_b04_review_disposable"
+    "127.0.0.1:5432/wp_b04_r18_baseline_disposable"
 )
 VALID_TOKEN = "B04-owner-token-2026"
-VALID_DATABASE = "wp_b04_review_disposable"
+VALID_DATABASE = "wp_b04_r18_baseline_disposable"
 
 
 def _assert_rejected(**overrides: object) -> None:
@@ -58,7 +59,7 @@ def test_b04_disposable_002_rejects_missing_or_non_secret_like_token(
 
 @pytest.mark.parametrize(
     "expected_database",
-    [None, "", "  ", "wp_b04_other_disposable", "WP_B04_REVIEW_DISPOSABLE"],
+    [None, "", "  ", "wp_b04_other_disposable", "WP_B04_R18_BASELINE_DISPOSABLE"],
 )
 def test_b04_disposable_003_rejects_missing_or_mismatched_expected_database(
     expected_database: str | None,
@@ -73,11 +74,11 @@ def test_b04_disposable_003_rejects_missing_or_mismatched_expected_database(
         "template0",
         "template1",
         "weldpassport",
-        "wp_b04_review",
+        "wp_b04_r18_baseline",
         "wp_b04__disposable",
-        "wp_b04_review_disposable_extra",
-        "WP_B04_REVIEW_DISPOSABLE",
-        "wp_b04_review-disposable",
+        "wp_b04_r18_baseline_disposable_extra",
+        "WP_B04_R18_BASELINE_DISPOSABLE",
+        "wp_b04_r18_baseline-disposable",
         "ordinary_application_database",
     ],
 )
@@ -87,7 +88,7 @@ def test_b04_disposable_004_rejects_system_production_and_non_disposable_names(
     _assert_rejected(
         database_url=(
             "postgresql+psycopg://b04_runner:database-password@"
-            f"db.example.test:5432/{database_name}"
+            f"127.0.0.1:5432/{database_name}"
         ),
         expected_database=database_name,
     )
@@ -96,15 +97,15 @@ def test_b04_disposable_004_rejects_system_production_and_non_disposable_names(
 @pytest.mark.parametrize(
     "database_url",
     [
-        "mysql+pymysql://b04_runner:database-password@db.example.test:5432/wp_b04_review_disposable",
-        "postgresql://b04_runner:database-password@db.example.test:5432/wp_b04_review_disposable",
-        "postgresql+psycopg2://b04_runner:database-password@db.example.test:5432/wp_b04_review_disposable",
-        "postgresql+psycopg://b04_runner:database-password@db1,db2:5432/wp_b04_review_disposable",
-        "postgresql+psycopg://b04_runner:database-password@/wp_b04_review_disposable?host=/tmp",
-        "postgresql+psycopg://b04_runner:database-password@db.example.test:5432/wp_b04_review_disposable#fragment",
-        "postgresql+psycopg://:database-password@db.example.test:5432/wp_b04_review_disposable",
-        "postgresql+psycopg://b04_runner:database-password@db.example.test/wp_b04_review_disposable",
-        "postgresql+psycopg://b04_runner:database-password@db.example.test:5432/",
+        "mysql+pymysql://b04_runner:database-password@127.0.0.1:5432/wp_b04_r18_baseline_disposable",
+        "postgresql://b04_runner:database-password@127.0.0.1:5432/wp_b04_r18_baseline_disposable",
+        "postgresql+psycopg2://b04_runner:database-password@127.0.0.1:5432/wp_b04_r18_baseline_disposable",
+        "postgresql+psycopg://b04_runner:database-password@db1,db2:5432/wp_b04_r18_baseline_disposable",
+        "postgresql+psycopg://b04_runner:database-password@/wp_b04_r18_baseline_disposable?host=/tmp",
+        "postgresql+psycopg://b04_runner:database-password@127.0.0.1:5432/wp_b04_r18_baseline_disposable#fragment",
+        "postgresql+psycopg://:database-password@127.0.0.1:5432/wp_b04_r18_baseline_disposable",
+        "postgresql+psycopg://b04_runner:database-password@127.0.0.1/wp_b04_r18_baseline_disposable",
+        "postgresql+psycopg://b04_runner:database-password@127.0.0.1:5432/",
     ],
 )
 def test_b04_disposable_005_rejects_non_postgresql_or_ambiguous_urls(
@@ -123,13 +124,13 @@ def test_b04_disposable_006_accepts_exact_name_and_returns_sanitized_identity() 
 
     assert identity == DatabaseIdentity(
         database=VALID_DATABASE,
-        host="db.example.test",
+        host="127.0.0.1",
         port=5432,
         username="b04_runner",
     )
     assert asdict(identity) == {
         "database": VALID_DATABASE,
-        "host": "db.example.test",
+        "host": "127.0.0.1",
         "port": 5432,
         "username": "b04_runner",
     }
@@ -155,21 +156,34 @@ class _FakeConnection:
         return _ScalarResult(self.server_version_num)
 
 
-def test_b04_disposable_007_accepts_only_postgresql_16_through_injected_connection() -> None:
-    connection = _FakeConnection("160005")
+def test_b04_r18_version_001_accepts_postgresql_18() -> None:
+    connection = _FakeConnection("180003")
 
-    assert assert_postgresql_16(connection) == 16
+    assert assert_postgresql_18(connection) == PostgresVersion(
+        server_version_num=180003,
+        major=18,
+    )
     assert connection.statements == ["SHOW server_version_num"]
 
 
-@pytest.mark.parametrize("server_version_num", ["150009", "170001", "invalid", None])
-def test_b04_disposable_008_rejects_non_16_or_malformed_postgresql_major(
+@pytest.mark.parametrize("server_version_num", ["160014", "170009", "190001"])
+def test_b04_r18_version_002_rejects_every_non_18_major(
     server_version_num: object,
 ) -> None:
     connection = _FakeConnection(server_version_num)
 
-    with pytest.raises(ValueError):
-        assert_postgresql_16(connection)
+    with pytest.raises(ValueError, match="B04-DISPOSABLE-POSTGRESQL-18"):
+        assert_postgresql_18(connection)
+
+
+@pytest.mark.parametrize("server_version_num", ["invalid", None, True, "18003"])
+def test_b04_r18_version_003_rejects_malformed_version(
+    server_version_num: object,
+) -> None:
+    connection = _FakeConnection(server_version_num)
+
+    with pytest.raises(ValueError, match="B04-DISPOSABLE-POSTGRESQL-VERSION"):
+        assert_postgresql_18(connection)
 
 
 @pytest.mark.parametrize(
@@ -216,15 +230,13 @@ def test_b04_disposable_010_rejects_production_alias_name_segments(
         "wp_b04_systematic_review_disposable",
     ],
 )
-def test_b04_disposable_011_accepts_non_alias_substrings(database_name: str) -> None:
-    identity = assert_disposable_database(
-        VALID_URL.replace(VALID_DATABASE, database_name),
-        opt_in="YES",
-        ownership_token=VALID_TOKEN,
+def test_b04_r18_disposable_011_rejects_every_other_well_shaped_name(
+    database_name: str,
+) -> None:
+    _assert_rejected(
+        database_url=VALID_URL.replace(VALID_DATABASE, database_name),
         expected_database=database_name,
     )
-
-    assert identity.database == database_name
 
 
 def test_b04_disposable_012_hides_sqlalchemy_parse_canary_from_error_surface(
@@ -274,3 +286,15 @@ def test_b04_disposable_013_rejects_literal_query_marker_before_parsing(
     suffix: str,
 ) -> None:
     _assert_rejected(database_url=f"{VALID_URL}{suffix}")
+
+
+@pytest.mark.parametrize(
+    "host",
+    ["localhost", "[::1]", "db.example.test", "192.0.2.10"],
+)
+def test_b04_r18_disposable_014_rejects_every_non_exact_loopback_host(
+    host: str,
+) -> None:
+    _assert_rejected(
+        database_url=VALID_URL.replace("127.0.0.1", host),
+    )

@@ -30,6 +30,9 @@ psycopg 3, SHA-256, canonical JSON.
 - Fingerprint format: `2`; supported PostgreSQL major: `18`.
 - Canonical scope: 5 schemas, 73 tables, 15 governed seeds.
 - Seven PG16 artifacts and their hashes from the specification are immutable.
+- PG16 and PG18 evidence JSON/SHA-256 files use repository-canonical LF bytes enforced
+  by `.gitattributes`; worktree bytes must equal the corresponding Git blobs even when
+  global `core.autocrlf=true`.
 - Working DB, application `.env`, application tests and B-04B are forbidden.
 - Migration freeze remains active.
 - No stage, commit, push, Docker cleanup or evidence promotion without a separate
@@ -52,6 +55,45 @@ Python:
 ```powershell
 $PythonExe = "D:\WeldPassport\.worktrees\project-control-center-mvp\09_Разработка\.venv\Scripts\python.exe"
 ```
+
+---
+
+### Pre-Task 1: Canonical evidence byte gate
+
+**Files:**
+
+- Create: `.gitattributes`
+- Modify:
+  `docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_SPEC.md`
+- Modify:
+  `docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_IMPLEMENTATION_PLAN.md`
+- Modify:
+  `docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_CLAUDE_CODE_PROMPT.md`
+
+- [ ] **Step 1: Enforce LF without changing Git blobs**
+
+Apply `text eol=lf` only to JSON/SHA-256 evidence under
+`migrations/baselines/canonical_baseline_v1/`. Rematerialize the seven PG16 worktree
+files from `HEAD`; do not alter their Git blob contents.
+
+- [ ] **Step 2: Verify canonical identity**
+
+For every PG16 artifact, require:
+
+```text
+worktree SHA-256 == HEAD Git blob SHA-256 == specification SHA-256
+CRLF count == 0
+```
+
+- [ ] **Step 3: Re-run the baseline suite**
+
+```powershell
+& $PythonExe -m pytest migration_contract_tests -q
+git diff --check
+```
+
+Stop before Task 1 unless the suite is GREEN and Git reports no diff for the seven
+PG16 artifacts.
 
 ---
 

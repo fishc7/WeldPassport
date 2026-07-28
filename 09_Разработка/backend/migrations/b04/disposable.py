@@ -13,6 +13,12 @@ from sqlalchemy.exc import ArgumentError
 _DISPOSABLE_DATABASE_RE = re.compile(
     r"^wp_b04_[a-z0-9][a-z0-9_]*_disposable$"
 )
+_R18_DISPOSABLE_DATABASES = frozenset(
+    {
+        "wp_b04_r18_historical_disposable",
+        "wp_b04_r18_baseline_disposable",
+    }
+)
 _PROHIBITED_DATABASES = frozenset(
     {"postgres", "template0", "template1", "weldpassport"}
 )
@@ -30,6 +36,14 @@ class DatabaseIdentity:
     host: str
     port: int
     username: str
+
+
+@dataclass(frozen=True, slots=True)
+class PostgresVersion:
+    """Exact sanitized PostgreSQL version observed during endpoint preflight."""
+
+    server_version_num: int
+    major: int
 
 
 def _is_secret_like(value: str | None) -> bool:
@@ -106,11 +120,14 @@ def assert_disposable_database(
         or not isinstance(database, str)
     ):
         _reject("URL-IDENTITY")
+    if host != "127.0.0.1":
+        _reject("HOST")
 
     if database != expected_database:
         _reject("DATABASE-MISMATCH")
     if (
         database in _PROHIBITED_DATABASES
+        or database not in _R18_DISPOSABLE_DATABASES
         or not _DISPOSABLE_DATABASE_RE.fullmatch(database)
         or _PRODUCTION_ALIAS_SEGMENTS.intersection(database.split("_"))
     ):
@@ -124,8 +141,8 @@ def assert_disposable_database(
     )
 
 
-def assert_postgresql_16(connection: Any) -> int:
-    """Require PostgreSQL 16 from an already-open, injected connection."""
+def assert_postgresql_18(connection: Any) -> PostgresVersion:
+    """Require PostgreSQL 18 and return its exact numeric server version."""
     try:
         raw_version = connection.exec_driver_sql("SHOW server_version_num").scalar_one()
         if isinstance(raw_version, bool):
@@ -133,10 +150,11 @@ def assert_postgresql_16(connection: Any) -> int:
         version = str(raw_version)
         if not re.fullmatch(r"[0-9]{6,}", version):
             raise ValueError
-        major = int(version) // 10_000
+        server_version_num = int(version)
+        major = server_version_num // 10_000
     except (AttributeError, TypeError, ValueError):
         raise ValueError("B04-DISPOSABLE-POSTGRESQL-VERSION") from None
 
-    if major != 16:
-        _reject("POSTGRESQL-16")
-    return major
+    if major != 18:
+        _reject("POSTGRESQL-18")
+    return PostgresVersion(server_version_num=server_version_num, major=major)

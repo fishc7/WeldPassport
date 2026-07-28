@@ -12,15 +12,27 @@ from typing import Any, Mapping, Sequence
 import pytest
 
 import migrations.b04.verify_baseline as verify_runner
+from migrations.b04.evidence import (
+    PG16_ARTIFACT_SHA256,
+    PG18_EVIDENCE_ID,
+    PG18_EXPECTED_ARTIFACTS,
+    validate_evidence_index,
+)
+from migrations.b04.manifest import canonical_json_bytes
 from migrations.b04.verify_baseline import VerificationConfig, VerificationError, verify_equivalence
 from migrations.b04.verify_baseline import _historical_environment
 from migrations.b04.seeds import seed_manifest
-from migrations.b04.disposable import DatabaseIdentity
+from migrations.b04.disposable import DatabaseIdentity, PostgresVersion
 
 
-_HISTORICAL_URL = "postgresql+psycopg://runner:history-pass@127.0.0.1:5432/wp_b04_historical_disposable"
-_BASELINE_URL = "postgresql+psycopg://runner:baseline-pass@127.0.0.1:5432/wp_b04_baseline_disposable"
+_HISTORICAL_URL = "postgresql+psycopg://runner:history-pass@127.0.0.1:5432/wp_b04_r18_historical_disposable"
+_BASELINE_URL = "postgresql+psycopg://runner:baseline-pass@127.0.0.1:5432/wp_b04_r18_baseline_disposable"
 _TOKEN = "B04-ownership-token-2026"
+_IMPLEMENTATION_SHA = "a" * 40
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
+_CANONICAL_ARTIFACT_DIR = (
+    _BACKEND_ROOT / "migrations" / "baselines" / "canonical_baseline_v1"
+)
 _FINGERPRINT = {
     "tables": [
         {"schema": "hr", "name": "worker_roles", "indexes": [{"name": "uq_hr_worker_roles_active_scope"}]}
@@ -56,7 +68,14 @@ class _Connection:
 
 
 def _config(
-    tmp_path: Path, events: list[str], *, fail_at: str | None = None, fail_repeat_fingerprint: bool = False
+    tmp_path: Path,
+    events: list[str],
+    *,
+    fail_at: str | None = None,
+    fail_repeat_fingerprint: bool = False,
+    historical_version: int = 180003,
+    baseline_version: int = 180003,
+    implementation_sha: str = _IMPLEMENTATION_SHA,
 ) -> VerificationConfig:
     command = _CommandAdapter(events, fail_at)
 
@@ -65,13 +84,25 @@ def _config(
         if fail_at == events[-1]:
             raise ValueError(f"failure:{events[-1]}")
         return DatabaseIdentity(
-            database="wp_b04_historical_disposable" if url == _HISTORICAL_URL else "wp_b04_baseline_disposable",
+            database="wp_b04_r18_historical_disposable" if url == _HISTORICAL_URL else "wp_b04_r18_baseline_disposable",
             host="127.0.0.1", port=5432, username="runner",
         )
 
     def connect(url: str) -> _Connection:
         events.append("connect:historical" if url == _HISTORICAL_URL else "connect:baseline")
         return _Connection("historical" if url == _HISTORICAL_URL else "baseline")
+
+    def version(connection: _Connection) -> PostgresVersion:
+        label = f"version:{connection.database}"
+        events.append(label)
+        if fail_at == label:
+            raise ValueError(f"failure:{label}")
+        number = (
+            historical_version
+            if connection.database == "historical"
+            else baseline_version
+        )
+        return PostgresVersion(server_version_num=number, major=18)
 
     baseline_fingerprint_count = 0
 
@@ -92,20 +123,36 @@ def _config(
         if fail_at == events[-1]:
             raise RuntimeError(f"failure:{events[-1]}")
 
+    artifact_root = tmp_path
+    evidence_dir = artifact_root / "postgresql-18"
+    evidence_dir.mkdir(exist_ok=True)
+    for name in PG16_ARTIFACT_SHA256:
+        (artifact_root / name).write_bytes(
+            (_CANONICAL_ARTIFACT_DIR / name).read_bytes()
+        )
+    index_path = artifact_root / "evidence-index.json"
+    index_path.write_bytes(
+        (_CANONICAL_ARTIFACT_DIR / "evidence-index.json").read_bytes()
+    )
+
     return VerificationConfig(
         historical_url=_HISTORICAL_URL,
         baseline_url=_BASELINE_URL,
         destructive_opt_in="YES",
         ownership_token=_TOKEN,
-        historical_expected_database="wp_b04_historical_disposable",
-        baseline_expected_database="wp_b04_baseline_disposable",
+        historical_expected_database="wp_b04_r18_historical_disposable",
+        baseline_expected_database="wp_b04_r18_baseline_disposable",
         source_sha="6c56f99edbd4e7346264ee14658d2076b5fd0775",
-        expected_fingerprint_path=tmp_path / "expected-fingerprint.json",
-        expected_fingerprint_sha256_path=tmp_path / "expected-fingerprint.sha256",
-        report_path=tmp_path / "verification-report.json",
+        implementation_sha=implementation_sha,
+        contract_path=evidence_dir / "contract.json",
+        expected_fingerprint_path=evidence_dir / "expected-fingerprint.json",
+        expected_fingerprint_sha256_path=evidence_dir / "expected-fingerprint.sha256",
+        report_path=evidence_dir / "verification-report.json",
+        evidence_index_path=index_path,
         command_runner=command,
         connection_factory=connect,
         safety_validator=safety,
+        version_validator=version,
         fingerprint_extractor=fingerprint,
         absence_checker=absence,
         fingerprint_serializer=lambda _: b'{"b04":"fingerprint"}\n',
@@ -115,28 +162,71 @@ def _config(
     )
 
 
-def test_b04_verify_001_runs_exact_fail_closed_sequence_and_writes_accepted_artifacts(tmp_path: Path) -> None:
+def test_b04_r18_report_001_is_pending_not_authorizing(tmp_path: Path) -> None:
     events: list[str] = []
     config = _config(tmp_path, events)
 
     report = verify_equivalence(config)
 
     assert events == [
-        "safety:historical", "safety:baseline", "historical-upgrade", "connect:historical",
+        "safety:historical", "safety:baseline",
+        "connect:historical", "version:historical",
+        "connect:baseline", "version:baseline",
+        "historical-upgrade", "connect:historical",
         "fingerprint:historical", "baseline-upgrade", "connect:baseline", "fingerprint:baseline",
         "baseline-downgrade", "connect:baseline", "absence:baseline", "baseline-reupgrade",
         "connect:baseline", "fingerprint:baseline",
     ]
     assert report.status == "B04A_VERIFIED"
+    assert report.evidence_id == PG18_EVIDENCE_ID
+    assert report.implementation_sha == _IMPLEMENTATION_SHA
+    assert report.postgres_major == 18
+    assert report.server_version_num == 180003
+    assert report.fingerprint_format_version == 2
+    assert dict(report.shared_artifact_sha256) == dict(PG16_ARTIFACT_SHA256)
     assert report.historical_digest == report.baseline_digest == report.reupgrade_digest
     expected = config.expected_fingerprint_path.read_bytes()
     assert config.expected_fingerprint_sha256_path.read_text(encoding="ascii") == (
         f"{hashlib.sha256(expected).hexdigest()}  expected-fingerprint.json\n"
     )
     saved = json.loads(config.report_path.read_text(encoding="utf-8"))
-    assert saved["status"] == "B04A_VERIFIED"
-    assert "history-pass" not in config.report_path.read_text(encoding="utf-8")
-    assert "baseline-pass" not in config.report_path.read_text(encoding="utf-8")
+    assert set(saved) == {
+        "baseline_database",
+        "baseline_digest",
+        "canonical_table_count",
+        "evidence_id",
+        "exact_seed_count",
+        "fingerprint_format_version",
+        "governed_index",
+        "historical_database",
+        "historical_digest",
+        "implementation_sha",
+        "postgres_major",
+        "reupgrade_digest",
+        "server_version_num",
+        "shared_artifact_sha256",
+        "source_sha",
+        "status",
+    }
+    report_text = config.report_path.read_text(encoding="utf-8")
+    assert "active_authorizing" not in report_text
+    assert "history-pass" not in report_text
+    assert "baseline-pass" not in report_text
+    contract = json.loads(config.contract_path.read_text(encoding="utf-8"))
+    assert contract["implementation_sha"] == _IMPLEMENTATION_SHA
+    assert contract["shared_artifact_sha256"] == dict(PG16_ARTIFACT_SHA256)
+    updated_index = json.loads(config.evidence_index_path.read_text(encoding="utf-8"))
+    validate_evidence_index(updated_index)
+    pg18 = next(
+        item
+        for item in updated_index["evidence_sets"]
+        if item["evidence_id"] == PG18_EVIDENCE_ID
+    )
+    assert pg18["status"] == "candidate_pending_acceptance"
+    assert pg18["acceptance"] is None
+    assert set(pg18["artifact_sha256"]) == set(PG18_EXPECTED_ARTIFACTS)
+    for name, digest in pg18["artifact_sha256"].items():
+        assert hashlib.sha256((config.contract_path.parent / name).read_bytes()).hexdigest() == digest
 
 
 @pytest.mark.parametrize(
@@ -144,6 +234,8 @@ def test_b04_verify_001_runs_exact_fail_closed_sequence_and_writes_accepted_arti
     [
         ("safety:historical", "safety:baseline"),
         ("safety:baseline", "historical-upgrade"),
+        ("version:historical", "version:baseline"),
+        ("version:baseline", "historical-upgrade"),
         ("historical-upgrade", "fingerprint:historical"),
         ("fingerprint:historical", "baseline-upgrade"),
         ("baseline-upgrade", "fingerprint:baseline"),
@@ -169,6 +261,126 @@ def test_b04_verify_002_each_failure_stops_later_work_without_an_accepted_report
     assert not config.expected_fingerprint_sha256_path.exists()
 
 
+def test_b04_r18_verify_002a_rejects_exact_version_mismatch_before_alembic(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    config = _config(
+        tmp_path,
+        events,
+        historical_version=180003,
+        baseline_version=180004,
+    )
+
+    with pytest.raises(
+        VerificationError,
+        match="^B04-VERIFY-POSTGRESQL-VERSION-MISMATCH$",
+    ):
+        verify_equivalence(config)
+
+    command = config.command_runner
+    assert isinstance(command, _CommandAdapter)
+    assert command.commands == {}
+    assert events == [
+        "safety:historical",
+        "safety:baseline",
+        "connect:historical",
+        "version:historical",
+        "connect:baseline",
+        "version:baseline",
+    ]
+
+
+def test_b04_r18_verify_002aa_rejects_unapproved_exact_pg18_minor_before_alembic(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    config = _config(
+        tmp_path,
+        events,
+        historical_version=180004,
+        baseline_version=180004,
+    )
+
+    with pytest.raises(
+        VerificationError,
+        match="^B04-VERIFY-POSTGRESQL-VERSION$",
+    ):
+        verify_equivalence(config)
+
+    command = config.command_runner
+    assert isinstance(command, _CommandAdapter)
+    assert command.commands == {}
+
+
+def test_b04_r18_verify_002b_rejects_swapped_database_roles_before_connection(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    config = _config(tmp_path, events)
+    config.historical_url = _BASELINE_URL
+    config.baseline_url = _HISTORICAL_URL
+    config.historical_expected_database = "wp_b04_r18_baseline_disposable"
+    config.baseline_expected_database = "wp_b04_r18_historical_disposable"
+
+    with pytest.raises(
+        VerificationError,
+        match="^B04-VERIFY-DATABASE-IDENTITY$",
+    ):
+        verify_equivalence(config)
+
+    assert events == []
+
+
+def test_b04_r18_verify_002c_closes_both_preflight_connections_before_command(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    config = _config(tmp_path, events)
+    preflight: list[str] = []
+
+    class ConnectionContext:
+        def __init__(self, database: str) -> None:
+            self.connection = _Connection(database)
+
+        def __enter__(self) -> _Connection:
+            preflight.append(f"open:{self.connection.database}")
+            return self.connection
+
+        def __exit__(self, *_: object) -> None:
+            preflight.append(f"close:{self.connection.database}")
+
+    def connect(url: str) -> ConnectionContext:
+        database = "historical" if url == _HISTORICAL_URL else "baseline"
+        return ConnectionContext(database)
+
+    def version(connection: _Connection) -> PostgresVersion:
+        preflight.append(f"version:{connection.database}")
+        number = 180003 if connection.database == "historical" else 180004
+        return PostgresVersion(server_version_num=number, major=18)
+
+    config.connection_factory = connect
+    config.version_validator = version
+
+    with pytest.raises(
+        VerificationError,
+        match="^B04-VERIFY-POSTGRESQL-VERSION-MISMATCH$",
+    ):
+        verify_equivalence(config)
+
+    command = config.command_runner
+    assert isinstance(command, _CommandAdapter)
+    assert command.commands == {}
+    assert preflight == [
+        "open:historical",
+        "version:historical",
+        "close:historical",
+        "open:baseline",
+        "version:baseline",
+        "close:baseline",
+    ]
+
+
 def test_b04_verify_003_subprocesses_receive_only_explicit_context_environments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("POSTGRES_PASSWORD", "ordinary-secret-must-not-leak")
     monkeypatch.setenv("POSTGRES_HOST", "ordinary-host-must-not-leak")
@@ -182,7 +394,7 @@ def test_b04_verify_003_subprocesses_receive_only_explicit_context_environments(
     historical = command.environments["historical-upgrade"]
     expected_historical = {
         "POSTGRES_HOST": "127.0.0.1", "POSTGRES_PORT": "5432",
-        "POSTGRES_DB": "wp_b04_historical_disposable", "POSTGRES_USER": "runner",
+        "POSTGRES_DB": "wp_b04_r18_historical_disposable", "POSTGRES_USER": "runner",
         "POSTGRES_PASSWORD": "history-pass", "POSTGRES_SCHEMA": "test",
     }
     if os.name == "nt":
@@ -212,7 +424,7 @@ def test_b04_verify_003a_historical_environment_adds_only_windows_systemroot_and
 
     assert environment == {
         "POSTGRES_HOST": "127.0.0.1", "POSTGRES_PORT": "5432",
-        "POSTGRES_DB": "wp_b04_historical_disposable", "POSTGRES_USER": "runner",
+        "POSTGRES_DB": "wp_b04_r18_historical_disposable", "POSTGRES_USER": "runner",
         "POSTGRES_PASSWORD": "history-pass", "POSTGRES_SCHEMA": "test",
         "SYSTEMROOT": "C:\\Windows",
     }
@@ -252,7 +464,7 @@ def test_b04_verify_003d_baseline_environment_is_exactly_four_variables_off_wind
     assert environment == {
         "WELDPASSPORT_B04_ALLOW_DESTRUCTIVE": "YES",
         "WELDPASSPORT_B04_OWNERSHIP_TOKEN": _TOKEN,
-        "WELDPASSPORT_B04_EXPECTED_DATABASE": "wp_b04_baseline_disposable",
+        "WELDPASSPORT_B04_EXPECTED_DATABASE": "wp_b04_r18_baseline_disposable",
         "WELDPASSPORT_B04_DATABASE_URL": _BASELINE_URL,
     }
 
@@ -272,7 +484,7 @@ def test_b04_verify_003e_baseline_environment_adds_only_windows_systemroot_and_n
     assert environment == {
         "WELDPASSPORT_B04_ALLOW_DESTRUCTIVE": "YES",
         "WELDPASSPORT_B04_OWNERSHIP_TOKEN": _TOKEN,
-        "WELDPASSPORT_B04_EXPECTED_DATABASE": "wp_b04_baseline_disposable",
+        "WELDPASSPORT_B04_EXPECTED_DATABASE": "wp_b04_r18_baseline_disposable",
         "WELDPASSPORT_B04_DATABASE_URL": _BASELINE_URL,
         "SYSTEMROOT": "C:\\Windows",
     }
@@ -310,15 +522,110 @@ def test_b04_verify_005_preflights_artifacts_and_manifest_before_any_database_ac
     assert events == []
 
 
-def test_b04_verify_005a_rejects_an_existing_artifact_before_any_database_action(tmp_path: Path) -> None:
+def test_b04_verify_005a_rejects_a_partial_artifact_set_before_any_database_action(tmp_path: Path) -> None:
     events: list[str] = []
     config = _config(tmp_path, events)
     config.expected_fingerprint_sha256_path.write_text("existing", encoding="ascii")
+
+    with pytest.raises(VerificationError, match="B04-VERIFY-ARTIFACT-PARTIAL"):
+        verify_equivalence(config)
+
+    assert events == []
+
+
+def test_b04_r18_verify_005aa_rejects_an_existing_complete_artifact_set(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    config = _config(tmp_path, events)
+    for name in PG18_EXPECTED_ARTIFACTS:
+        (config.contract_path.parent / name).write_text("existing", encoding="utf-8")
 
     with pytest.raises(VerificationError, match="B04-VERIFY-ARTIFACT-EXISTS"):
         verify_equivalence(config)
 
     assert events == []
+
+
+def test_b04_r18_verify_005b_rejects_output_outside_versioned_directory(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    config = _config(tmp_path, events)
+    config.report_path = tmp_path / "verification-report.json"
+
+    with pytest.raises(VerificationError, match="B04-VERIFY-ARTIFACT-TARGET"):
+        verify_equivalence(config)
+
+    assert events == []
+
+
+def test_b04_r18_verify_005c_rejects_partial_target_set_before_database_action(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    config = _config(tmp_path, events)
+    config.contract_path.write_text("partial", encoding="utf-8")
+
+    with pytest.raises(VerificationError, match="B04-VERIFY-ARTIFACT-PARTIAL"):
+        verify_equivalence(config)
+
+    assert events == []
+
+
+def test_b04_r18_verify_005d_rejects_symlinked_evidence_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    config = _config(tmp_path, events)
+    evidence_dir = config.contract_path.parent
+    evidence_dir.rmdir()
+    external = tmp_path / "external"
+    external.mkdir()
+    try:
+        evidence_dir.symlink_to(external, target_is_directory=True)
+    except OSError:
+        original_is_symlink = Path.is_symlink
+        monkeypatch.setattr(
+            Path,
+            "is_symlink",
+            lambda path: path == evidence_dir or original_is_symlink(path),
+        )
+
+    with pytest.raises(VerificationError, match="B04-VERIFY-ARTIFACT-SYMLINK"):
+        verify_equivalence(config)
+
+    assert events == []
+
+
+def test_b04_r18_verify_005e_environment_requires_implementation_sha_and_versions_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    values = {
+        "WELDPASSPORT_B04_ALLOW_DESTRUCTIVE": "YES",
+        "WELDPASSPORT_B04_OWNERSHIP_TOKEN": _TOKEN,
+        "WELDPASSPORT_B04_HISTORICAL_URL": _HISTORICAL_URL,
+        "WELDPASSPORT_B04_BASELINE_URL": _BASELINE_URL,
+        "WELDPASSPORT_B04_HISTORICAL_EXPECTED_DATABASE": "wp_b04_r18_historical_disposable",
+        "WELDPASSPORT_B04_BASELINE_EXPECTED_DATABASE": "wp_b04_r18_baseline_disposable",
+    }
+    for name, value in values.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("WELDPASSPORT_B04_IMPLEMENTATION_SHA", raising=False)
+
+    with pytest.raises(VerificationError, match="B04-VERIFY-MISSING-ENVIRONMENT"):
+        VerificationConfig.from_environment()
+
+    monkeypatch.setenv("WELDPASSPORT_B04_IMPLEMENTATION_SHA", _IMPLEMENTATION_SHA)
+    config = VerificationConfig.from_environment()
+    assert config.implementation_sha == _IMPLEMENTATION_SHA
+    assert config.contract_path.as_posix().endswith(
+        "canonical_baseline_v1/postgresql-18/contract.json"
+    )
+    assert config.evidence_index_path.as_posix().endswith(
+        "canonical_baseline_v1/evidence-index.json"
+    )
 
 
 def test_b04_verify_006_manifest_failure_stops_before_disposable_safety(tmp_path: Path) -> None:
@@ -352,7 +659,7 @@ def test_b04_verify_006a_historical_command_uses_the_isolated_context_config(tmp
     assert command.commands["historical-upgrade"][5:] == ("upgrade", "head")
 
 
-@pytest.mark.parametrize("failed_target", ["expected-fingerprint.json", "expected-fingerprint.sha256", "verification-report.json"])
+@pytest.mark.parametrize("failed_target", list(PG18_EXPECTED_ARTIFACTS))
 def test_b04_verify_007_rolls_back_every_artifact_when_atomic_publication_fails(
     tmp_path: Path, failed_target: str
 ) -> None:
@@ -367,6 +674,7 @@ def test_b04_verify_007_rolls_back_every_artifact_when_atomic_publication_fails(
             observed_before_failure.append((
                 target.name,
                 tuple(path.name for path in (
+                    config.contract_path,
                     config.expected_fingerprint_path,
                     config.expected_fingerprint_sha256_path,
                     config.report_path,
@@ -381,11 +689,17 @@ def test_b04_verify_007_rolls_back_every_artifact_when_atomic_publication_fails(
 
     assert events[:3] == ["manifest", "safety:historical", "safety:baseline"]
     expected_earlier = {
-        "expected-fingerprint.json": (),
-        "expected-fingerprint.sha256": ("expected-fingerprint.json",),
-        "verification-report.json": ("expected-fingerprint.json", "expected-fingerprint.sha256"),
+        "contract.json": (),
+        "expected-fingerprint.json": ("contract.json",),
+        "expected-fingerprint.sha256": ("contract.json", "expected-fingerprint.json"),
+        "verification-report.json": (
+            "contract.json",
+            "expected-fingerprint.json",
+            "expected-fingerprint.sha256",
+        ),
     }
     assert observed_before_failure == [(failed_target, expected_earlier[failed_target])]
+    assert not config.contract_path.exists()
     assert not config.expected_fingerprint_path.exists()
     assert not config.expected_fingerprint_sha256_path.exists()
     assert not config.report_path.exists()
@@ -404,9 +718,32 @@ def test_b04_verify_008_racing_foreign_artifact_is_never_overwritten_or_deleted(
     with pytest.raises(VerificationError, match="B04-VERIFY-ARTIFACT-PUBLISH"):
         verify_equivalence(config)
 
-    assert config.expected_fingerprint_path.read_bytes() == b"foreign-race-artifact"
+    assert config.contract_path.read_bytes() == b"foreign-race-artifact"
+    assert not config.expected_fingerprint_path.exists()
     assert not config.expected_fingerprint_sha256_path.exists()
     assert not config.report_path.exists()
+
+
+def test_b04_r18_verify_008b_index_failure_rolls_back_artifacts_and_preserves_prior_index(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    config = _config(tmp_path, events)
+    config.manifest_verifier = lambda *_: None
+    prior_index = config.evidence_index_path.read_bytes()
+
+    def fail_index(_: Path, __: Path) -> None:
+        raise OSError("injected index replacement failure")
+
+    config.index_replacer = fail_index
+    with pytest.raises(VerificationError, match="B04-VERIFY-ARTIFACT-PUBLISH"):
+        verify_equivalence(config)
+
+    assert config.evidence_index_path.read_bytes() == prior_index
+    assert all(
+        not (config.contract_path.parent / name).exists()
+        for name in PG18_EXPECTED_ARTIFACTS
+    )
 
 
 def test_b04_verify_008a_repeat_baseline_fingerprint_failure_stops_before_artifact_publication(tmp_path: Path) -> None:

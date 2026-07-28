@@ -44,6 +44,7 @@ disposable PG18 БД и подготовить отдельный immutable evid
 ## Разрешено
 
 - изменять только файлы, перечисленные в implementation plan;
+- поддерживать `.gitattributes`-контракт `eol=lf` для versioned evidence JSON/SHA-256;
 - TDD-правки B-04 disposable guard, candidate context, fingerprint и verifier;
 - добавить strict versioned evidence/index contracts;
 - выполнять pure `migration_contract_tests` и `compileall`;
@@ -147,6 +148,7 @@ git diff --check
 Обязательно отдельно доказать:
 
 - hashes семи PG16 artifacts не изменились;
+- worktree bytes семи PG16 artifacts совпадают с Git blobs и не содержат CRLF;
 - `migrations/versions` не изменён;
 - baseline candidate не изменён;
 - source cut и manifest совпадают;

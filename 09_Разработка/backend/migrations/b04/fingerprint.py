@@ -1,4 +1,4 @@
-"""Fail-closed PostgreSQL 16 catalog fingerprint for B-04 verification only."""
+"""Fail-closed PostgreSQL 18 catalog fingerprint v2 for B-04 verification only."""
 
 from __future__ import annotations
 
@@ -18,15 +18,15 @@ if TYPE_CHECKING:
 
 
 CANONICAL_SCHEMAS = ("engineering", "hr", "project", "quality", "welding")
-FINGERPRINT_FORMAT_VERSION = 1
-SUPPORTED_POSTGRES_MAJOR = 16
+FINGERPRINT_FORMAT_VERSION = 2
+SUPPORTED_POSTGRES_MAJOR = 18
 _PARAMS = {"schemas": list(CANONICAL_SCHEMAS)}
 _FORBIDDEN = frozenset({"oid", "owner", "acl", "statistics", "stats", "row_count", "storage", "last_value", "is_called", "created_at", "updated_at"})
 _DOLLAR = re.compile(r"\$(?:[^\W\d]\w*)?\$", re.UNICODE)
 
 
 class FingerprintError(ValueError):
-    """Observed data is outside the frozen B-04 PostgreSQL 16 contract."""
+    """Observed data is outside the frozen B-04 PostgreSQL 18 contract."""
 
 
 def normalize_deparsed_expression(value: str | None) -> str | None:

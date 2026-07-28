@@ -12,7 +12,7 @@ from alembic import context
 from sqlalchemy import create_engine, inspect, pool
 
 from app.shared.canonical_metadata import canonical_metadata
-from migrations.b04.disposable import assert_disposable_database, assert_postgresql_16
+from migrations.b04.disposable import assert_disposable_database, assert_postgresql_18
 from migrations.canonical_boundary import include_name, include_object, make_include_object
 
 
@@ -20,6 +20,14 @@ DATABASE_URL_ENV = "WELDPASSPORT_B04_DATABASE_URL"
 ALLOW_DESTRUCTIVE_ENV = "WELDPASSPORT_B04_ALLOW_DESTRUCTIVE"
 OWNERSHIP_TOKEN_ENV = "WELDPASSPORT_B04_OWNERSHIP_TOKEN"
 EXPECTED_DATABASE_ENV = "WELDPASSPORT_B04_EXPECTED_DATABASE"
+EXPECTED_DATABASE = "wp_b04_r18_baseline_disposable"
+
+
+def _expected_database() -> str:
+    value = os.environ.get(EXPECTED_DATABASE_ENV)
+    if value != EXPECTED_DATABASE:
+        raise ValueError("B04-DISPOSABLE-EXPECTED-DATABASE")
+    return value
 
 
 def run_migrations_offline() -> None:
@@ -28,7 +36,7 @@ def run_migrations_offline() -> None:
         database_url,
         opt_in=os.environ.get(ALLOW_DESTRUCTIVE_ENV),
         ownership_token=os.environ.get(OWNERSHIP_TOKEN_ENV),
-        expected_database=os.environ.get(EXPECTED_DATABASE_ENV),
+        expected_database=_expected_database(),
     )
     context.configure(
         url=database_url,
@@ -51,7 +59,7 @@ def run_migrations_online() -> None:
         database_url,
         opt_in=os.environ.get(ALLOW_DESTRUCTIVE_ENV),
         ownership_token=os.environ.get(OWNERSHIP_TOKEN_ENV),
-        expected_database=os.environ.get(EXPECTED_DATABASE_ENV),
+        expected_database=_expected_database(),
     )
     connectable = create_engine(
         database_url,
@@ -60,7 +68,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        assert_postgresql_16(connection)
+        assert_postgresql_18(connection)
         fk_aware_include_object = make_include_object(inspect(connection))
         connection.commit()
         context.configure(

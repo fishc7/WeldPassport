@@ -42,17 +42,20 @@ head новые migration revisions отсутствуют.
 
 ## 3. Неизменяемый PG16 evidence
 
-Следующие семь файлов являются historical evidence и не изменяются ни на один байт:
+Следующие семь файлов являются historical evidence и не изменяются ни на один байт.
+Их SHA-256 вычисляется по каноническим bytes Git blobs с LF. Репозиторный
+`.gitattributes` закрепляет `eol=lf` для JSON/SHA-256 evidence, поэтому clean checkout
+обязан быть byte-identical Git blob независимо от `core.autocrlf`:
 
 | Artifact | SHA-256 |
 |---|---|
-| `cut.json` | `edcc5c1d44cf1a67aed327a18db107be3ecc769ad52cc8cee32b12a902ea5d4f` |
-| `expected-fingerprint.json` | `287460f0745dfbf70ce2c5d1ca39082bdf97a1e8518a1961a06d537e8f6a1827` |
-| `expected-fingerprint.sha256` | `7c4b871337bbe3beed9102ad071c828c8bad5219c65f6a291bc15ea1eb8f2a62` |
-| `frozen-revision-manifest.json` | `623baf93e438eadc57ae61643a7eccb7e4bf0411ca4cf4a6ae1c9c629014a314` |
-| `frozen-revision-manifest.sha256` | `f862dda44d97c89289eacb4f2aba274be3403cc6429b7eccc25a4bc3b47d2cde` |
-| `seed-manifest.json` | `d286f1bd92e1ac862861acc9456fe80f05d006afcfb37abeb69559df535055c4` |
-| `verification-report.json` | `a430d781f440ba2ff3fb03d0395d6ea4ae1ae6262bc351173620f39392d3abab` |
+| `cut.json` | `6ca7959ae2f25c6d9c0c9b02272aacda34a09e035515fcb25773cba9f5bd46dc` |
+| `expected-fingerprint.json` | `ce2cd0613eab20da8d0a93d8caf675aa32fce932d909dfa219533b0c12dfc9f6` |
+| `expected-fingerprint.sha256` | `c4ac2c98c18778a9428dbeeb0e53246279daa7837e2b1673596b3d5148353b1e` |
+| `frozen-revision-manifest.json` | `8e791f4204b3b68b2dfb7ac8409f3b55124547a9df4e8c5487e128b66a22ec8d` |
+| `frozen-revision-manifest.sha256` | `7f9531008ba5d1fcb3ed2544fb3da1212aad9ec4dd98c343090e1586c0d69eaa` |
+| `seed-manifest.json` | `64aa1533c00f940405ed7fd7cbee7a60d831f5f952ec56961034f0b5570b679d` |
+| `verification-report.json` | `563d65195cd1e381acccccf7caa31c48b09ef22fb2fda12235d705e1fbfd8487` |
 
 Их статус в resolver:
 
@@ -66,8 +69,9 @@ PG16 fingerprint v1 digest
 
 ## 4. Границы реализации
 
-Разрешено изменять только B-04 verification tooling, его pure contract tests и новый
-versioned PG18 evidence subtree.
+Разрешено изменять только B-04 verification tooling, его pure contract tests, новый
+versioned PG18 evidence subtree и репозиторный `.gitattributes`, закрепляющий
+канонические LF bytes evidence.
 
 Запрещено:
 

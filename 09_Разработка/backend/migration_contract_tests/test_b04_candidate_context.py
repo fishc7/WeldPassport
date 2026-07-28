@@ -86,6 +86,7 @@ def test_b04_context_002_uses_only_explicit_b04_environment_contract() -> None:
     }
     assert "settings" not in source
     assert "migrations.versions" not in source
+    assert "wp_b04_r18_baseline_disposable" in source
 
 
 def test_b04_context_003_has_no_socket_settings_revision_or_secret_output_paths() -> None:
@@ -221,7 +222,7 @@ def test_b04_context_010_runtime_db_reuses_orm_base_without_creating_an_engine()
 
         config = types.ModuleType("app.shared.config")
         config.settings = types.SimpleNamespace(
-            database_url="postgresql+psycopg://safe:password@host:5432/wp_b04_review_disposable",
+            database_url="postgresql+psycopg://safe:password@host:5432/wp_b04_r18_baseline_disposable",
             postgres_schema="test",
         )
         sys.modules["app.shared.config"] = config
@@ -249,17 +250,17 @@ def test_b04_context_011_executes_online_safety_and_major_checks_in_order() -> N
         import sqlalchemy
 
         events = []
-        database_url = "postgresql+psycopg://runner:password@host:5432/wp_b04_review_disposable"
+        database_url = "postgresql+psycopg://runner:password@127.0.0.1:5432/wp_b04_r18_baseline_disposable"
         os.environ.update({{
             "WELDPASSPORT_B04_DATABASE_URL": database_url,
             "WELDPASSPORT_B04_ALLOW_DESTRUCTIVE": "YES",
             "WELDPASSPORT_B04_OWNERSHIP_TOKEN": "B04-owner-token-2026",
-            "WELDPASSPORT_B04_EXPECTED_DATABASE": "wp_b04_review_disposable",
+            "WELDPASSPORT_B04_EXPECTED_DATABASE": "wp_b04_r18_baseline_disposable",
         }})
 
         class Result:
             def scalar_one(self):
-                return "160005"
+                return "180003"
 
         class Connection:
             def exec_driver_sql(self, statement):
@@ -339,18 +340,18 @@ def test_b04_context_011_executes_online_safety_and_major_checks_in_order() -> N
 
         import migrations.b04.disposable as disposable
         original_safety = disposable.assert_disposable_database
-        original_major = disposable.assert_postgresql_16
+        original_version = disposable.assert_postgresql_18
 
         def safety(*args, **kwargs):
             events.append(["safety", args[0], kwargs["opt_in"], kwargs["expected_database"]])
             return original_safety(*args, **kwargs)
 
-        def major(value):
-            events.append(["major"])
-            return original_major(value)
+        def version(value):
+            events.append(["version"])
+            return original_version(value)
 
         disposable.assert_disposable_database = safety
-        disposable.assert_postgresql_16 = major
+        disposable.assert_postgresql_18 = version
 
         spec = importlib.util.spec_from_file_location("candidate_online", r"{ENV_PATH}")
         module = importlib.util.module_from_spec(spec)
@@ -360,10 +361,10 @@ def test_b04_context_011_executes_online_safety_and_major_checks_in_order() -> N
     )
 
     assert result == [
-        ["safety", "postgresql+psycopg://runner:password@host:5432/wp_b04_review_disposable", "YES", "wp_b04_review_disposable"],
-        ["engine", "postgresql+psycopg://runner:password@host:5432/wp_b04_review_disposable", "NullPool", {"connect_timeout": 10}],
+        ["safety", "postgresql+psycopg://runner:password@127.0.0.1:5432/wp_b04_r18_baseline_disposable", "YES", "wp_b04_r18_baseline_disposable"],
+        ["engine", "postgresql+psycopg://runner:password@127.0.0.1:5432/wp_b04_r18_baseline_disposable", "NullPool", {"connect_timeout": 10}],
         ["connect"],
-        ["major"],
+        ["version"],
         ["show", "SHOW server_version_num"],
         ["inspect"],
         ["make_include_object"],
@@ -385,17 +386,17 @@ def test_b04_context_011a_does_not_commit_when_include_object_preflight_fails() 
         import sqlalchemy
 
         events = []
-        database_url = "postgresql+psycopg://runner:password@host:5432/wp_b04_review_disposable"
+        database_url = "postgresql+psycopg://runner:password@127.0.0.1:5432/wp_b04_r18_baseline_disposable"
         os.environ.update({{
             "WELDPASSPORT_B04_DATABASE_URL": database_url,
             "WELDPASSPORT_B04_ALLOW_DESTRUCTIVE": "YES",
             "WELDPASSPORT_B04_OWNERSHIP_TOKEN": "B04-owner-token-2026",
-            "WELDPASSPORT_B04_EXPECTED_DATABASE": "wp_b04_review_disposable",
+            "WELDPASSPORT_B04_EXPECTED_DATABASE": "wp_b04_r18_baseline_disposable",
         }})
 
         class Result:
             def scalar_one(self):
-                return "160005"
+                return "180003"
 
         class Connection:
             def exec_driver_sql(self, statement):
@@ -464,7 +465,7 @@ def test_b04_context_011a_does_not_commit_when_include_object_preflight_fails() 
     )
 
     assert result == [
-        ["engine", "postgresql+psycopg://runner:password@host:5432/wp_b04_review_disposable", "NullPool", {"connect_timeout": 10}],
+        ["engine", "postgresql+psycopg://runner:password@127.0.0.1:5432/wp_b04_r18_baseline_disposable", "NullPool", {"connect_timeout": 10}],
         ["connect"],
         ["show", "SHOW server_version_num"],
         ["inspect"],
@@ -483,12 +484,12 @@ def test_b04_context_012_executes_offline_with_validated_url_and_no_engine() -> 
         import sqlalchemy
 
         events = []
-        database_url = "postgresql+psycopg://runner:password@host:5432/wp_b04_review_disposable"
+        database_url = "postgresql+psycopg://runner:password@127.0.0.1:5432/wp_b04_r18_baseline_disposable"
         os.environ.update({{
             "WELDPASSPORT_B04_DATABASE_URL": database_url,
             "WELDPASSPORT_B04_ALLOW_DESTRUCTIVE": "YES",
             "WELDPASSPORT_B04_OWNERSHIP_TOKEN": "B04-owner-token-2026",
-            "WELDPASSPORT_B04_EXPECTED_DATABASE": "wp_b04_review_disposable",
+            "WELDPASSPORT_B04_EXPECTED_DATABASE": "wp_b04_r18_baseline_disposable",
         }})
         sqlalchemy.create_engine = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("engine forbidden"))
 
@@ -549,7 +550,7 @@ def test_b04_context_012_executes_offline_with_validated_url_and_no_engine() -> 
     )
 
     assert result == [
-        ["safety", "postgresql+psycopg://runner:password@host:5432/wp_b04_review_disposable", "YES", "wp_b04_review_disposable"],
+        ["safety", "postgresql+psycopg://runner:password@127.0.0.1:5432/wp_b04_r18_baseline_disposable", "YES", "wp_b04_r18_baseline_disposable"],
         ["configure"],
         ["begin"],
         ["run"],
