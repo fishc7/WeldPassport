@@ -10,9 +10,17 @@
 
 Используй отдельный worktree
 `D:\WeldPassport\.worktrees\b04a-r18-reverification` и branch
-`codex/b04a-r18-reverification` от documentation commit `4c93a3b`, чей родитель —
-code baseline `e87800e771f5a39bd55cd745c532657c89f06516`. Если ancestry, clean status или
-source cut не совпадают, остановись.
+`codex/b04a-r18-reverification` от clean documentation head, который содержит
+accepted planning commit `a7bdaf813822bf242309be64b369c8968eef9463`.
+Цепочка обязательных ancestors:
+
+```text
+a7bdaf813822bf242309be64b369c8968eef9463
+  → 4c93a3bac94272ae454ca1423d135df2d5e38bc3
+  → e87800e771f5a39bd55cd745c532657c89f06516
+```
+
+Если ancestry, clean status или source cut не совпадают, остановись.
 
 ## Цель
 

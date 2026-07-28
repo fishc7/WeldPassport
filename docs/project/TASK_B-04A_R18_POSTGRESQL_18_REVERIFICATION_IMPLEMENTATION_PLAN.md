@@ -18,7 +18,10 @@ psycopg 3, SHA-256, canonical JSON.
 
 - Implementation code baseline:
   `e87800e771f5a39bd55cd745c532657c89f06516`.
-- Documentation parent: `4c93a3bac94272ae454ca1423d135df2d5e38bc3`.
+- ADR-030 decision commit:
+  `4c93a3bac94272ae454ca1423d135df2d5e38bc3`.
+- Required accepted documentation ancestor:
+  `a7bdaf813822bf242309be64b369c8968eef9463`.
 - Schema source cut:
   `6c56f99edbd4e7346264ee14658d2076b5fd0775`.
 - Frozen graph: 31 revisions; root `20260702_02_hr_core`; head
