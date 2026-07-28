@@ -10,7 +10,7 @@
 План развития WeldPassport. Машиночитаемое состояние выполнения —
 `docs/project/PROJECT_STATUS.yaml`; постатейный статус — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]].
 
-## Текущий этап (обновлено 2026-07-24)
+## Текущий этап (обновлено 2026-07-28)
 
 **Инженерный контур, WeldOperation, термообработка и ядро контроля качества (Tasks 1–7,
 8A–8F, 9A–9C) реализованы.** Идёт **Task 9D — Quality / Defect Management**: блоки
@@ -27,6 +27,14 @@ Task 10A завершён commit `c1b551e` от 2026-07-24.
 2026-07-24. Revision 27, person-level SoD, evidence-bearing grant/snapshot и dual-role
 warning прошли PostgreSQL-приёмку и полный backend regression (`1590 passed`).
 
+**B-04A — Canonical Baseline Build & Verification** технически завершён и принят
+без Git commit (`accepted_uncommitted`). Для source commit
+`6c56f99edbd4e7346264ee14658d2076b5fd0775` на PostgreSQL 16.14 доказана
+эквивалентность historical, clean baseline и re-upgrade: 73 canonical tables,
+15 governed seeds, fingerprint
+`ce2cd0613eab20da8d0a93d8caf675aa32fce932d909dfa219533b0c12dfc9f6`;
+pure suite — `246 passed, 1 skipped`.
+
 Реализовано и задокументировано (полный перечень — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]):
 
 - `hr.workers`, `hr.worker_roles` — ОК (`/api/v1/hr`);
@@ -42,21 +50,30 @@ warning прошли PostgreSQL-приёмку и полный backend regressio
 
 ## Следующий этап
 
-### 0. Test DB Safety Interlock — завершён
+### 0. B-04A — принят без commit; B-04B — blocked
+
+- B-04A evidence опубликовано вне активного `migrations/versions`;
+- active migration graph, version marker и рабочая БД не изменены;
+- migration freeze остаётся активным;
+- следующий Git-шаг — отдельное подтверждение commit B-04A;
+- B-04B repository cut, marker transfer и adoption не начинать до maintenance
+  readiness и отдельного решения.
+
+### 1. Test DB Safety Interlock — завершён
 
 - ADR-029 вводит fail-closed guard до первого подключения integration pytest и Alembic;
 - pure acceptance: focused `10 passed`, migration contracts `45 passed`;
 - application regression намеренно не запускался;
 - реализация опубликована в commit `2046384`;
 - interlock не заменяет полный TEST-DB Foundation и не меняет зависимость ADR-025:
-  далее отдельно проектируются B-04 и runtime compatibility profile.
+  B-04A принят, а B-04B и runtime compatibility profile остаются отдельными этапами.
 
-### 1. Task 10A — завершён
+### 2. Task 10A — завершён
 
 - 10A-R/10A-1/10A-1R/10A-2/10A-2R/10A-3 реализованы, приняты и зафиксированы (`c1b551e`);
 - AS-02 не включён в Task 10A; архитектура AS-02 принята отдельно в ADR-028.
 
-### 2. AS-02 — завершён
+### 3. AS-02 — завершён
 
 - person-level SoD для `SUBMIT → RETURN/DECIDE`;
 - evidence-bearing `AuthorizationGrant` и immutable `authorization_context`;
@@ -65,7 +82,7 @@ warning прошли PostgreSQL-приёмку и полный backend regressio
   [[docs/project/TASK_AS_02_QUALITY_DECISION_RBAC_IMPLEMENTATION_PLAN|Implementation Plan]]
   завершены; PostgreSQL rehearsal `27 → 26 → 27` и полный regression успешны.
 
-### 3. Завершить Task 9D (Quality / Defect Management)
+### 4. Завершить Task 9D (Quality / Defect Management)
 
 - остаток блока **9D-4** — `ProductionHold` / `ProductionHoldRelease`, вычисляемый quality
   state `Joint`;
@@ -74,18 +91,18 @@ warning прошли PostgreSQL-приёмку и полный backend regressio
 - **9D-7** — API, permissions и интеграционные тесты контура 9D;
 - **9D-8** — Architecture consolidation Task 9D.
 
-### 4. Электронная документация (ADR-018)
+### 5. Электронная документация (ADR-018)
 
 - document lifecycle, versioning, snapshots, templates, official document issuance;
 - код, миграции и API пока не создавались.
 
-### 5. Вывод legacy
+### 6. Вывод legacy
 
 - миграция `desktop_ok` на `hr` + `welding`;
 - ETL из `РАБОТНИКИ` / `СВАРЩИКИ`;
 - снятие роутера `workforce`.
 
-### 6. Закрытие истории стыка
+### 7. Закрытие истории стыка
 
 - периодика КСС;
 - сведение производственной, контрольной и документальной истории стыка в единую

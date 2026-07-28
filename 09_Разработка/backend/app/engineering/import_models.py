@@ -39,7 +39,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.engineering import import_workflow as iw
 from app.engineering.models import ENGINEERING_SCHEMA, _in_check
 from app.projects.models import PROJECT_SCHEMA
-from app.shared.db import Base
+from app.shared.orm import Base
 
 _JOINTS = f"{ENGINEERING_SCHEMA}.joints.id"
 _WELD_OPS = f"{ENGINEERING_SCHEMA}.weld_operations.id"

@@ -39,7 +39,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.quality.defect_models import DEFECT_ROOTS_TABLE, QUALITY_SCHEMA
-from app.shared.db import Base
+from app.shared.orm import Base
 
 DEFECT_DISPOSITIONS_TABLE = "defect_dispositions"
 DEFECT_DISPOSITION_EVENTS_TABLE = "defect_disposition_events"

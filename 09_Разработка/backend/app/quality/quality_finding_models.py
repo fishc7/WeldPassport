@@ -45,7 +45,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.engineering.models import ENGINEERING_SCHEMA
 from app.projects.models import PROJECT_SCHEMA
 from app.quality import quality_finding_workflow as qfw
-from app.shared.db import Base
+from app.shared.orm import Base
 
 # QUALITY_SCHEMA дублирует app.quality.models.QUALITY_SCHEMA намеренно: этот модуль
 # должен импортироваться независимо (models реэкспортирует классы в конце файла —

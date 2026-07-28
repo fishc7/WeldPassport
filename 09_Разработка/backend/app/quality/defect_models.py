@@ -46,7 +46,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.engineering.models import ENGINEERING_SCHEMA
 from app.quality import defect_workflow as dw
-from app.shared.db import Base
+from app.shared.orm import Base
 
 # Дублируется намеренно (как в quality_finding_models): независимый импорт модуля.
 QUALITY_SCHEMA = "quality"

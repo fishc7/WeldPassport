@@ -66,7 +66,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.engineering.models import ENGINEERING_SCHEMA
 from app.projects.models import PROJECT_SCHEMA
 from app.quality.engineering_evaluation_models import REVISIONS_TABLE
-from app.shared.db import Base
+from app.shared.orm import Base
 
 # Дублируется намеренно (как в остальных модулях quality): независимый импорт модуля.
 QUALITY_SCHEMA = "quality"
@@ -223,12 +223,12 @@ class QualityDecision(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    review_submitted_by_worker_id: Mapped[int | None] = mapped_column(Integer)
     approved_by_worker_id: Mapped[int | None] = mapped_column(Integer)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     approved_role: Mapped[str | None] = mapped_column(String(40))
 
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    review_submitted_by_worker_id: Mapped[int | None] = mapped_column(Integer)
 
 
 class QualityDecisionBasis(Base):

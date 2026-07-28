@@ -7,7 +7,7 @@ from importlib import import_module
 from sqlalchemy import MetaData
 from sqlalchemy.exc import NoReferencedTableError
 
-from app.shared.db import Base
+from app.shared.orm import Base
 
 
 CANONICAL_SCHEMAS: frozenset[str] = frozenset(

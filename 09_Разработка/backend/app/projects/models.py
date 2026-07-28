@@ -22,7 +22,7 @@ from sqlalchemy.dialects.postgresql import ARRAY as PGARRAY
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.shared.db import Base
+from app.shared.orm import Base
 
 PROJECT_SCHEMA = "project"
 
