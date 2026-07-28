@@ -1,9 +1,10 @@
 from collections.abc import Generator
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.shared.config import settings
+from app.shared.orm import Base
 
 SCHEMA = settings.postgres_schema
 
@@ -21,10 +22,6 @@ def _set_search_path(dbapi_connection, _record):
 
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-
-
-class Base(DeclarativeBase):
-    pass
 
 
 def get_db() -> Generator[Session, None, None]:

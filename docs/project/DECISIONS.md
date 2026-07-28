@@ -4099,6 +4099,22 @@ Adoption, TEST-DB Foundation и отдельную Task runtime compatibility pr
 ещё не реализованы. Настоящий архитектурный этап не изменяет backend, models, migrations,
 API или tests.
 
+Отдельная актуализация реализации 2026-07-28, не изменяющая исторический снимок ADR
+выше: B-03 завершён ранее; B-04A Canonical Baseline
+Build & Verification завершён и зафиксирован implementation commit
+`4487127a3042cf6a8ba003b85cffd143dc920f0e` (`done`). Source commit
+`6c56f99edbd4e7346264ee14658d2076b5fd0775`; PostgreSQL 16.14; historical,
+baseline и re-upgrade fingerprints равны
+`ce2cd0613eab20da8d0a93d8caf675aa32fce932d909dfa219533b0c12dfc9f6`;
+верифицированы 73 canonical tables и 15 governed seeds; disposable equivalence
+завершена кодом `B04-EQUIVALENCE-EVIDENCE-OK`, pure suite —
+`246 passed, 1 skipped`.
+
+Это не является B-04B/adoption: active migration graph и действующий marker не
+изменены, рабочая БД не затрагивалась, migration freeze остаётся активным.
+B-04B, TEST-DB Foundation и runtime profile не реализованы; старт B-04B требует
+отдельной maintenance readiness и отдельного решения.
+
 ---
 
 ## ADR-026. AI Data Access & Analytics Layer

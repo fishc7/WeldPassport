@@ -30,7 +30,7 @@ from app.quality.method_assignment_workflow import (
     ASSIGNMENT_STATUSES,
     INSPECTION_METHOD_CODES,
 )
-from app.shared.db import Base
+from app.shared.orm import Base
 
 QUALITY_SCHEMA = "quality"
 

@@ -21,7 +21,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.hr.models import HR_SCHEMA
-from app.shared.db import Base
+from app.shared.orm import Base
 
 WELDING_SCHEMA = "welding"
 
@@ -47,7 +47,9 @@ class Welder(Base):
         nullable=False,
     )
     stamp_code: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, default="active", server_default="active"
+    )
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -103,7 +105,7 @@ class WelderAdmission(Base):
     )
     stamp_code: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     admission_status: Mapped[str] = mapped_column(
-        Text, nullable=False, default="draft", index=True
+        Text, nullable=False, default="draft", server_default="draft", index=True
     )
     welding_methods: Mapped[list] = mapped_column(JSONB, nullable=False)
     material_groups: Mapped[list] = mapped_column(JSONB, nullable=False)

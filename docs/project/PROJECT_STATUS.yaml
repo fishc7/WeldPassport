@@ -1,15 +1,15 @@
 project: WeldPassport
-current_stage: test_db_safety_interlock_done
-current_branch: codex/test-db-safety
-updated_at: 2026-07-24
+current_stage: b04a_done
+current_branch: codex/b04a-baseline
+updated_at: 2026-07-28
 
 # Источник фактического статуса Tasks с коммитами — docs/project/TASK_REGISTRY.md.
 # Этот файл — машиночитаемая сводка по модулям для панелей/скриптов.
 
 summary:
   total_progress: 77
-  current_focus: "TEST-DB-SAFETY-INTERLOCK — реализован, проверен и опубликован"
-  next_action: "Отдельно спроектировать B-04 и runtime compatibility profile"
+  current_focus: "B-04A — завершён и зафиксирован commit 4487127"
+  next_action: "B-04B не начинать до maintenance readiness и отдельного решения"
 
 modules:
   - code: constitution
@@ -36,6 +36,23 @@ modules:
     branch: codex/test-db-safety
     visible: true
     note: "ADR-029, commit 2046384: guard до PostgreSQL/Alembic; focused 10 passed, migration contracts 45 passed. Полный TEST-DB Foundation остаётся после B-04."
+
+  - code: canonical_baseline_b04a
+    name: "B-04A → Canonical Baseline Build & Verification"
+    owner: "Архитектура / миграции"
+    status: done
+    progress: 100
+    branch: codex/b04a-baseline
+    visible: true
+    note: "Implementation commit 4487127a3042cf6a8ba003b85cffd143dc920f0e; source 6c56f99edbd4e7346264ee14658d2076b5fd0775; PostgreSQL 16.14; 73 tables; 15 seeds; fingerprint ce2cd0613eab20da8d0a93d8caf675aa32fce932d909dfa219533b0c12dfc9f6; equivalence OK; pure suite 246 passed, 1 skipped. Active graph/marker/working DB unchanged; migration freeze active."
+
+  - code: canonical_baseline_b04b
+    name: "B-04B → Repository Cut, Maintenance and Adoption"
+    owner: "Архитектура / эксплуатация"
+    status: planned
+    progress: 0
+    visible: true
+    note: "Blocked pending maintenance readiness и отдельного решения о старте. Repository cut, marker transfer и adoption не выполнялись."
 
   - code: hr_workers
     name: "ОК → Работники"

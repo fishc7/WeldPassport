@@ -1359,10 +1359,24 @@ ADR-025 не отменяет deprecated-статус и стратегию вы
 
 Clean PostgreSQL foundation создаётся отдельным self-contained
 `canonical_baseline_v1`. Реализация разделена на B-03 Migration Foundation, B-04 Canonical
-Baseline Adoption и TEST-DB Foundation; настоящий архитектурный этап не реализует эти
-задачи и не описывает их implementation diff. B-04 является единственным владельцем физического
+Baseline Adoption и TEST-DB Foundation. B-04 является единственным владельцем физического
 переноса `alembic_version` и adoption. Runtime composition/profile switch вынесены в
 отдельную Task `RUNTIME-LEGACY-COMPATIBILITY-PROFILE`; B-03 runtime не меняет.
+
+По состоянию на 2026-07-28 B-04A Canonical Baseline Build & Verification
+завершён и зафиксирован implementation commit
+`4487127a3042cf6a8ba003b85cffd143dc920f0e` (`done`). Для source commit
+`6c56f99edbd4e7346264ee14658d2076b5fd0775` на PostgreSQL 16.14 подтверждена
+эквивалентность historical, clean baseline и re-upgrade: 73 canonical tables,
+15 governed seeds и единый fingerprint
+`ce2cd0613eab20da8d0a93d8caf675aa32fce932d909dfa219533b0c12dfc9f6`.
+Baseline-кандидат и семь immutable evidence artifacts находятся вне активного
+`migrations/versions`.
+
+B-04A не выполняет repository cut и adoption: active migration graph, действующая
+конфигурация version marker и рабочая БД не изменены. B-04B заблокирован до
+maintenance readiness и отдельного решения о старте; migration freeze остаётся
+активным до принятого B-04B closure.
 
 До полного TEST-DB Foundation действует предварительный
 [[docs/project/ADR-029-test-db-safety-interlock|Test DB Safety Interlock]]. Integration

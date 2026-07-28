@@ -17,7 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.shared.db import Base
+from app.shared.orm import Base
 
 HR_SCHEMA = "hr"
 
@@ -35,7 +35,9 @@ class Department(Base):
     code: Mapped[str | None] = mapped_column(String(50))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -60,7 +62,9 @@ class Position(Base):
     code: Mapped[str | None] = mapped_column(String(50))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -110,7 +114,7 @@ class Worker(Base):
         ForeignKey(f"{HR_SCHEMA}.positions.id"),
     )
     employment_status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="active"
+        String(20), nullable=False, default="active", server_default="active"
     )
     hire_date: Mapped[date | None] = mapped_column(Date)
     dismissal_date: Mapped[date | None] = mapped_column(Date)
@@ -175,7 +179,9 @@ class WorkerRole(Base):
     scope_id: Mapped[str | None] = mapped_column(String(36))
     valid_from: Mapped[date | None] = mapped_column(Date)
     valid_to: Mapped[date | None] = mapped_column(Date)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

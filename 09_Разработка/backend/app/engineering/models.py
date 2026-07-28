@@ -74,7 +74,7 @@ from app.engineering.weld_operation_workflow import (
     WELD_STAGES,
 )
 from app.projects.models import PROJECT_SCHEMA
-from app.shared.db import Base
+from app.shared.orm import Base
 from app.welding.models import WELDING_SCHEMA
 
 ENGINEERING_SCHEMA = "engineering"
@@ -429,58 +429,10 @@ class Joint(Base):
         String(20), nullable=False, server_default="DRAFT"
     )
 
-    # ── Три версии (Task 5B, §15 ADR-011 / §3 задания) ────────────────────────
-    # record_version — concurrency (прежняя version Task 5A, переименование);
-    # approval_version — значимые инженерные/технологические данные (к ней
-    # привязаны согласования); workflow_version — переходы/блокировки/замена.
+    # record_version — concurrency (прежняя version Task 5A, переименование).
     record_version: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="1"
     )
-    approval_version: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="1"
-    )
-    workflow_version: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="1"
-    )
-
-    # ── Согласование ПТО (§5-7 ADR-011) ───────────────────────────────────────
-    pto_status: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="NOT_SUBMITTED"
-    )
-    pto_pending_reason: Mapped[str | None] = mapped_column(String(30))
-    pto_decision_method: Mapped[str | None] = mapped_column(String(20))
-    # approval_version, к которой относится текущее решение ПТО (§2 задания, §36
-    # ADR-011). Устаревшее (не равное approval_version) не активирует Joint.
-    pto_approval_version: Mapped[int | None] = mapped_column(Integer)
-    pto_decided_by: Mapped[int | None] = mapped_column(Integer)
-    pto_decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    pto_comment: Mapped[str | None] = mapped_column(Text)
-
-    # ── Согласование ОГС (§5, §8-9 ADR-011) ───────────────────────────────────
-    ogs_status: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="NOT_SUBMITTED"
-    )
-    ogs_pending_reason: Mapped[str | None] = mapped_column(String(30))
-    ogs_decision_method: Mapped[str | None] = mapped_column(String(20))
-    ogs_approval_version: Mapped[int | None] = mapped_column(Integer)
-    ogs_decided_by: Mapped[int | None] = mapped_column(Integer)
-    ogs_decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    ogs_comment: Mapped[str | None] = mapped_column(Text)
-
-    # ── Отправка на согласование / отмена / замена ────────────────────────────
-    submitted_by: Mapped[int | None] = mapped_column(Integer)
-    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    cancelled_reason: Mapped[str | None] = mapped_column(Text)
-    cancelled_by: Mapped[int | None] = mapped_column(Integer)
-    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Самоссылка замены: source → successor (§6 задания). predecessor/successor
-    # определяются по этой связи; исходный Joint не удаляется.
-    superseded_by_joint_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey(f"{ENGINEERING_SCHEMA}.joints.id", ondelete="RESTRICT"),
-    )
-    superseded_by: Mapped[int | None] = mapped_column(Integer)
-    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Инженерные поля по сторонам соединения (1/2).
     dn_1: Mapped[Decimal | None] = mapped_column(Numeric)
@@ -537,6 +489,59 @@ class Joint(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+    # ── Версии и согласования Task 5B в historical physical order ─────────────
+    # approval_version — значимые инженерные/технологические данные (к ней
+    # привязаны согласования); workflow_version — переходы/блокировки/замена.
+    approval_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1"
+    )
+    workflow_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1"
+    )
+
+    # ── Согласование ПТО (§5-7 ADR-011) ───────────────────────────────────────
+    pto_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="NOT_SUBMITTED"
+    )
+    pto_pending_reason: Mapped[str | None] = mapped_column(String(30))
+    pto_decision_method: Mapped[str | None] = mapped_column(String(20))
+    # approval_version, к которой относится текущее решение ПТО (§2 задания, §36
+    # ADR-011). Устаревшее (не равное approval_version) не активирует Joint.
+    pto_approval_version: Mapped[int | None] = mapped_column(Integer)
+    pto_decided_by: Mapped[int | None] = mapped_column(Integer)
+    pto_decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pto_comment: Mapped[str | None] = mapped_column(Text)
+
+    # ── Согласование ОГС (§5, §8-9 ADR-011) ───────────────────────────────────
+    ogs_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="NOT_SUBMITTED"
+    )
+    ogs_pending_reason: Mapped[str | None] = mapped_column(String(30))
+    ogs_decision_method: Mapped[str | None] = mapped_column(String(20))
+    ogs_approval_version: Mapped[int | None] = mapped_column(Integer)
+    ogs_decided_by: Mapped[int | None] = mapped_column(Integer)
+    ogs_decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ogs_comment: Mapped[str | None] = mapped_column(Text)
+
+    # ── Отправка на согласование / отмена / замена ────────────────────────────
+    submitted_by: Mapped[int | None] = mapped_column(Integer)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_reason: Mapped[str | None] = mapped_column(Text)
+    cancelled_by: Mapped[int | None] = mapped_column(Integer)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Самоссылка замены: source → successor (§6 задания). predecessor/successor
+    # определяются по этой связи; исходный Joint не удаляется.
+    superseded_by_joint_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            f"{ENGINEERING_SCHEMA}.joints.id",
+            ondelete="RESTRICT",
+            name="fk_engineering_joints_superseded_by_joint",
+        ),
+    )
+    superseded_by: Mapped[int | None] = mapped_column(Integer)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class JointBulkRequest(Base):

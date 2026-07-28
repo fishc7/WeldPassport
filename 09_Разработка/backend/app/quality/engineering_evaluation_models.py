@@ -42,7 +42,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.projects.models import PROJECT_SCHEMA
 from app.quality import engineering_evaluation_workflow as eew
-from app.shared.db import Base
+from app.shared.orm import Base
 
 # Дублируется намеренно (как в quality_finding_models): независимый импорт модуля.
 QUALITY_SCHEMA = "quality"

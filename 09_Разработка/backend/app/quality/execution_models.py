@@ -54,7 +54,7 @@ from app.projects.models import PROJECT_SCHEMA
 from app.quality import laboratory_conclusion_workflow as lcw
 from app.quality import method_execution_workflow as mew
 from app.quality.method_assignment_workflow import INSPECTION_METHOD_CODES
-from app.shared.db import Base
+from app.shared.orm import Base
 
 # QUALITY_SCHEMA дублирует app.quality.models.QUALITY_SCHEMA намеренно:
 # execution_models должен импортироваться независимо от models (models
@@ -755,9 +755,6 @@ class LaboratoryConclusion(Base):
 
     # ── Реквизиты документа ───────────────────────────────────────────────────
     conclusion_number: Mapped[str | None] = mapped_column(String(100))
-    # Нормализованный номер для проверки уникальности (§5 блока 9C-5); исходный
-    # номер сохраняется в conclusion_number. Заполняется сервисом при указании номера.
-    normalized_conclusion_number: Mapped[str | None] = mapped_column(String(100))
     conclusion_year: Mapped[int | None] = mapped_column(Integer)
     issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -833,6 +830,8 @@ class LaboratoryConclusion(Base):
     version: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="1"
     )
+    # Миграция 18 добавила нормализованный номер после исходной структуры таблицы.
+    normalized_conclusion_number: Mapped[str | None] = mapped_column(String(100))
 
 
 # ── Связь заключение ↔ конкретная редакция выполнения (§17 задания) ─────────────
@@ -917,9 +916,9 @@ class QualityAuditEvent(Base):
     changed_fields: Mapped[dict | None] = mapped_column(JSONB)
     previous_values: Mapped[dict | None] = mapped_column(JSONB)
     new_values: Mapped[dict | None] = mapped_column(JSONB)
-    authorization_context: Mapped[dict | None] = mapped_column(JSONB)
     reason: Mapped[str | None] = mapped_column(Text)
     actor_worker_id: Mapped[int] = mapped_column(Integer, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    authorization_context: Mapped[dict | None] = mapped_column(JSONB)
