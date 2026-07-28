@@ -1,8 +1,12 @@
 # Prompt для Claude Code / Cursor — B-04B Cut & Maintenance Adoption
 
-Начинай только от отдельно принятого B-04A head. Если нет подписанного
-`B04A_VERIFIED` evidence, совпадающих artifact digests и отдельной приёмки B-04A,
-остановись.
+> **Статус:** `BLOCKED`. Не выполнять этот prompt до отдельной приёмки
+> `B-04A-R18` и последующего verdict `READY` по Maintenance Readiness Review.
+
+Начинай только от отдельно принятого B-04A-R18 head. Если нет подписанного
+`B04A_VERIFIED` evidence блока B-04A-R18, active-authorizing fingerprint v2 для
+PostgreSQL 18.x,
+совпадающих artifact digests и отдельной приёмки B-04A-R18, остановись.
 
 ## Цель
 
@@ -14,10 +18,12 @@ maintenance adoption существующей PostgreSQL-БД.
 
 - `AGENTS.md`;
 - `docs/project/ADR-025-migration-governance-and-legacy-schema-boundary.md`;
+- `docs/project/ADR-030-postgresql-18-b04-evidence-versioning.md`;
 - `docs/project/TASK_B-04_CANONICAL_BASELINE_ADOPTION_SPEC.md`;
 - `docs/project/TASK_B-04A_BASELINE_BUILD_VERIFICATION_IMPLEMENTATION_PLAN.md`;
 - `docs/project/TASK_B-04B_CUT_MAINTENANCE_ADOPTION_IMPLEMENTATION_PLAN.md`;
-- все принятые B-04A artifacts и evidence.
+- immutable PG16 B-04A evidence со статусом `historical_non_authorizing`;
+- все принятые active-authorizing B-04A-R18 artifacts и evidence.
 
 ## Разрешено до maintenance gate
 
@@ -61,10 +67,13 @@ maintenance adoption существующей PostgreSQL-БД.
 
 Fail closed проверяет:
 
-- exact target DB identity и PostgreSQL 16.x;
+- exact target DB identity и PostgreSQL 18.x;
+- exact `server_version_num`, записанный в preflight evidence и совпадающий с
+  восстановленной rehearsal-копией;
 - maintenance approval и остановку writers/migrators;
 - custom-format backup, SHA-256 и успешный `pg_restore`;
-- accepted source/manifest/fingerprint/seed digests;
+- accepted source/manifest/fingerprint v2/seed digests;
+- `evidence-index.json`, указывающий на единственный active-authorizing PG18 evidence set;
 - historical marker: ровно одна строка head 27;
 - полное отсутствие public marker;
 - live fingerprint и 15 exact seeds;
@@ -107,7 +116,8 @@ CREATE TABLE public.alembic_version (
 
 До рабочей БД обязательно:
 
-- `pg_restore` backup в isolated PostgreSQL 16.x;
+- `pg_restore` backup в isolated PostgreSQL 18.x;
+- exact `server_version_num` restored copy совпадает с target DB;
 - fingerprint restored copy;
 - полный preflight;
 - marker transaction;
@@ -152,7 +162,7 @@ git diff --check
 
 До maintenance:
 
-1. B-04A evidence reference;
+1. B-04A-R18 active-authorizing evidence reference;
 2. список файлов и rename proof;
 3. archive checksum proof;
 4. полный diff;

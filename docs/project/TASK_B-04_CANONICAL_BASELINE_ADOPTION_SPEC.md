@@ -1,5 +1,11 @@
 # B-04 — Canonical Baseline Adoption
 
+> Версионная актуализация 2026-07-28:
+> [[docs/project/ADR-030-postgresql-18-b04-evidence-versioning|ADR-030]] фиксирует
+> PostgreSQL 18.x как target major, сохраняет PG16 B-04A evidence как
+> `historical_non_authorizing` и вводит отдельный gate B-04A-R18. До его приёмки
+> и нового Maintenance Readiness verdict `READY` B-04B остаётся `BLOCKED`.
+
 Статус: **ACCEPTED**
 
 Дата проектирования: 2026-07-24
@@ -176,16 +182,16 @@ Manifest содержит:
 
 После B-04B checksum каждого архивного файла обязан совпасть с manifest.
 
-## 8. Canonical fingerprint v1
+## 8. Versioned canonical fingerprint contracts
 
-### 8.1. Источник
+### 8.1. Fingerprint v1 — PostgreSQL 16 historical contract
 
 Authority fingerprint строится из PostgreSQL system catalogs. SQLAlchemy metadata и
 нормализованный `pg_dump --schema-only` используются только как дополнительные
 cross-checks.
 
-Fingerprint v1 фиксируется для PostgreSQL 16.x. Другой major version является stop
-condition и требует новой версии fingerprint contract.
+Fingerprint v1 фиксируется для PostgreSQL 16.x и сохраняется как исторический
+`historical_non_authorizing` contract. Он не может авторизовать B-04B.
 
 Fingerprint включает:
 
@@ -249,7 +255,19 @@ Expressions извлекаются PostgreSQL deparser functions. Нормали
 policy, enum/domain или иной class — останавливает процесс до расширения fingerprint
 contract.
 
-### 8.2. Platform allowlist
+### 8.2. Fingerprint v2 — PostgreSQL 18 target contract
+
+Fingerprint v2 строится повторно на двух disposable PostgreSQL 18.x БД в рамках
+B-04A-R18 и сохраняет ту же canonical scope, source cut, 31 revisions, baseline
+revision и seed policy. Evidence обязательно фиксирует точный `server_version_num`,
+версию fingerprint contract и digests.
+
+`evidence-index.json` указывает ровно на один active-authorizing PG18 evidence set.
+PG16 evidence остаётся immutable и не включается в authorizing resolution. Любой
+major, отличный от 18, является stop condition и требует отдельного ADR и новой
+версии fingerprint contract.
+
+### 8.3. Platform allowlist
 
 Allowlist внутри пяти canonical-схем по умолчанию пуст.
 
@@ -265,7 +283,7 @@ kind + schema + name + parent identity + definition_sha256 + reason
 
 Wildcard и правило «игнорировать объект по имени» запрещены.
 
-### 8.3. Seed policy
+### 8.4. Seed policy
 
 Для 15 defect seed-строк применяется exact-row policy:
 
@@ -315,6 +333,23 @@ B-04A disposable runner:
 Невозможность чистого historical replay является stop condition и отдельным finding.
 Переход только к metadata-сравнению запрещён.
 
+### 9.1. B-04A-R18
+
+B-04A-R18 повторяет указанный verification flow на двух owned disposable
+PostgreSQL 18.x, не изменяя baseline candidate или frozen history. Обязательное
+равенство для fingerprint format v2:
+
+```text
+historical fingerprint v2
+    == baseline fingerprint v2
+    == re-upgrade fingerprint v2
+    == postgresql-18/expected-fingerprint.json
+```
+
+Существующие PG16 artifacts не изменяются. Рабочая БД в B-04A-R18 не подключается.
+B-04B разрешается только отдельно принятым PG18 evidence, выбранным как
+`active_authorizing` в `evidence-index.json`.
+
 ## 10. Repository cut B-04B
 
 После приёмки B-04A B-04B одним scoped change:
@@ -347,7 +382,7 @@ Preflight не изменяет БД и требует:
 1. утверждённое maintenance window;
 2. действующий migration freeze;
 3. остановленные application writers и migrators;
-4. точную DB identity и PostgreSQL 16.x;
+4. точную DB identity и PostgreSQL 18.x;
 5. backup PostgreSQL custom format, созданный `pg_dump --format=custom`, и manifest с
    SHA-256;
 6. доказанный `pg_restore` этого backup в отдельную изолированную БД;
@@ -363,6 +398,10 @@ Preflight не изменяет БД и требует:
 12. 15 governed seeds совпадают точно;
 13. неизвестные canonical objects отсутствуют;
 14. активные DDL/migration sessions и долгие transactions отсутствуют.
+
+Дополнительно target DB и отдельная restored rehearsal DB обязаны иметь одинаковую
+точную `server_version_num`. Изменение target minor после rehearsal блокирует adoption
+до повторного restore/rehearsal.
 
 Успешный preflight создаёт immutable `PREPARED` evidence и одноразовый adoption token,
 связанный с DB identity, old marker и digest всех утверждённых artifacts.
@@ -469,6 +508,17 @@ credentials или персональных данных.
 - disposable safety contract доказан;
 - verification report неизменяем и полон.
 
+### B-04A-R18
+
+- PG16 evidence byte-identical и классифицирован как `historical_non_authorizing`;
+- fingerprint format version равен `2`;
+- supported PostgreSQL major равен `18`;
+- historical, baseline и re-upgrade fingerprints v2 равны;
+- PG18 evidence отделён от PG16 artifacts;
+- `evidence-index.json` не разрешает PG18 adoption до отдельной приёмки;
+- рабочая БД не подключалась;
+- отдельная приёмка B-04A-R18 завершена.
+
 ### B-04B
 
 - archive byte-identical и невидим active Alembic;
@@ -528,6 +578,11 @@ B-04A-0 source verification + freeze
   → B-04A-3 pure verification
   → B-04A-4 disposable PostgreSQL equivalence
   → B-04A acceptance
+  → ADR-030
+  → B-04A-R18 fingerprint v2 + disposable PG18 equivalence
+  → B-04A-R18 acceptance
+  → новый READ-ONLY Maintenance Readiness Review
+  → READY
   → B-04B-1 cut/adoption tooling
   → B-04B-2 restored-backup rehearsal
   → отдельное maintenance approval
@@ -586,3 +641,22 @@ Evidence опубликовано в
   только в owned disposable PostgreSQL container;
 - runtime compatibility profile и TEST-DB Foundation не входят в B-04A;
 - migration freeze остаётся активным до принятого B-04B closure.
+
+## 20. PostgreSQL 18 realignment
+
+Дата фиксации: **2026-07-28**.
+
+По ADR-030:
+
+- PostgreSQL 18.x является target major-version;
+- точная minor-версия фиксируется в evidence;
+- PG16 B-04A evidence сохраняется неизменяемым как
+  `historical_non_authorizing`;
+- source cut `6c56f99`, 31 revisions, `canonical_baseline_v1` и marker state
+  не меняются;
+- вводится отдельный planned gate B-04A-R18;
+- B-04B остаётся `BLOCKED`;
+- migration freeze остаётся active.
+
+Настоящая документальная актуализация не реализует fingerprint v2, не создаёт PG18
+evidence, не подключает рабочую БД и не разрешает repository cut/adoption.

@@ -2,20 +2,27 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status:** `BLOCKED`. Do not execute any task until B-04A-R18 is separately
+> accepted and a subsequent Maintenance Readiness Review returns `READY`.
+
 **Goal:** Активировать принятый `canonical_baseline_v1` и атомарно принять
 существующую PostgreSQL-БД через перенос version marker в `public`.
 
-**Architecture:** B-04B выполняется только после отдельной приёмки B-04A. Repository cut
-и maintenance tooling готовятся на изолированной stacked-ветке; полный процесс сначала
+**Architecture:** B-04B выполняется только после отдельной приёмки B-04A-R18.
+PG16 B-04A evidence сохраняется immutable со статусом `historical_non_authorizing`;
+авторизующим является только PG18 fingerprint v2 evidence. Repository cut и
+maintenance tooling готовятся на изолированной stacked-ветке; полный процесс сначала
 репетируется на восстановленной копии backup. Рабочая БД изменяется только отдельным
 разрешённым maintenance run.
 
-**Tech Stack:** Python 3.12, pytest 8, SQLAlchemy 2, Alembic, PostgreSQL 16,
+**Tech Stack:** Python 3.12, pytest 8, SQLAlchemy 2, Alembic, PostgreSQL 18.x,
 `pg_dump --format=custom`, `pg_restore`, SHA-256, canonical JSON.
 
 ## Global Constraints
 
-- B-04A status must be accepted with evidence digest and exact accepted head SHA.
+- B-04A-R18 status must be accepted with evidence digest and exact accepted head SHA.
+- `evidence-index.json` must identify one active-authorizing PG18 fingerprint v2
+  evidence set; PG16 evidence remains historical and non-authorizing.
 - Migration freeze remains active through B-04B closure.
 - Active historical head before adoption:
   `20260724_27_qd_rbac_sod`.
@@ -124,6 +131,8 @@ Do not commit without separate confirmation.
 Dependency-injected tests must reject:
 
 - wrong DB identity or PostgreSQL major;
+- target/restored exact `server_version_num` mismatch;
+- missing/mismatched active-authorizing fingerprint v2 evidence index;
 - missing/invalid `pg_dump` SHA-256;
 - missing successful `pg_restore` evidence;
 - source/manifest/fingerprint/seed digest mismatch;
@@ -403,7 +412,8 @@ Do not commit without separate confirmation.
 
 **Interfaces:**
 
-- Consumes a custom-format backup and isolated restored PostgreSQL 16.x target.
+- Consumes a custom-format backup and isolated restored PostgreSQL 18.x target whose
+  exact `server_version_num` matches the target DB.
 - Produces `B04B_REHEARSAL_ACCEPTED` report or a fail-closed finding.
 
 - [ ] **Step 1: Write failing orchestration tests**
@@ -445,7 +455,8 @@ Only against the approved isolated restored copy:
 Expected:
 
 - restore verified;
-- fingerprint equals B-04A expected digest;
+- fingerprint equals B-04A-R18 active-authorizing fingerprint v2 digest;
+- restored and target `server_version_num` values match exactly;
 - marker transaction and postflight pass;
 - recovery from a separately restored backup is demonstrated;
 - report status `B04B_REHEARSAL_ACCEPTED`.
@@ -465,6 +476,7 @@ Expected: zero failures.
 Stop. Present all evidence and request a new explicit confirmation that identifies:
 
 - exact target database;
+- exact target/restored `server_version_num`;
 - maintenance window;
 - backup digest;
 - accepted rehearsal digest;

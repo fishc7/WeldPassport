@@ -49,6 +49,11 @@ flowchart LR
 - Celery или Dramatiq для фоновых задач;
 - Redis как очередь и краткоживущий кэш.
 
+Целевая policy по [[docs/project/ADR-030-postgresql-18-b04-evidence-versioning|ADR-030]]:
+единственная поддерживаемая major-версия — PostgreSQL 18.x. Точная minor-версия
+фиксируется в operational evidence; B-04 verification/adoption допускаются только
+по versioned fingerprint/evidence contract соответствующей major-версии.
+
 ### Frontend
 
 - React + TypeScript;
@@ -1377,6 +1382,13 @@ B-04A не выполняет repository cut и adoption: active migration graph
 конфигурация version marker и рабочая БД не изменены. B-04B заблокирован до
 maintenance readiness и отдельного решения о старте; migration freeze остаётся
 активным до принятого B-04B closure.
+
+[[docs/project/ADR-030-postgresql-18-b04-evidence-versioning|ADR-030]] сохраняет
+указанное PG16 evidence как `historical_non_authorizing` и вводит отдельный gate
+`B-04A-R18` для целевой PostgreSQL 18.x. `canonical_baseline_v1`, source cut,
+31 frozen revision и marker state не меняются. До отдельной PG18 re-verification,
+её приёмки и нового Maintenance Readiness Review B-04B остаётся `BLOCKED`, а
+migration freeze — active.
 
 До полного TEST-DB Foundation действует предварительный
 [[docs/project/ADR-029-test-db-safety-interlock|Test DB Safety Interlock]]. Integration

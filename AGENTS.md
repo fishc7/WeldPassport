@@ -84,7 +84,7 @@ Context/                   AboutMe / BusinessBrain / WorkingPreferences
 
 **Целевой стек MVP** (см. `docs/ARCHITECTURE.md`):
 
-- Backend: Python 3.12, FastAPI, SQLAlchemy 2, Alembic, Pydantic, PostgreSQL 16,
+- Backend: Python 3.12, FastAPI, SQLAlchemy 2, Alembic, Pydantic, PostgreSQL 18.x,
   Celery/Dramatiq + Redis для фоновых задач.
 - Frontend: React + TypeScript, Vite, React Query, React Hook Form, Ant Design/MUI.
 - Инфраструктура: Docker Compose, Timeweb Cloud, Nginx + TLS, Selectel Object
