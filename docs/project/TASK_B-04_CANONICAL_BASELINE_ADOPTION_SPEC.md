@@ -3,8 +3,9 @@
 > Версионная актуализация 2026-07-28:
 > [[docs/project/ADR-030-postgresql-18-b04-evidence-versioning|ADR-030]] фиксирует
 > PostgreSQL 18.x как target major, сохраняет PG16 B-04A evidence как
-> `historical_non_authorizing` и вводит отдельный gate B-04A-R18. До его приёмки
-> и нового Maintenance Readiness verdict `READY` B-04B остаётся `BLOCKED`.
+> `historical_non_authorizing` и вводит отдельный gate B-04A-R18. B-04A-R18 принят
+> 2026-07-29; до нового Maintenance Readiness verdict `READY` B-04B остаётся
+> `BLOCKED`.
 
 Статус: **ACCEPTED**
 
@@ -660,9 +661,15 @@ Evidence опубликовано в
   `historical_non_authorizing`;
 - source cut `6c56f99`, 31 revisions, `canonical_baseline_v1` и marker state
   не меняются;
-- вводится отдельный planned gate B-04A-R18;
+- B-04A-R18 принят 2026-07-29: implementation
+  `f5245ba80698bdddfc64d2071061c2299a1c20f8`, accepted evidence
+  `b34538f5ddd4ed31d8094bc5d96f42ada7d1f28d`, PostgreSQL 18.3,
+  fingerprint v2
+  `e9e5affd8544b10353f2139c6526bab819f6da2ed919eb279fc1357803e2649a`,
+  evidence status `active_authorizing`;
 - B-04B остаётся `BLOCKED`;
 - migration freeze остаётся active.
 
-Настоящая документальная актуализация не реализует fingerprint v2, не создаёт PG18
-evidence, не подключает рабочую БД и не разрешает repository cut/adoption.
+Следующий gate — новый READ-ONLY Maintenance Readiness Review. Принятое PG18
+evidence само по себе не разрешает repository cut/adoption; рабочая БД в B-04A-R18
+не подключалась.

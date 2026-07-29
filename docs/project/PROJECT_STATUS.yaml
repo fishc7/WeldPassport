@@ -1,15 +1,15 @@
 project: WeldPassport
-current_stage: b04a_r18_planned
-current_branch: codex/b04b-maintenance-readiness-review
-updated_at: 2026-07-28
+current_stage: b04a_r18_accepted_maintenance_readiness_blocked
+current_branch: codex/b04a-r18-reverification
+updated_at: 2026-07-29
 
 # Источник фактического статуса Tasks с коммитами — docs/project/TASK_REGISTRY.md.
 # Этот файл — машиночитаемая сводка по модулям для панелей/скриптов.
 
 summary:
-  total_progress: 77
-  current_focus: "B-04A-R18 spec/plan/prompt подготовлены для отдельной приёмки"
-  next_action: "Провести документальную приёмку B-04A-R18; implementation не начинать"
+  total_progress: 78
+  current_focus: "B-04A-R18 принят; B-04B остаётся BLOCKED"
+  next_action: "Провести новый READ-ONLY Maintenance Readiness Review; adoption не начинать"
 
 modules:
   - code: constitution
@@ -49,11 +49,11 @@ modules:
   - code: canonical_baseline_b04a_r18
     name: "B-04A-R18 → PostgreSQL 18 Re-verification"
     owner: "Архитектура / миграции"
-    status: planned
-    progress: 0
-    branch: codex/b04b-maintenance-readiness-review
+    status: done
+    progress: 100
+    branch: codex/b04a-r18-reverification
     visible: true
-    note: "ADR-030 ACCEPTED. Spec/plan/prompt имеют статус docs_review; implementation и PG18 evidence отсутствуют. После документальной приёмки требуются fingerprint v2, две owned disposable PG18.x и отдельная evidence-приёмка. Working DB запрещена."
+    note: "ACCEPTED 2026-07-29. Implementation f5245ba; evidence b34538f; PostgreSQL 18.3; fingerprint v2 e9e5affd8544b10353f2139c6526bab819f6da2ed919eb279fc1357803e2649a; evidence active_authorizing; 314 passed, 1 skipped. Working DB не подключалась."
 
   - code: canonical_baseline_b04b
     name: "B-04B → Repository Cut, Maintenance and Adoption"
@@ -61,7 +61,7 @@ modules:
     status: planned
     progress: 0
     visible: true
-    note: "Blocked до принятого B-04A-R18 и нового Maintenance Readiness verdict READY. Repository cut, marker transfer и adoption не выполнялись; migration freeze active."
+    note: "B-04A-R18 принят, но новый Maintenance Readiness Review ещё не дал READY. Repository cut, marker transfer и adoption не выполнялись; B-04B BLOCKED; migration freeze active."
 
   - code: hr_workers
     name: "ОК → Работники"

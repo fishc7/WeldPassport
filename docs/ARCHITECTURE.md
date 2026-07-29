@@ -1386,8 +1386,10 @@ maintenance readiness и отдельного решения о старте; mi
 [[docs/project/ADR-030-postgresql-18-b04-evidence-versioning|ADR-030]] сохраняет
 указанное PG16 evidence как `historical_non_authorizing` и вводит отдельный gate
 `B-04A-R18` для целевой PostgreSQL 18.x. `canonical_baseline_v1`, source cut,
-31 frozen revision и marker state не меняются. До отдельной PG18 re-verification,
-её приёмки и нового Maintenance Readiness Review B-04B остаётся `BLOCKED`, а
+31 frozen revision и marker state не меняются. B-04A-R18 принят 2026-07-29:
+PostgreSQL 18.3, fingerprint v2 и PG18 evidence `active_authorizing`, accepted
+evidence commit `b34538f5ddd4ed31d8094bc5d96f42ada7d1f28d`. До нового READ-ONLY
+Maintenance Readiness Review с verdict `READY` B-04B остаётся `BLOCKED`, а
 migration freeze — active.
 
 До полного TEST-DB Foundation действует предварительный

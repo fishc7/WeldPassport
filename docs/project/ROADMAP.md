@@ -55,22 +55,21 @@ pure suite — `246 passed, 1 skipped`.
 
 ## Следующий этап
 
-### 0. B-04A-R18 — следующий gate; B-04B — blocked
+### 0. B-04A-R18 принят; Maintenance Readiness — следующий gate
 
 - B-04A PG16 evidence опубликовано вне активного `migrations/versions` и сохраняется
   неизменяемым как historical non-authorizing;
 - implementation commit: `4487127a3042cf6a8ba003b85cffd143dc920f0e`;
 - active migration graph, version marker и рабочая БД не изменены;
 - migration freeze остаётся активным;
-- следующий отдельный блок — B-04A-R18: fingerprint v2, две disposable PostgreSQL 18.x,
-  immutable PG18 evidence и отдельная приёмка;
-- B-04A-R18
-  [[docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_SPEC|specification]],
-  [[docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_IMPLEMENTATION_PLAN|implementation plan]]
-  и [[docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_CLAUDE_CODE_PROMPT|execution prompt]]
-  подготовлены для отдельной документальной приёмки;
-- B-04B repository cut, marker transfer и adoption не начинать до maintenance
-  readiness `READY`, возможного только после принятия B-04A-R18.
+- B-04A-R18 принят 2026-07-29: implementation `f5245ba`, accepted evidence
+  `b34538f`, PostgreSQL 18.3, fingerprint v2
+  `e9e5affd8544b10353f2139c6526bab819f6da2ed919eb279fc1357803e2649a`;
+- PG18 evidence имеет статус `active_authorizing`; verification report —
+  `B04A_VERIFIED`; pure verification — `314 passed, 1 skipped`;
+- следующий отдельный gate — новый READ-ONLY Maintenance Readiness Review;
+- B-04B repository cut, marker transfer и adoption не начинать до нового
+  Maintenance Readiness verdict `READY`; текущий статус B-04B — `BLOCKED`.
 
 ### 1. Test DB Safety Interlock — завершён
 

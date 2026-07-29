@@ -2,7 +2,9 @@
 
 Дата: 2026-07-28
 
-Статус: **DRAFT FOR REVIEW**
+Статус: **ACCEPTED / VERIFIED**
+
+Дата приёмки: 2026-07-29
 
 Связано:
 
@@ -277,3 +279,29 @@ spec/plan/prompt acceptance
 - resolver не допускает self-authorization;
 - working DB и B-04B исключены;
 - реализация разделена на pure code review, disposable evidence и отдельную приёмку.
+
+## 12. Closure evidence
+
+B-04A-R18 принят 2026-07-29 со следующими неизменяемыми фактами:
+
+- implementation commit:
+  `f5245ba80698bdddfc64d2071061c2299a1c20f8`;
+- accepted evidence commit:
+  `b34538f5ddd4ed31d8094bc5d96f42ada7d1f28d`;
+- PostgreSQL `server_version_num = 180003` (PostgreSQL 18.3);
+- fingerprint format version: `2`;
+- historical, baseline и re-upgrade fingerprint digest:
+  `e9e5affd8544b10353f2139c6526bab819f6da2ed919eb279fc1357803e2649a`;
+- verification report status: `B04A_VERIFIED`;
+- verification report SHA-256:
+  `f2ab657c702852d68e2c58620faab1d56434088bbbab63307ded27a39d1b8c17`;
+- evidence index status: `active_authorizing`;
+- owner acceptance:
+  `repository_owner`, `2026-07-29T05:51:15Z`;
+- pure verification: `314 passed, 1 skipped`;
+- семь PG16 artifacts подтверждены byte-identical;
+- рабочая БД не подключалась и не изменялась.
+
+Принятие B-04A-R18 не разрешает B-04B автоматически. Следующий gate — новый
+READ-ONLY Maintenance Readiness Review. До его verdict `READY` B-04B остаётся
+`BLOCKED`, а migration freeze — active.
