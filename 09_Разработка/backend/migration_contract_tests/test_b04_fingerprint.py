@@ -81,11 +81,12 @@ def _base_routes() -> dict[str, list[Mapping[str, object]]]:
             {"schema": "hr", "table": "workers", "ordinal": 2, "name": "manager_id", "format_type": "uuid", "nullable": True, "collation": None, "default": None, "identity": "", "generated": ""},
         ],
         "constraints": [
-            {"schema": "hr", "table": "workers", "name": "workers_pkey", "kind": "p", "columns": ["id"], "target_schema": None, "target_table": None, "target_columns": [], "match_type": None, "update_action": None, "delete_action": None, "deferrable": False, "deferred": False, "validated": True, "nulls_not_distinct": False, "definition": "PRIMARY KEY (id)", "no_inherit": False},
-            {"schema": "hr", "table": "workers", "name": "workers_manager_key", "kind": "u", "columns": ["manager_id"], "target_schema": None, "target_table": None, "target_columns": [], "match_type": None, "update_action": None, "delete_action": None, "deferrable": True, "deferred": True, "validated": True, "nulls_not_distinct": True, "definition": "UNIQUE NULLS NOT DISTINCT (manager_id)", "no_inherit": False},
-            {"schema": "hr", "table": "workers", "name": "workers_manager_fkey", "kind": "f", "columns": ["manager_id"], "target_schema": "hr", "target_table": "workers", "target_columns": ["id"], "match_type": "s", "update_action": "a", "delete_action": "n", "deferrable": True, "deferred": False, "validated": True, "nulls_not_distinct": False, "definition": "FOREIGN KEY (manager_id) REFERENCES hr.workers(id)", "no_inherit": False},
-            {"schema": "hr", "table": "workers", "name": "workers_manager_second_fkey", "kind": "f", "columns": ["manager_id"], "target_schema": "hr", "target_table": "workers", "target_columns": ["id"], "match_type": "s", "update_action": "a", "delete_action": "n", "deferrable": True, "deferred": False, "validated": True, "nulls_not_distinct": False, "definition": "FOREIGN KEY (manager_id) REFERENCES hr.workers(id)", "no_inherit": False},
-            {"schema": "hr", "table": "workers", "name": "workers_id_check", "kind": "c", "columns": [], "target_schema": None, "target_table": None, "target_columns": [], "match_type": None, "update_action": None, "delete_action": None, "deferrable": False, "deferred": False, "validated": True, "nulls_not_distinct": False, "definition": "CHECK ( id <> '00000000-0000-0000-0000-000000000000'::uuid )", "no_inherit": True},
+            {"schema": "hr", "table": "workers", "name": "workers_id_not_null", "kind": "n", "columns": ["id"], "target_schema": None, "target_table": None, "target_columns": [], "match_type": None, "update_action": None, "delete_action": None, "deferrable": False, "deferred": False, "validated": True, "enforced": True, "nulls_not_distinct": False, "definition": "NOT NULL id", "no_inherit": False},
+            {"schema": "hr", "table": "workers", "name": "workers_pkey", "kind": "p", "columns": ["id"], "target_schema": None, "target_table": None, "target_columns": [], "match_type": None, "update_action": None, "delete_action": None, "deferrable": False, "deferred": False, "validated": True, "enforced": True, "nulls_not_distinct": False, "definition": "PRIMARY KEY (id)", "no_inherit": False},
+            {"schema": "hr", "table": "workers", "name": "workers_manager_key", "kind": "u", "columns": ["manager_id"], "target_schema": None, "target_table": None, "target_columns": [], "match_type": None, "update_action": None, "delete_action": None, "deferrable": True, "deferred": True, "validated": True, "enforced": True, "nulls_not_distinct": True, "definition": "UNIQUE NULLS NOT DISTINCT (manager_id)", "no_inherit": False},
+            {"schema": "hr", "table": "workers", "name": "workers_manager_fkey", "kind": "f", "columns": ["manager_id"], "target_schema": "hr", "target_table": "workers", "target_columns": ["id"], "match_type": "s", "update_action": "a", "delete_action": "n", "deferrable": True, "deferred": False, "validated": True, "enforced": True, "nulls_not_distinct": False, "definition": "FOREIGN KEY (manager_id) REFERENCES hr.workers(id)", "no_inherit": False},
+            {"schema": "hr", "table": "workers", "name": "workers_manager_second_fkey", "kind": "f", "columns": ["manager_id"], "target_schema": "hr", "target_table": "workers", "target_columns": ["id"], "match_type": "s", "update_action": "a", "delete_action": "n", "deferrable": True, "deferred": False, "validated": True, "enforced": True, "nulls_not_distinct": False, "definition": "FOREIGN KEY (manager_id) REFERENCES hr.workers(id)", "no_inherit": False},
+            {"schema": "hr", "table": "workers", "name": "workers_id_check", "kind": "c", "columns": [], "target_schema": None, "target_table": None, "target_columns": [], "match_type": None, "update_action": None, "delete_action": None, "deferrable": False, "deferred": False, "validated": True, "enforced": True, "nulls_not_distinct": False, "definition": "CHECK ( id <> '00000000-0000-0000-0000-000000000000'::uuid )", "no_inherit": True},
         ],
         "indexes": [
             {"schema": "hr", "table": "workers", "name": "workers_pkey", "kind": "i", "is_partition": False, "detach_pending": False, "parent_schema": None, "parent_name": None, "method": "btree", "keys": [" id "], "key_columns": ["id"], "include": [], "unique": True, "nulls_not_distinct": False, "predicate": None, "valid": True, "ready": True, "backing_constraint": "workers_pkey"},
@@ -129,7 +130,7 @@ def test_b04_r18_fingerprint_003_is_deterministic_for_named_collection_order() -
     value, _ = _extract(_base_routes())
     reordered = json.loads(json.dumps(value))
     reordered["sequences"].reverse()
-    for key in ("primary_keys_uniques", "foreign_keys", "checks", "indexes"):
+    for key in ("not_nulls", "primary_keys_uniques", "foreign_keys", "checks", "indexes"):
         reordered["tables"][0][key].reverse()
 
     assert canonicalize_fingerprint(reordered) == canonicalize_fingerprint(value)
@@ -304,6 +305,7 @@ def test_b04_fp_012_partition_and_partitioned_index_semantics_change_digest() ->
     routes = _base_routes()
     routes["classes"].append({"schema": "hr", "name": "workers_2026", "kind": "r", "rls": False, "force_rls": False, "is_partition": True, "detach_pending": False, "parent_schema": "hr", "parent_table": "workers", "partition_key": None, "bound": " FOR VALUES FROM (1) TO (2) "})
     routes["columns"].append({"schema": "hr", "table": "workers_2026", "ordinal": 1, "name": "id", "format_type": "bigint", "nullable": False, "collation": None, "default": None, "identity": "", "generated": ""})
+    routes["constraints"].append(dict(routes["constraints"][0], table="workers_2026", name="workers_2026_id_not_null"))
     routes["classes"][0] = dict(routes["classes"][0], kind="p", partition_key=" RANGE (id) ")
     routes["indexes"] = [dict(index, kind="I") for index in routes["indexes"]]
     routes["indexes"].append({"schema": "hr", "table": "workers_2026", "name": "workers_2026_pkey", "kind": "i", "is_partition": True, "detach_pending": False, "parent_schema": "hr", "parent_name": "workers_pkey", "method": "btree", "keys": [" id "], "key_columns": ["id"], "include": [], "unique": True, "nulls_not_distinct": False, "predicate": None, "valid": True, "ready": True, "backing_constraint": None})
@@ -360,6 +362,7 @@ def test_b04_fp_015_partition_topology_requires_parent_table_and_parent_index_co
     routes["indexes"] = [dict(index, kind="I") for index in routes["indexes"]]
     routes["classes"].append({"schema": "hr", "name": "workers_child", "kind": "r", "rls": False, "force_rls": False, "is_partition": True, "detach_pending": False, "parent_schema": "hr", "parent_table": "workers", "partition_key": None, "bound": "FOR VALUES FROM (1) TO (2)"})
     routes["columns"].append({"schema": "hr", "table": "workers_child", "ordinal": 1, "name": "id", "format_type": "uuid", "nullable": False, "collation": None, "default": None, "identity": "", "generated": ""})
+    routes["constraints"].append(dict(routes["constraints"][0], table="workers_child", name="workers_child_id_not_null"))
     routes["indexes"].append({"schema": "hr", "table": "workers_child", "name": "workers_child_pkey", "kind": "i", "is_partition": True, "detach_pending": False, "parent_schema": "hr", "parent_name": "workers_pkey", "method": "btree", "keys": ["id"], "key_columns": ["id"], "include": [], "unique": True, "nulls_not_distinct": False, "predicate": None, "valid": True, "ready": True, "backing_constraint": None})
     routes["indexes"].append({"schema": "hr", "table": "workers_child", "name": "workers_child_local_ix", "kind": "i", "is_partition": False, "detach_pending": False, "parent_schema": None, "parent_name": None, "method": "btree", "keys": ["id"], "key_columns": ["id"], "include": [], "unique": False, "nulls_not_distinct": False, "predicate": None, "valid": True, "ready": True, "backing_constraint": None})
     value, _ = _extract(routes)
@@ -371,6 +374,7 @@ def test_b04_fp_015_partition_topology_requires_parent_table_and_parent_index_co
         child = {"schema": "hr", "name": "workers_child", "kind": "r", "rls": False, "force_rls": False, "is_partition": True, "detach_pending": bad == "detach", "parent_schema": "hr", "parent_table": "workers" if bad != "missing_parent" else "absent", "partition_key": None, "bound": "FOR VALUES FROM (1) TO (2)"}
         broken["classes"].append(child)
         broken["columns"].append({"schema": "hr", "table": "workers_child", "ordinal": 1, "name": "id", "format_type": "uuid", "nullable": False, "collation": None, "default": None, "identity": "", "generated": ""})
+        broken["constraints"].append(dict(broken["constraints"][0], table="workers_child", name="workers_child_id_not_null"))
         if bad == "wrong_parent_kind":
             broken["classes"][0] = dict(broken["classes"][0], kind="r", partition_key=None)
         with pytest.raises(FingerprintError, match="B04-FP-(PARTITION|UNSUPPORTED-OBJECT)"):
@@ -502,3 +506,69 @@ def test_b04_fp_022_standalone_index_key_columns_must_be_local_or_expression() -
     expression_index["key_columns"] = ["absent_column"]
     with pytest.raises(FingerprintError):
         canonicalize_fingerprint(bad)
+
+
+def test_b04_fp_023_pg18_named_not_null_constraint_is_fingerprinted() -> None:
+    routes = _base_routes()
+
+    value, connection = _extract(routes)
+
+    assert value["tables"][0]["not_nulls"] == [
+        {
+            "name": "workers_id_not_null",
+            "kind": "n",
+            "column": "id",
+            "validated": True,
+            "enforced": True,
+            "no_inherit": False,
+        }
+    ]
+    assert "con.conenforced AS enforced" in connection.statements["constraints"]
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["missing", "nullable", "duplicate_column", "not_validated", "not_enforced", "no_inherit"],
+)
+def test_b04_fp_024_not_null_catalog_and_column_nullability_must_agree(mutation: str) -> None:
+    value, _ = _extract(_base_routes())
+    bad = json.loads(json.dumps(value))
+    table = bad["tables"][0]
+    not_null = table["not_nulls"][0]
+
+    if mutation == "missing":
+        table["not_nulls"] = []
+    elif mutation == "nullable":
+        table["columns"][0]["nullable"] = True
+    elif mutation == "duplicate_column":
+        table["not_nulls"].append(dict(not_null, name="workers_id_second_not_null"))
+    elif mutation == "not_validated":
+        not_null["validated"] = False
+    elif mutation == "not_enforced":
+        not_null["enforced"] = False
+    else:
+        not_null["no_inherit"] = True
+
+    with pytest.raises(FingerprintError, match="B04-FP-NOT-NULL"):
+        canonicalize_fingerprint(bad)
+
+
+def test_b04_fp_025_not_null_order_is_canonical_and_semantics_change_digest() -> None:
+    routes = _base_routes()
+    routes["columns"][1] = dict(routes["columns"][1], nullable=False)
+    routes["constraints"].append(
+        dict(
+            routes["constraints"][0],
+            name="workers_manager_id_not_null",
+            columns=["manager_id"],
+            definition="NOT NULL manager_id",
+        )
+    )
+    value, _ = _extract(routes)
+    reordered = json.loads(json.dumps(value))
+    reordered["tables"][0]["not_nulls"].reverse()
+    changed = json.loads(json.dumps(value))
+    changed["tables"][0]["not_nulls"][0]["name"] = "renamed_not_null"
+
+    assert canonicalize_fingerprint(reordered) == canonicalize_fingerprint(value)
+    assert fingerprint_digest(changed) != fingerprint_digest(value)
