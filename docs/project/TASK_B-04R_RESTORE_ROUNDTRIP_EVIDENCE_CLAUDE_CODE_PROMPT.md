@@ -1,8 +1,10 @@
 # Prompt для Claude Code / Cursor — B-04R Restore-Roundtrip Evidence
 
-> **Статус:** `PLAN ACCEPTED — awaiting owner-authorized documentation commit`.
-> Не выполнять этот prompt, пока accepted ADR/Spec/Plan/Prompt не находятся в
-> согласованном documentation commit и его SHA не подтверждён как implementation base.
+> **Статус:** `IMPLEMENTATION COMMITTED 2026-07-29 — evidence pending`.
+> Implementation base:
+> `08bc6a09974e0272ff27938511af5d4d6ba33403`.
+> DB run, evidence generation, implementation commit и B-04B остаются запрещены
+> до отдельных явных разрешений.
 
 ## Цель
 

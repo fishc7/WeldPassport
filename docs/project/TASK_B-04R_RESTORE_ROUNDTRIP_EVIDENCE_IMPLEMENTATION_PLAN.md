@@ -1,8 +1,14 @@
 # B-04R Restore-Roundtrip Evidence Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-Статус: **ACCEPTED 2026-07-29**
+Статус: **IMPLEMENTATION COMMITTED 2026-07-29 — evidence pending**
+
+Implementation base:
+`08bc6a09974e0272ff27938511af5d4d6ba33403`.
+
+Pure verification: focused `58 passed`; полный `migration_contract_tests` —
+`378 passed, 1 skipped`. DB run и генерация restore evidence не выполнялись.
 
 **Goal:** Реализовать отдельный fail-closed PostgreSQL 18 restore-roundtrip
 evidence contract, который сохраняет live evidence byte-identical, доказывает
@@ -92,7 +98,7 @@ if (-not $PythonExe -or -not (Test-Path -LiteralPath $PythonExe -PathType Leaf))
   artifact bytes.
 - Produces: recorded base SHA and before-hash manifest used again in Task 6.
 
-- [ ] **Step 1: Verify the execution base**
+- [x] **Step 1: Verify the execution base**
 
 ```powershell
 git status --short
@@ -104,7 +110,7 @@ Expected: only explicitly authorized B-04R implementation files may be dirty; th
 ancestor check returns exit code 0. Stop if the accepted documentation is not in
 `HEAD`.
 
-- [ ] **Step 2: Record immutable before-hashes**
+- [x] **Step 2: Record immutable before-hashes**
 
 Compute SHA-256 for:
 
@@ -127,7 +133,7 @@ migrations/b04/fingerprint.py
 Save the command output outside the repository as review evidence. Do not create a
 repository file.
 
-- [ ] **Step 3: Run the pre-change pure suite**
+- [x] **Step 3: Run the pre-change pure suite**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests -q
@@ -165,7 +171,7 @@ Expected: the current accepted suite passes. Stop before Task 1 on any failure.
   - `build_accepted_restore_index(value: Mapping[str, object], *, accepted_at_utc: str, accepted_by: str, verification_report_sha256: str) -> dict[str, object]`;
   - `resolve_restore_authorizing_evidence(value: Mapping[str, object], artifact_root: Path, live_index: Mapping[str, object]) -> RestoreEvidenceSet`.
 
-- [ ] **Step 1: Write exact-key failing tests**
+- [x] **Step 1: Write exact-key failing tests**
 
 The initial repository index is exactly:
 
@@ -199,7 +205,7 @@ def test_b04r_index_002_runner_transition_stops_pending_acceptance() -> None:
     assert updated["evidence_sets"][0]["acceptance"] is None
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests/test_b04_restore_evidence.py -q
@@ -208,7 +214,7 @@ def test_b04r_index_002_runner_transition_stops_pending_acceptance() -> None:
 Expected: collection fails because `migrations.b04.restore_evidence` and
 `restore-evidence-index.json` do not exist.
 
-- [ ] **Step 3: Implement exact states and immutable models**
+- [x] **Step 3: Implement exact states and immutable models**
 
 ```python
 RESTORE_EVIDENCE_ID = "postgresql-18-restore-roundtrip-v1"
@@ -295,7 +301,7 @@ _RESTORE_REPORT_KEYS = frozenset({
 })
 ```
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests/test_b04_restore_evidence.py -q
@@ -303,7 +309,7 @@ _RESTORE_REPORT_KEYS = frozenset({
 
 Expected: all Task 1 tests pass.
 
-- [ ] **Step 5: Review checkpoint**
+- [x] **Step 5: Review checkpoint**
 
 Provide the new index, public interfaces, focused test result and diff. Do not stage
 or commit.
@@ -327,7 +333,7 @@ or commit.
   - `build_typed_equivalence_map(live: Mapping[str, object], restored: Mapping[str, object]) -> dict[str, object]`;
   - `assert_typed_equivalence(live: Mapping[str, object], restored: Mapping[str, object], equivalence_map: Mapping[str, object]) -> None`.
 
-- [ ] **Step 1: Write failing typed-diff tests**
+- [x] **Step 1: Write failing typed-diff tests**
 
 Construct minimal fingerprint-v2 fixtures with named tables, CHECK definitions and
 partial-index predicates. Test:
@@ -353,7 +359,7 @@ def test_b04r_diff_002_rejects_every_non_expression_difference(mutation: str) ->
 Also reject missing/extra/duplicate map entries, mutated pointers, wildcard/regex
 keys, wrong object identity and either expression SHA mismatch.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests/test_b04_restore_evidence.py -q
@@ -361,7 +367,7 @@ keys, wrong object identity and either expression SHA mismatch.
 
 Expected: new tests fail because the typed-diff functions are absent.
 
-- [ ] **Step 3: Implement recursive leaf comparison**
+- [x] **Step 3: Implement recursive leaf comparison**
 
 Walk dictionaries by exact key and lists by exact length/index. A differing leaf is
 allowed only when its RFC 6901 pointer resolves to one of:
@@ -398,12 +404,12 @@ After validating every mapped pointer and hash,
 with one sentinel and requires complete JSON equality. It rejects non-string leaves,
 `null` predicates, path prefixes, wildcards and any unmapped difference.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run the focused file and confirm all negative mutations fail with
 `B04R-DIFF-KIND` or `B04R-DIFF-MAP`.
 
-- [ ] **Step 5: Review checkpoint**
+- [x] **Step 5: Review checkpoint**
 
 Provide fixtures demonstrating one accepted deparser-only difference and one rejected
 structural difference. Do not stage or commit.
@@ -465,7 +471,7 @@ class PreflightResult:
     live_evidence: EvidenceSet
 ```
 
-- [ ] **Step 1: Write failing safety and ordering tests**
+- [x] **Step 1: Write failing safety and ordering tests**
 
 Add only these names to `_R18_DISPOSABLE_DATABASES`:
 
@@ -488,7 +494,7 @@ def test_b04r_readonly_001_begin_is_first_working_statement() -> None:
     assert snapshot.transaction_read_only == "on"
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests/test_b04_disposable_safety.py migration_contract_tests/test_b04_restore_roundtrip_runner.py -q
@@ -496,7 +502,7 @@ def test_b04r_readonly_001_begin_is_first_working_statement() -> None:
 
 Expected: new disposable names are rejected and the runner module is absent.
 
-- [ ] **Step 3: Implement explicit configuration**
+- [x] **Step 3: Implement explicit configuration**
 
 `RestoreVerificationConfig.from_environment()` requires every value below and rejects
 missing/empty inputs without reading application `.env`:
@@ -522,7 +528,7 @@ The config exposes injectable `connection_factory`, `command_runner`,
 `version_probe`, `safety_validator`, `fingerprint_extractor`, `temporary_writer`,
 `artifact_linker` and `index_replacer`.
 
-- [ ] **Step 4: Implement read-only and disposable database preflight**
+- [x] **Step 4: Implement read-only and disposable database preflight**
 
 The first working statement is the explicit read-only transaction. Within that same
 transaction read:
@@ -544,12 +550,12 @@ For both disposable endpoints run socket-free safety first, then require current
 operator ownership and zero non-system relations before any restore command.
 Compare actual `(database, host, port, username)` identities and reject any collision.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run both focused files. Confirm every failure stops before the first tool command and
 only stable secret-free `B04R-*` codes escape.
 
-- [ ] **Step 6: Review checkpoint**
+- [x] **Step 6: Review checkpoint**
 
 Provide statement-order evidence, exact environment-name list and negative identity
 matrix. Do not stage, commit or connect to a real DB.
@@ -576,7 +582,7 @@ matrix. Do not stage, commit or connect to a real DB.
   - sanitized `DatabaseSnapshot` for working, first restore and second restore;
   - exact backup SHA-256 and tool version evidence.
 
-- [ ] **Step 1: Write failing command-sequence tests**
+- [x] **Step 1: Write failing command-sequence tests**
 
 Use fake adapters; no PostgreSQL process is started. Assert exact phase order:
 
@@ -601,7 +607,7 @@ Assert no command contains a password or full DSN. Connection values are passed 
 through a fresh exact `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`
 environment. Command arguments contain only sanitized database names and paths.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests/test_b04_restore_roundtrip_runner.py -q
@@ -609,7 +615,7 @@ environment. Command arguments contain only sanitized database names and paths.
 
 Expected: command-sequence and fixed-point tests fail.
 
-- [ ] **Step 3: Implement archive validation and restore commands**
+- [x] **Step 3: Implement archive validation and restore commands**
 
 Require an existing regular non-symlink backup, compute SHA-256, and validate custom
 format using the exact configured `pg_restore --list` executable before connecting
@@ -645,7 +651,7 @@ pg_restore --exit-on-error --no-owner --no-privileges
 Delete only the exact runner-created temporary second archive in `finally`; never
 delete the operator-provided backup or either database.
 
-- [ ] **Step 4: Implement snapshot equality**
+- [x] **Step 4: Implement snapshot equality**
 
 First and second snapshots must have identical:
 
@@ -664,12 +670,12 @@ and first restore and verify it again between live and second restore. Any diffe
 outside the two expression kinds stops with `B04R-DIFF-KIND`; fixed-point mismatch
 stops with `B04R-FIXED-POINT`.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run the focused runner tests. Confirm injected failure at every phase prevents all
 later phases and prevents artifact publication.
 
-- [ ] **Step 6: Review checkpoint**
+- [x] **Step 6: Review checkpoint**
 
 Provide the exact fake command trace, backup ownership boundary and fixed-point
 negative test. Do not run the real DB sequence.
@@ -704,7 +710,7 @@ negative test. Do not run the real DB sequence.
   - updated `restore-evidence-index.json` with
     `candidate_pending_acceptance`.
 
-- [ ] **Step 1: Write failing artifact-graph tests**
+- [x] **Step 1: Write failing artifact-graph tests**
 
 Tests assert:
 
@@ -720,11 +726,11 @@ index hashes all five artifacts. Reject partial targets, existing targets, symli
 directories, noncanonical JSON, path escape, racing foreign files and publication
 failure at every link/replace step.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run both B-04R focused files. Expected: artifact construction/publication tests fail.
 
-- [ ] **Step 3: Build exact contract and report**
+- [x] **Step 3: Build exact contract and report**
 
 Contract records exact source/implementation SHA, server/tool versions, live and
 restore digests, equivalence-map digest, existing immutable live/shared artifact
@@ -740,7 +746,7 @@ Report contains database names only—no hosts, ports, users, DSNs or credential
 records backup SHA, three fingerprint digests, marker/count results, two typed
 difference counts and all three boolean proof fields.
 
-- [ ] **Step 4: Implement create-new atomic publication**
+- [x] **Step 4: Implement create-new atomic publication**
 
 Write all six new payloads to same-directory temporary files. Hard-link each of five
 artifacts create-new, then atomically replace only the new restore index. On failure,
@@ -750,7 +756,7 @@ racing foreign file and the prior index.
 The runner calls only `build_pending_restore_index()`. It has no code path to
 `build_accepted_restore_index()`.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests/test_b04_restore_evidence.py migration_contract_tests/test_b04_restore_roundtrip_runner.py -q
@@ -758,7 +764,7 @@ The runner calls only `build_pending_restore_index()`. It has no code path to
 
 Expected: all focused tests pass, including atomic rollback and secret scans.
 
-- [ ] **Step 6: Review checkpoint**
+- [x] **Step 6: Review checkpoint**
 
 Provide schemas, digest graph, rollback matrix and focused results. Stop for code
 acceptance; DB run and evidence generation remain forbidden.
@@ -784,7 +790,7 @@ acceptance; DB run and evidence generation remain forbidden.
 - Consumes: Tasks 1–5 accepted code.
 - Produces: complete code-review packet and an explicit stop before operator DB work.
 
-- [ ] **Step 1: Run focused and full pure suites**
+- [x] **Step 1: Run focused and full pure suites**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests/test_b04_restore_evidence.py -q
@@ -796,7 +802,7 @@ git diff --check
 
 No application, PostgreSQL or Alembic tests run at this gate.
 
-- [ ] **Step 2: Recompute immutable after-hashes**
+- [x] **Step 2: Recompute immutable after-hashes**
 
 Recompute the Pre-Task list and require byte equality for every existing artifact and
 `fingerprint.py`. Also require no changes under:
@@ -807,7 +813,7 @@ migrations/baseline_candidates/
 migrations/archive/
 ```
 
-- [ ] **Step 3: Perform secret and scope scans**
+- [x] **Step 3: Perform secret and scope scans**
 
 ```powershell
 rg -n "(postgresql\\+psycopg://|password=|PGPASSWORD|WELDPASSPORT_B04R_.*URL)" `
@@ -821,13 +827,13 @@ git diff
 transient environments; no credential value, DSN, hostname or username may occur in
 an artifact/report fixture.
 
-- [ ] **Step 4: Update status without claiming operational acceptance**
+- [x] **Step 4: Update status without claiming operational acceptance**
 
 Set B-04R to `implemented / awaiting operator verification` only after code acceptance.
 B-04B remains `planned / blocked`. Do not mark evidence active and do not report
 Maintenance Readiness `READY`.
 
-- [ ] **Step 5: Prepare the code acceptance packet**
+- [x] **Step 5: Prepare the code acceptance packet**
 
 Return:
 
@@ -842,7 +848,7 @@ Return:
 9. proposed commit split;
 10. explicit stop before stage/commit/DB run.
 
-- [ ] **Step 6: Stop for separate decisions**
+- [x] **Step 6: Stop for separate decisions**
 
 After code acceptance, the remaining gates are strictly separate:
 

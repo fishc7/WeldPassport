@@ -1,5 +1,5 @@
 project: WeldPassport
-current_stage: b04r_implementation_preflight
+current_stage: b04r_db_run_authorization
 current_branch: codex/b04b-maintenance-readiness-review
 updated_at: 2026-07-29
 
@@ -8,8 +8,8 @@ updated_at: 2026-07-29
 
 summary:
   total_progress: 78
-  current_focus: "ADR-031, B-04R Spec и implementation plan приняты"
-  next_action: "Получить отдельное разрешение на documentation commit, подтвердить base SHA и начать pure TDD implementation; B-04B не начинать"
+  current_focus: "B-04R pure implementation принята и зафиксирована implementation commit"
+  next_action: "Подтвердить exact implementation commit SHA и получить отдельное разрешение на DB preflight/run; evidence generation и B-04B не начинать"
 
 modules:
   - code: constitution
@@ -58,11 +58,11 @@ modules:
   - code: canonical_baseline_b04r
     name: "B-04R → PostgreSQL 18 Restore-Roundtrip Evidence"
     owner: "Архитектура / миграции"
-    status: planned
-    progress: 25
+    status: implementation_committed_evidence_pending
+    progress: 85
     branch: codex/b04b-maintenance-readiness-review
     visible: true
-    note: "ADR-031, Spec и implementation plan ACCEPTED 2026-07-29. Live e9e5affd..., restore fixed point 3a9e682c...; exact diff 133 CHECK + 2 predicates. Pure implementation ждёт owner-authorized documentation commit/base SHA; implementation/accepted evidence отсутствуют."
+    note: "ADR-031, Spec, plan и pure implementation ACCEPTED 2026-07-29; documentation base 08bc6a0. Pure implementation включена в текущий implementation commit; exact SHA сообщается после создания. Focused 58 passed, migration contracts 378 passed, 1 skipped. DB run и evidence generation отсутствуют."
 
   - code: canonical_baseline_b04b
     name: "B-04B → Repository Cut, Maintenance and Adoption"

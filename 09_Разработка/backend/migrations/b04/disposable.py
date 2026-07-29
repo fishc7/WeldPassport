@@ -17,6 +17,8 @@ _R18_DISPOSABLE_DATABASES = frozenset(
     {
         "wp_b04_r18_historical_disposable",
         "wp_b04_r18_baseline_disposable",
+        "wp_b04_r18_restore_first_disposable",
+        "wp_b04_r18_restore_second_disposable",
     }
 )
 _PROHIBITED_DATABASES = frozenset(

@@ -117,9 +117,12 @@ WeldPassport — внутренняя система для отдела гла�
   но восстановленная из `pg_dump` база имеет устойчивое round-trip-представление
   выражений PostgreSQL. ADR-031 разделяет live evidence и restore-roundtrip evidence
   без ослабления структурного сравнения. Спецификация и implementation plan B-04R
-  приняты 2026-07-29; текущий шлюз — owner-authorized documentation commit и
-  фиксация implementation base SHA. B-04B остаётся заблокирован до отдельной
-  реализации и приёмки B-04R и повторной readiness-проверки.
+  приняты 2026-07-29, documentation base зафиксирован commit
+  `08bc6a09974e0272ff27938511af5d4d6ba33403`; pure implementation принята
+  владельцем и зафиксирована implementation commit 2026-07-29. DB run и restore
+  evidence не выполнялись.
+  B-04B остаётся заблокирован до отдельной evidence acceptance B-04R и повторной
+  readiness-проверки.
 - **Task 9D — реализация в процессе (обновлено 2026-07-21; актуальный статус по подблокам —
   [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]).** Блоки **9D-1** (`QualityFinding` Core),
   **9D-2** (`EngineeringEvaluation`, ADR-021; блоки 9D-2A — 9D-2E), **9D-3** (`Defect Technical

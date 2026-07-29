@@ -387,9 +387,14 @@ archived     — чат сохранён как история, активных
 
 Что ещё сделать:
 
-- зафиксировать accepted documentation отдельным owner-authorized commit;
-- реализовать B-04R отдельным этапом;
-- провести Diff и приёмку B-04R;
+- accepted documentation зафиксирована commit
+  `08bc6a09974e0272ff27938511af5d4d6ba33403`;
+- pure implementation B-04R завершена; focused `58 passed`, полный набор
+  `378 passed, 1 skipped`;
+- Diff и отдельная code acceptance B-04R завершены 2026-07-29;
+- implementation commit разрешён и создан 2026-07-29;
+- получить отдельное разрешение на DB preflight/run;
+- только после этого отдельно разрешать DB run, генерацию и приёмку evidence;
 - повторить B-04B readiness только после приёмки B-04R.
 
 ---

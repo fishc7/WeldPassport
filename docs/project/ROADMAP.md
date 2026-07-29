@@ -77,9 +77,13 @@ B-04R restore-roundtrip evidence по ADR-031.
   2026-07-29;
 - [[docs/project/TASK_B-04R_RESTORE_ROUNDTRIP_EVIDENCE_IMPLEMENTATION_PLAN|B-04R
   implementation plan]] принят 2026-07-29;
-- следующий gate — owner-authorized documentation commit, фиксация exact
-  implementation base SHA и pure TDD implementation; code/evidence review остаются
-  отдельными;
+- documentation commit `08bc6a09974e0272ff27938511af5d4d6ba33403` принят как
+  exact implementation base;
+- pure TDD implementation принята владельцем и зафиксирована implementation
+  commit 2026-07-29: focused `58 passed`, полный `migration_contract_tests` —
+  `378 passed, 1 skipped`; текущий gate — отдельное разрешение на DB preflight/run;
+- DB run, генерация restore evidence, implementation commit и evidence acceptance
+  остаются отдельными запрещёнными до явного разрешения этапами;
 - B-04B repository cut, marker transfer и adoption не начинать до принятого B-04R
   evidence и нового Maintenance Readiness verdict `READY`; текущий статус —
   `BLOCKED`.

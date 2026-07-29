@@ -138,6 +138,33 @@ def test_b04_disposable_006_accepts_exact_name_and_returns_sanitized_identity() 
     assert VALID_TOKEN not in repr(identity)
 
 
+@pytest.mark.parametrize(
+    "database_name",
+    [
+        "wp_b04_r18_restore_first_disposable",
+        "wp_b04_r18_restore_second_disposable",
+    ],
+)
+def test_b04r_disposable_001_accepts_only_exact_restore_names(
+    database_name: str,
+) -> None:
+    url = (
+        "postgresql+psycopg://b04_runner:database-password@"
+        f"127.0.0.1:5432/{database_name}"
+    )
+    assert assert_disposable_database(
+        url,
+        opt_in="YES",
+        ownership_token=VALID_TOKEN,
+        expected_database=database_name,
+    ) == DatabaseIdentity(
+        database=database_name,
+        host="127.0.0.1",
+        port=5432,
+        username="b04_runner",
+    )
+
+
 class _ScalarResult:
     def __init__(self, value: object) -> None:
         self._value = value
