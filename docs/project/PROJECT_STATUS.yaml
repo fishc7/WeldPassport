@@ -1,0 +1,186 @@
+project: WeldPassport
+current_stage: b04a_r18_accepted_maintenance_readiness_blocked
+current_branch: codex/b04a-r18-reverification
+updated_at: 2026-07-29
+
+# Источник фактического статуса Tasks с коммитами — docs/project/TASK_REGISTRY.md.
+# Этот файл — машиночитаемая сводка по модулям для панелей/скриптов.
+
+summary:
+  total_progress: 78
+  current_focus: "B-04A-R18 принят; B-04B остаётся BLOCKED"
+  next_action: "Провести новый READ-ONLY Maintenance Readiness Review; adoption не начинать"
+
+modules:
+  - code: constitution
+    name: "Конституция проекта"
+    owner: "Архитектура"
+    status: done
+    progress: 100
+    visible: true
+    note: "docs/project/CONSTITUTION.md — главный архитектурный документ."
+
+  - code: architecture
+    name: "Архитектура и governance"
+    owner: "Архитектура / план"
+    status: stable
+    progress: 100
+    visible: true
+    note: "AGF, Architecture Sessions, ADR-004..030; PostgreSQL 18.x и versioned B-04 evidence по ADR-030; TASK_REGISTRY.md — реестр Tasks."
+
+  - code: test_db_safety_interlock
+    name: "Fail-closed защита integration pytest"
+    owner: "Архитектура / тестовая инфраструктура"
+    status: done
+    progress: 100
+    branch: codex/test-db-safety
+    visible: true
+    note: "ADR-029, commit 2046384: guard до PostgreSQL/Alembic; focused 10 passed, migration contracts 45 passed. Полный TEST-DB Foundation остаётся после B-04."
+
+  - code: canonical_baseline_b04a
+    name: "B-04A → PostgreSQL 16 historical verification"
+    owner: "Архитектура / миграции"
+    status: done
+    progress: 100
+    branch: codex/b04a-baseline
+    visible: true
+    note: "Historical non-authorizing evidence по ADR-030. Implementation 4487127; PostgreSQL 16.14; fingerprint v1 ce2cd0613eab20da8d0a93d8caf675aa32fce932d909dfa219533b0c12dfc9f6. Evidence неизменяем, но не разрешает PG18 adoption."
+
+  - code: canonical_baseline_b04a_r18
+    name: "B-04A-R18 → PostgreSQL 18 Re-verification"
+    owner: "Архитектура / миграции"
+    status: done
+    progress: 100
+    branch: codex/b04a-r18-reverification
+    visible: true
+    note: "ACCEPTED 2026-07-29. Implementation f5245ba; evidence b34538f; PostgreSQL 18.3; fingerprint v2 e9e5affd8544b10353f2139c6526bab819f6da2ed919eb279fc1357803e2649a; evidence active_authorizing; 314 passed, 1 skipped. Working DB не подключалась."
+
+  - code: canonical_baseline_b04b
+    name: "B-04B → Repository Cut, Maintenance and Adoption"
+    owner: "Архитектура / эксплуатация"
+    status: planned
+    progress: 0
+    visible: true
+    note: "B-04A-R18 принят, но новый Maintenance Readiness Review ещё не дал READY. Repository cut, marker transfer и adoption не выполнялись; B-04B BLOCKED; migration freeze active."
+
+  - code: hr_workers
+    name: "ОК → Работники"
+    owner: "ОК"
+    status: done
+    progress: 100
+    branch: feature/ok-workers-mvp
+    visible: true
+    note: "hr.workers, hr.worker_roles, API /api/v1/hr."
+
+  - code: ogs_welders
+    name: "ОГС → Профиль сварщика и допуски"
+    owner: "ОГС"
+    status: done
+    progress: 100
+    branch: feature/ogs-welder-admissions-mvp
+    visible: true
+    note: "welding.welders, welding.welder_admissions, API /api/v1/ogs. ADR-004."
+
+  - code: legacy_workforce
+    name: "Legacy workforce"
+    owner: "Переходный"
+    status: deprecated
+    progress: 100
+    visible: false
+    note: "ADR-005. Не расширять; вывод через desktop_ok и импортёры."
+
+  - code: engineering_projects
+    name: "Инженерный контур: Company/Project/Line/EngineeringDocument"
+    owner: "Инженерный / ПТО"
+    status: done
+    progress: 100
+    branch: feature/engineering-joints-mvp
+    visible: true
+    note: "Tasks 1-4 (MASTER, Company/Project/project_companies, Line, EngineeringDocument/DocumentRevision)."
+
+  - code: engineering_joint
+    name: "Joint — жизненный цикл и bulk-импорт"
+    owner: "Инженерный / ПТО"
+    status: done
+    progress: 100
+    branch: feature/engineering-joints-mvp
+    visible: true
+    note: "Tasks 5A/5B/6/7. Joint core, review lifecycle, история ревизий РД, bulk-импорт (ADR-010/011)."
+
+  - code: weld_operation
+    name: "СМР → WeldOperation (производственный факт сварки)"
+    owner: "Мастер / прораб / ОГС"
+    status: done
+    progress: 100
+    branch: feature/engineering-joints-mvp
+    visible: true
+    note: "Tasks 8A-8E: core, допуск/WPS, review ОГС, корректировки/supersede, импорт (ADR-012/013)."
+
+  - code: heat_treatment
+    name: "Термическая обработка"
+    owner: "ОГС"
+    status: done
+    progress: 100
+    branch: feature/engineering-joints-mvp
+    visible: true
+    note: "Task 8F: HeatTreatmentBatch/HeatTreatmentOperation, влияние на готовность Joint (ADR-014)."
+
+  - code: quality_inspection
+    name: "ОТК → Контроль качества и НК (Execution Core)"
+    owner: "ОТК / НК"
+    status: done
+    progress: 100
+    branch: feature/engineering-joints-mvp
+    visible: true
+    note: "Tasks 9A-9C: Inspection lifecycle, Method Assignment/Execution, LaboratoryConclusion, Quality Audit (ADR-015/016)."
+
+  - code: quality_defect_management
+    name: "ОТК → Task 9D: Quality Finding / Evaluation / Defect / Disposition"
+    owner: "ОТК / ОГС"
+    status: in_progress
+    progress: 55
+    branch: feature/engineering-joints-mvp
+    visible: true
+    note: "9D-1 QualityFinding, 9D-2 EngineeringEvaluation, 9D-3 Defect, 9D-4A DefectDisposition — реализованы (ADR-019/021/022/023). Остаток 9D-4 (ProductionHold), 9D-5..9D-8 — planned. Детали — docs/project/TASK_REGISTRY.md."
+
+  - code: quality_decision_core
+    name: "ОГС / ОТК → Task 10A: QualityDecision Core"
+    owner: "ОГС / ОТК"
+    status: done
+    progress: 100
+    branch: docs/as-02-quality-decision-rbac-analysis
+    visible: true
+    note: "ADR-027 + Recovery Addendum ACCEPTED; 10A-R/10A-1/10A-1R/10A-2/10A-2R/10A-3 завершены commit c1b551e от 2026-07-24. AS-02 вне Task 10A."
+
+  - code: quality_decision_rbac
+    name: "ОГС / ОТК → AS-02: QualityDecision RBAC Consolidation"
+    owner: "Архитектура / ОГС / ОТК"
+    status: done
+    progress: 100
+    branch: docs/as-02-quality-decision-rbac-analysis
+    visible: true
+    note: "ADR-028 реализован и принят 2026-07-24: revision 27, person-level SoD, evidence-bearing resolver/audit, dual-role warning, additive API; PostgreSQL rehearsal и 1590 backend tests успешны."
+
+  - code: pto_docs
+    name: "ПТО → Электронная документация"
+    owner: "ПТО"
+    status: planned
+    progress: 5
+    visible: true
+    note: "Канон принят (ADR-018, Session 008-06); код, миграции, API не создавались."
+
+  - code: closure
+    name: "Закрытие истории стыка"
+    owner: "WeldPassport"
+    status: planned
+    progress: 0
+    visible: true
+    note: "Финальная цель: полная история стыка после завершения Task 9D."
+
+  - code: project_control_center
+    name: "Project Control Center (служебный контур)"
+    owner: "Владелец / разработка"
+    status: in_progress
+    progress: 20
+    visible: true
+    note: "Не производственный модуль (ADR-020). Первый срез — 09_Разработка/project_control/; штатное подключение PostgreSQL и авто-снимки — следующий рубеж."

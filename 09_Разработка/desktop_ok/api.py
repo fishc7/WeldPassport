@@ -126,6 +126,7 @@ class Api:
         self._tabel_org: str = ""
         self._tabel_analysis: dict = {}
         self._tabel_paths: list[str] = []
+        self._tabel_read_errors: list[str] = []
         self._ok1c_analysis: dict = {}
         self._ok1c_org: str = ""
 
@@ -219,6 +220,7 @@ class Api:
         self._tabel_org = organizatsiya
         self._tabel_analysis = analysis
         self._tabel_paths = list(paths)
+        self._tabel_read_errors = errors
 
         return {
             "unique_count": len(unique),
@@ -239,18 +241,21 @@ class Api:
                 self._tabel_analysis,
                 fuzzy_decisions,
                 conn,
+                read_errors=getattr(self, "_tabel_read_errors", None),
             )
 
-        # Импорт зафиксирован в БД (commit при выходе из with) — теперь
-        # переносим исходные файлы в архив. Сбой переноса не должен
-        # «отменять» успешный импорт, поэтому ошибки только сообщаем.
         archive = _archive_tabel_files(self._tabel_paths, self._tabel_org)
-        result["archived"] = archive["archived"]
-        result["archive_errors"] = archive["errors"]
+        if archive["archived"]:
+            result["warnings"].append(
+                f"Файлы перенесены в архив: {len(archive['archived'])}"
+            )
+        if archive["errors"]:
+            result["errors"].extend(archive["errors"])
 
         self._tabel_unique = {}
         self._tabel_analysis = {}
         self._tabel_paths = []
+        self._tabel_read_errors = []
         return result
 
     # ── Импорт из 1С ──────────────────────────────────────────────────────
@@ -317,7 +322,7 @@ def _serialize_ok1c(analysis: dict) -> dict:
                 if u["need_svar_status_upd"]
                 else []
             )
-            + ([{"field": "профиль СВАРЩИКИ", "value": "создать"}] if u["need_svar"] else []),
+            + ([{"field": "профиль СВАРЩИКИ", "value": "создать"}] if u.get("need_svar") else []),
         }
         for u in analysis["update"]
     ]
@@ -420,5 +425,7 @@ def _clean_worker_payload(payload: dict) -> dict:
             value = value or None
         if key == "id_dolzhnosti" and value is not None:
             value = int(value)
+        if key in ("data_priema", "data_uvolneniya") and value == "":
+            value = None
         cleaned[key] = value
     return cleaned

@@ -1,0 +1,71 @@
+erDiagram
+    hr_workers ||--o{ welding_stamps : has
+    hr_workers ||--o{ welding_certifications : has
+    hr_workers ||--o{ welding_welder_admissions : receives
+
+    welding_stamps ||--o{ welding_welder_admissions : used_for
+    welding_certifications ||--o{ welding_welder_admissions : based_on
+
+    projects ||--o{ welding_welder_admissions : grants_scope
+
+    hr_workers {
+        uuid id PK
+        text personnel_no
+        text full_name
+        uuid position_id FK
+        uuid department_id FK
+        text status
+    }
+
+    welding_stamps {
+        uuid id PK
+        uuid worker_id FK
+        text stamp_code
+        date issued_at
+        date revoked_at
+        boolean is_active
+        text note
+    }
+
+    welding_certifications {
+        uuid id PK
+        uuid worker_id FK
+        text cert_number
+        text welding_method
+        text material_group
+        numeric diameter_from
+        numeric diameter_to
+        numeric thickness_from
+        numeric thickness_to
+        date valid_from
+        date valid_to
+        text status
+        text note
+    }
+
+    welding_welder_admissions {
+        uuid id PK
+        uuid worker_id FK
+        uuid stamp_id FK
+        uuid certification_id FK
+        uuid project_id FK
+        text admission_type
+        text welding_method
+        text material_group
+        numeric diameter_from
+        numeric diameter_to
+        numeric thickness_from
+        numeric thickness_to
+        date valid_from
+        date valid_to
+        text status
+        text issued_by
+        text note
+    }
+
+    projects {
+        uuid id PK
+        text code
+        text name
+        text status
+    }

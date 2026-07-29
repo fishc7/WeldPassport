@@ -1,3 +1,8 @@
+"""Legacy API workforce (DEPRECATED).
+
+Не использовать для новых интеграций. См. ADR-005 и app.hr / app.welding.
+"""
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 

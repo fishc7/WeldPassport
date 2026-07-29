@@ -1,0 +1,968 @@
+from datetime import date
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query, Response
+from sqlalchemy.orm import Session
+
+from app.engineering.joint_bulk import JointBulkService
+from app.engineering.schemas import (
+    ApproveOgsCommand,
+    ApprovePtoCommand,
+    BlockCommand,
+    CancelCommand,
+    DocumentRevisionCreate,
+    DocumentRevisionRead,
+    DocumentRole,
+    DocumentType,
+    EngineeringDocumentCreate,
+    EngineeringDocumentListFilters,
+    EngineeringDocumentRead,
+    EngineeringStatus,
+    GeometryType,
+    InvalidateLinkCommand,
+    JointBlockRead,
+    JointBulkCreate,
+    JointBulkResponse,
+    JointCreate,
+    JointDocumentRevisionCreate,
+    JointDocumentRevisionRead,
+    JointEventRead,
+    JointListFilters,
+    JointListResponse,
+    JointRead,
+    JointSortBy,
+    JointUpdate,
+    LinkStatus,
+    CorrectionApplyCommand,
+    CorrectionCancelCommand,
+    CorrectionCommentCommand,
+    CorrectionOgsAcceptCommand,
+    CorrectionOptionalCommentCommand,
+    CorrectionRetryApplyCommand,
+    CorrectionVersionCommand,
+    OgsReviewApproveCommand,
+    OgsReviewRejectCommand,
+    OgsReviewStatus,
+    RejectCommand,
+    RevisionRole,
+    RevokeCommand,
+    SetCurrentRevisionCommand,
+    SortOrder,
+    SubmitForReviewCommand,
+    SupersedeCommand,
+    UnblockCommand,
+    WeldJointType,
+    WelderConfirmationStatus,
+    WelderConfirmCommand,
+    WelderDisputeCommand,
+    WeldOperationCancelRequest,
+    WeldOperationCompleteRequest,
+    WeldOperationCorrectionCreate,
+    WeldOperationCorrectionRead,
+    WeldOperationCorrectionUpdate,
+    WeldOperationCreate,
+    WeldOperationListFilters,
+    WeldOperationListResponse,
+    WeldOperationOgsReviewRead,
+    WeldOperationRead,
+    WeldOperationReweldCreate,
+    WeldOperationReweldDecisionCommand,
+    WeldOperationStatus,
+    WeldOperationUpdate,
+    WeldOperationValidateRequest,
+    WeldOperationWelderConfirmationRead,
+    WeldStage,
+)
+from app.engineering.weld_operation_validation import (
+    QualificationValidationStatus,
+    WpsValidationStatus,
+)
+from app.engineering.services import (
+    EngineeringService,
+    WeldOperationCorrectionService,
+    WeldOperationService,
+    joint_to_read,
+)
+from app.shared.auth import get_current_user_id
+from app.shared.db import get_db
+
+router = APIRouter(prefix="/engineering", tags=["engineering"])
+
+
+def _svc(db: Session = Depends(get_db)) -> EngineeringService:
+    return EngineeringService(db)
+
+
+def _bulk_svc(db: Session = Depends(get_db)) -> JointBulkService:
+    return JointBulkService(db)
+
+
+def _weld_svc(db: Session = Depends(get_db)) -> WeldOperationService:
+    return WeldOperationService(db)
+
+
+# ── Документы ─────────────────────────────────────────────────────────────────
+
+
+@router.post("/documents", response_model=EngineeringDocumentRead, status_code=201)
+def create_document(
+    data: EngineeringDocumentCreate,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.create_document(data, created_by=uid)
+
+
+@router.get("/documents", response_model=list[EngineeringDocumentRead])
+def list_documents(
+    project_id: UUID | None = Query(default=None),
+    line_id: UUID | None = Query(default=None),
+    document_type: DocumentType | None = Query(default=None),
+    status: EngineeringStatus | None = Query(default=None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    filters = EngineeringDocumentListFilters(
+        project_id=project_id,
+        line_id=line_id,
+        document_type=document_type,
+        status=status,
+        skip=skip,
+        limit=limit,
+    )
+    return svc.list_documents(filters)
+
+
+# ── Ревизии по revision_id ────────────────────────────────────────────────────
+# Статические пути /revisions/{revision_id} и /documents/{document_id} не
+# конфликтуют: разные литеральные префиксы верхнего уровня.
+
+
+@router.post(
+    "/revisions/{revision_id}/approve", response_model=DocumentRevisionRead
+)
+def approve_revision(
+    revision_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.approve_revision(revision_id, worker_id=uid)
+
+
+@router.post(
+    "/revisions/{revision_id}/cancel", response_model=DocumentRevisionRead
+)
+def cancel_revision(
+    revision_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.cancel_revision(revision_id, worker_id=uid)
+
+
+@router.post(
+    "/revisions/{revision_id}/supersede", response_model=DocumentRevisionRead
+)
+def supersede_revision(
+    revision_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.supersede_revision(revision_id, worker_id=uid)
+
+
+# ── Документ: детали, переходы, ревизии ───────────────────────────────────────
+
+
+@router.get("/documents/{document_id}", response_model=EngineeringDocumentRead)
+def get_document(
+    document_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.get_document(document_id)
+
+
+@router.post(
+    "/documents/{document_id}/approve", response_model=EngineeringDocumentRead
+)
+def approve_document(
+    document_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.approve_document(document_id, worker_id=uid)
+
+
+@router.post(
+    "/documents/{document_id}/cancel", response_model=EngineeringDocumentRead
+)
+def cancel_document(
+    document_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.cancel_document(document_id, worker_id=uid)
+
+
+@router.post(
+    "/documents/{document_id}/supersede", response_model=EngineeringDocumentRead
+)
+def supersede_document(
+    document_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.supersede_document(document_id, worker_id=uid)
+
+
+@router.post(
+    "/documents/{document_id}/revisions",
+    response_model=DocumentRevisionRead,
+    status_code=201,
+)
+def create_revision(
+    document_id: UUID,
+    data: DocumentRevisionCreate,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.create_revision(document_id, data, created_by=uid)
+
+
+@router.get(
+    "/documents/{document_id}/revisions",
+    response_model=list[DocumentRevisionRead],
+)
+def list_revisions(
+    document_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_revisions(document_id)
+
+
+# ── Стыки (Joint, Task 5A) ────────────────────────────────────────────────────
+
+
+@router.post("/joints", response_model=JointRead, status_code=201)
+def create_joint(
+    data: JointCreate,
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return joint_to_read(svc.create_joint(data))
+
+
+# Маршрут /joints/bulk объявлен ДО динамического /joints/{joint_id}, чтобы строка
+# "bulk" не интерпретировалась как UUID пути (§6 задания). Первый успех — 201;
+# идемпотентный повтор — 200 (Response.status_code переопределяет default).
+@router.post("/joints/bulk", response_model=JointBulkResponse, status_code=201)
+def bulk_create_joints(
+    data: JointBulkCreate,
+    response: Response,
+    svc: JointBulkService = Depends(_bulk_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    result = svc.create_bulk(payload=data, actor_worker_id=uid)
+    if result.replayed:
+        response.status_code = 200
+    return result.response_payload
+
+
+@router.get("/joints", response_model=JointListResponse)
+def list_joints(
+    project_id: UUID | None = Query(default=None),
+    line_id: UUID | None = Query(default=None),
+    current_document_revision_id: UUID | None = Query(default=None),
+    system_code: str | None = Query(default=None),
+    joint_no: str | None = Query(default=None),
+    geometry_type: GeometryType | None = Query(default=None),
+    weld_joint_type: WeldJointType | None = Query(default=None),
+    ready_for_welding: bool | None = Query(default=None),
+    sort_by: JointSortBy = Query(default="created_at"),
+    sort_order: SortOrder = Query(default="asc"),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    filters = JointListFilters(
+        project_id=project_id,
+        line_id=line_id,
+        current_document_revision_id=current_document_revision_id,
+        system_code=system_code,
+        joint_no=joint_no,
+        geometry_type=geometry_type,
+        weld_joint_type=weld_joint_type,
+        ready_for_welding=ready_for_welding,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit,
+        offset=offset,
+    )
+    return svc.list_joints(filters)
+
+
+@router.get("/joints/{joint_id}", response_model=JointRead)
+def get_joint(
+    joint_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.read_joint(joint_id, uid)
+
+
+@router.patch("/joints/{joint_id}", response_model=JointRead)
+def update_joint(
+    joint_id: UUID,
+    data: JointUpdate,
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.update_joint(joint_id, data)
+
+
+# ── Стыки: команды жизненного цикла (Task 5B, §7 ADR-011) ─────────────────────
+# Актор — только из X-User-Id (§17 ADR-011); тело несёт причины/версии.
+
+
+@router.post("/joints/{joint_id}/submit-for-review", response_model=JointRead)
+def submit_for_review(
+    joint_id: UUID,
+    data: SubmitForReviewCommand = SubmitForReviewCommand(),
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.submit_for_review(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/approve-pto", response_model=JointRead)
+def approve_pto(
+    joint_id: UUID,
+    data: ApprovePtoCommand = ApprovePtoCommand(),
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.approve_pto(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/reject-pto", response_model=JointRead)
+def reject_pto(
+    joint_id: UUID,
+    data: RejectCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.reject_pto(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/revoke-pto", response_model=JointRead)
+def revoke_pto(
+    joint_id: UUID,
+    data: RevokeCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.revoke_pto(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/approve-ogs", response_model=JointRead)
+def approve_ogs(
+    joint_id: UUID,
+    data: ApproveOgsCommand = ApproveOgsCommand(),
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.approve_ogs(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/reject-ogs", response_model=JointRead)
+def reject_ogs(
+    joint_id: UUID,
+    data: RejectCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.reject_ogs(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/revoke-ogs", response_model=JointRead)
+def revoke_ogs(
+    joint_id: UUID,
+    data: RevokeCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.revoke_ogs(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/block", response_model=JointRead)
+def block_joint(
+    joint_id: UUID,
+    data: BlockCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.block(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/unblock", response_model=JointRead)
+def unblock_joint(
+    joint_id: UUID,
+    data: UnblockCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.unblock(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/cancel", response_model=JointRead)
+def cancel_joint(
+    joint_id: UUID,
+    data: CancelCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.cancel(joint_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/supersede", response_model=JointRead)
+def supersede_joint(
+    joint_id: UUID,
+    data: SupersedeCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.supersede(joint_id, data, actor_worker_id=uid)
+
+
+@router.get("/joints/{joint_id}/blocks", response_model=list[JointBlockRead])
+def list_joint_blocks(
+    joint_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_blocks(joint_id)
+
+
+@router.get("/joints/{joint_id}/events", response_model=list[JointEventRead])
+def list_joint_events(
+    joint_id: UUID,
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_events(joint_id)
+
+
+# ── Стыки: история связей с ревизиями (Task 6) ────────────────────────────────
+
+
+@router.get(
+    "/joints/{joint_id}/document-revisions",
+    response_model=list[JointDocumentRevisionRead],
+)
+def list_joint_document_revisions(
+    joint_id: UUID,
+    link_status: LinkStatus | None = Query(default=None),
+    document_role: DocumentRole | None = Query(default=None),
+    revision_role: RevisionRole | None = Query(default=None),
+    svc: EngineeringService = Depends(_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_revision_links(
+        joint_id,
+        link_status=link_status,
+        document_role=document_role,
+        revision_role=revision_role,
+    )
+
+
+@router.post(
+    "/joints/{joint_id}/document-revisions",
+    response_model=JointDocumentRevisionRead,
+    status_code=201,
+)
+def create_joint_document_revision(
+    joint_id: UUID,
+    data: JointDocumentRevisionCreate,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.create_revision_link(joint_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/joints/{joint_id}/document-revisions/{link_id}/invalidate",
+    response_model=JointDocumentRevisionRead,
+)
+def invalidate_joint_document_revision(
+    joint_id: UUID,
+    link_id: UUID,
+    data: InvalidateLinkCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.invalidate_link(joint_id, link_id, data, actor_worker_id=uid)
+
+
+@router.post("/joints/{joint_id}/set-current-revision", response_model=JointRead)
+def set_current_revision(
+    joint_id: UUID,
+    data: SetCurrentRevisionCommand,
+    svc: EngineeringService = Depends(_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.set_current_revision(joint_id, data, actor_worker_id=uid)
+
+
+# ── WeldOperation (Task 8A, ADR-012 / Session 005) ────────────────────────────
+# Актор — только из X-User-Id (§15 задания). Физического DELETE нет (§14). Команды
+# complete/cancel — отдельные действия, а не универсальный update.
+
+
+def _weld_operation_subfilters(
+    project_id: UUID | None = Query(default=None),
+    line_id: UUID | None = Query(default=None),
+    actual_welder_id: UUID | None = Query(default=None),
+    responsible_worker_id: int | None = Query(default=None),
+    lifecycle_status: WeldOperationStatus | None = Query(default=None),
+    weld_stage: WeldStage | None = Query(default=None),
+    welding_method: str | None = Query(default=None),
+    qualification_validation_status: QualificationValidationStatus | None = Query(
+        default=None
+    ),
+    wps_validation_status: WpsValidationStatus | None = Query(default=None),
+    welder_confirmation_status: WelderConfirmationStatus | None = Query(
+        default=None
+    ),
+    ogs_review_status: OgsReviewStatus | None = Query(default=None),
+    performed_from: date | None = Query(default=None),
+    performed_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> WeldOperationListFilters:
+    """Фильтры без joint_id — для вложенного пути, где joint_id берётся из пути."""
+    return WeldOperationListFilters(
+        project_id=project_id,
+        line_id=line_id,
+        actual_welder_id=actual_welder_id,
+        responsible_worker_id=responsible_worker_id,
+        lifecycle_status=lifecycle_status,
+        weld_stage=weld_stage,
+        welding_method=welding_method,
+        qualification_validation_status=qualification_validation_status,
+        wps_validation_status=wps_validation_status,
+        welder_confirmation_status=welder_confirmation_status,
+        ogs_review_status=ogs_review_status,
+        performed_from=performed_from,
+        performed_to=performed_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def _weld_operation_filters(
+    joint_id: UUID | None = Query(default=None),
+    filters: WeldOperationListFilters = Depends(_weld_operation_subfilters),
+) -> WeldOperationListFilters:
+    filters.joint_id = joint_id
+    return filters
+
+
+@router.post(
+    "/weld-operations", response_model=WeldOperationRead, status_code=201
+)
+def create_weld_operation(
+    data: WeldOperationCreate,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.create_operation(data, actor_worker_id=uid)
+
+
+@router.get("/weld-operations", response_model=WeldOperationListResponse)
+def list_weld_operations(
+    filters: WeldOperationListFilters = Depends(_weld_operation_filters),
+    svc: WeldOperationService = Depends(_weld_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_operations(filters)
+
+
+@router.get(
+    "/weld-operations/{operation_id}", response_model=WeldOperationRead
+)
+def get_weld_operation(
+    operation_id: UUID,
+    svc: WeldOperationService = Depends(_weld_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.get_operation(operation_id)
+
+
+@router.patch(
+    "/weld-operations/{operation_id}", response_model=WeldOperationRead
+)
+def update_weld_operation(
+    operation_id: UUID,
+    data: WeldOperationUpdate,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.update_operation(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/complete",
+    response_model=WeldOperationRead,
+)
+def complete_weld_operation(
+    operation_id: UUID,
+    data: WeldOperationCompleteRequest = WeldOperationCompleteRequest(),
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.complete_operation(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/validate",
+    response_model=WeldOperationRead,
+)
+def validate_weld_operation(
+    operation_id: UUID,
+    data: WeldOperationValidateRequest = WeldOperationValidateRequest(),
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.validate_operation(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/cancel", response_model=WeldOperationRead
+)
+def cancel_weld_operation(
+    operation_id: UUID,
+    data: WeldOperationCancelRequest,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.cancel_operation(operation_id, data, actor_worker_id=uid)
+
+
+# ── WeldOperation: подтверждение сварщика и review ОГС (Task 8C, ADR-012) ──────
+# Actor — только из X-User-Id (§6). Отдельные команды поверх завершённого факта;
+# производственный факт не редактируется. Физического DELETE истории нет (§8).
+
+
+@router.post(
+    "/weld-operations/{operation_id}/welder-confirmation/confirm",
+    response_model=WeldOperationRead,
+)
+def confirm_welder(
+    operation_id: UUID,
+    data: WelderConfirmCommand,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.confirm_welder(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/welder-confirmation/dispute",
+    response_model=WeldOperationRead,
+)
+def dispute_welder(
+    operation_id: UUID,
+    data: WelderDisputeCommand,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.dispute_welder(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/ogs-review/approve",
+    response_model=WeldOperationRead,
+)
+def approve_ogs_review(
+    operation_id: UUID,
+    data: OgsReviewApproveCommand,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.approve_review(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/ogs-review/reject",
+    response_model=WeldOperationRead,
+)
+def reject_ogs_review(
+    operation_id: UUID,
+    data: OgsReviewRejectCommand,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.reject_review(operation_id, data, actor_worker_id=uid)
+
+
+@router.get(
+    "/weld-operations/{operation_id}/welder-confirmations",
+    response_model=list[WeldOperationWelderConfirmationRead],
+)
+def list_welder_confirmations(
+    operation_id: UUID,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.list_welder_confirmations(operation_id, actor_worker_id=uid)
+
+
+@router.get(
+    "/weld-operations/{operation_id}/ogs-reviews",
+    response_model=list[WeldOperationOgsReviewRead],
+)
+def list_ogs_reviews(
+    operation_id: UUID,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.list_ogs_reviews(operation_id, actor_worker_id=uid)
+
+
+@router.get(
+    "/joints/{joint_id}/weld-operations",
+    response_model=WeldOperationListResponse,
+)
+def list_joint_weld_operations(
+    joint_id: UUID,
+    filters: WeldOperationListFilters = Depends(_weld_operation_subfilters),
+    svc: WeldOperationService = Depends(_weld_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_operations_for_joint(joint_id, filters)
+
+
+# ── WeldOperation: корректировки и переварка (Task 8D, ADR-012) ────────────────
+# Actor — только из X-User-Id (§18). Завершённая операция неизменяема: исправление
+# выполняется через отдельную трассируемую корректировку. Статусы корректировки
+# меняются доменными командами, а не обычным PATCH. Физического DELETE нет.
+
+
+def _corr_svc(db: Session = Depends(get_db)) -> WeldOperationCorrectionService:
+    return WeldOperationCorrectionService(db)
+
+
+@router.post(
+    "/weld-operations/{operation_id}/corrections",
+    response_model=WeldOperationCorrectionRead,
+    status_code=201,
+)
+def create_correction(
+    operation_id: UUID,
+    data: WeldOperationCorrectionCreate,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.create_correction(operation_id, data, actor_worker_id=uid)
+
+
+@router.get(
+    "/weld-operations/{operation_id}/corrections",
+    response_model=list[WeldOperationCorrectionRead],
+)
+def list_operation_corrections(
+    operation_id: UUID,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.list_corrections(operation_id)
+
+
+@router.get(
+    "/weld-operation-corrections/{correction_id}",
+    response_model=WeldOperationCorrectionRead,
+)
+def get_correction(
+    correction_id: UUID,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    _uid: int = Depends(get_current_user_id),
+):
+    return svc.get_correction(correction_id)
+
+
+@router.patch(
+    "/weld-operation-corrections/{correction_id}",
+    response_model=WeldOperationCorrectionRead,
+)
+def update_correction(
+    correction_id: UUID,
+    data: WeldOperationCorrectionUpdate,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.update_correction(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/submit",
+    response_model=WeldOperationCorrectionRead,
+)
+def submit_correction(
+    correction_id: UUID,
+    data: CorrectionVersionCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.submit(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/smr-approve",
+    response_model=WeldOperationCorrectionRead,
+)
+def smr_approve_correction(
+    correction_id: UUID,
+    data: CorrectionOptionalCommentCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.smr_approve(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/smr-return",
+    response_model=WeldOperationCorrectionRead,
+)
+def smr_return_correction(
+    correction_id: UUID,
+    data: CorrectionCommentCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.smr_return(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/smr-reject",
+    response_model=WeldOperationCorrectionRead,
+)
+def smr_reject_correction(
+    correction_id: UUID,
+    data: CorrectionCommentCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.smr_reject(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/ogs-accept",
+    response_model=WeldOperationCorrectionRead,
+)
+def ogs_accept_correction(
+    correction_id: UUID,
+    data: CorrectionOgsAcceptCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.ogs_accept(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/ogs-return",
+    response_model=WeldOperationCorrectionRead,
+)
+def ogs_return_correction(
+    correction_id: UUID,
+    data: CorrectionCommentCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.ogs_return(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/ogs-reject",
+    response_model=WeldOperationCorrectionRead,
+)
+def ogs_reject_correction(
+    correction_id: UUID,
+    data: CorrectionCommentCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.ogs_reject(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/cancel",
+    response_model=WeldOperationCorrectionRead,
+)
+def cancel_correction(
+    correction_id: UUID,
+    data: CorrectionCancelCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.cancel(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/apply",
+    response_model=WeldOperationCorrectionRead,
+)
+def apply_correction(
+    correction_id: UUID,
+    data: CorrectionApplyCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.apply(correction_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operation-corrections/{correction_id}/retry-apply",
+    response_model=WeldOperationCorrectionRead,
+)
+def retry_apply_correction(
+    correction_id: UUID,
+    data: CorrectionRetryApplyCommand,
+    svc: WeldOperationCorrectionService = Depends(_corr_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.retry_apply(correction_id, data, actor_worker_id=uid)
+
+
+# ── Полная переварка (reweld, Task 8D §16) ────────────────────────────────────
+
+
+@router.post(
+    "/weld-operations/{operation_id}/reweld",
+    response_model=WeldOperationRead,
+    status_code=201,
+)
+def create_reweld(
+    operation_id: UUID,
+    data: WeldOperationReweldCreate,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.create_reweld(operation_id, data, actor_worker_id=uid)
+
+
+@router.post(
+    "/weld-operations/{reweld_id}/reweld-decision",
+    response_model=WeldOperationRead,
+)
+def reweld_decision(
+    reweld_id: UUID,
+    data: WeldOperationReweldDecisionCommand,
+    svc: WeldOperationService = Depends(_weld_svc),
+    uid: int = Depends(get_current_user_id),
+):
+    return svc.reweld_decision(reweld_id, data, actor_worker_id=uid)

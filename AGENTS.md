@@ -32,15 +32,20 @@ docs/                      каноничная документация (чит
   00_PROJECT_CONTEXT.md    жизненный цикл и модули системы
   ARCHITECTURE.md          архитектура, модель данных, API, деплой MVP
 09_Разработка/             исходный код
-  src/                     модули приложения (запускается с src в PYTHONPATH)
-    config.py              чтение .env, объект settings
+  backend/                 основной backend (FastAPI): app/main.py, модули app/,
+                           migrations/, tests/, alembic.ini (см. docs/ARCHITECTURE.md §16)
+  src/                     legacy / импортный / переходный слой (ранние ORM, config,
+                           db); не основная реализация backend — не развивать без
+                           отдельного архитектурного решения
+    config.py              чтение .env, объект settings (для scripts/)
     db.py                  низкоуровневый доступ через psycopg
     database.py            SQLAlchemy engine + сессии
-    models/                ORM-модели (base, workers, welders, projects,
+    models/                ранние ORM-модели (base, workers, welders, projects,
                            production, spravochniki)
-  scripts/                 разовые/служебные скрипты (импорт, схема, проверки)
-  backend/                 каркас FastAPI (app/ по модулям, migrations/, tests/,
-                           alembic.ini) — целевой backend MVP
+  scripts/                 разовые/служебные скрипты (импорт, схема, проверки);
+                           используют src/ в PYTHONPATH
+  frontend/                React + TypeScript + Vite
+  desktop_ok/              прототип отдельного рабочего места ОК (десктоп)
   requirements.txt         зависимости Python
   .env.example             шаблон переменных окружения
 00_Паспорт_проекта/        паспорт, ТЗ, миссия
@@ -61,12 +66,25 @@ Context/                   AboutMe / BusinessBrain / WorkingPreferences
 
 ## 3. Технологический стек
 
-**Текущее состояние кода:** Python + SQLAlchemy 2 + psycopg (raw) + python-dotenv,
-PostgreSQL. Это пока модели и служебные скрипты, без HTTP-слоя.
+**Текущее состояние кода:** основной backend — FastAPI в `09_Разработка/backend/`
+(`app/main.py`). HTTP-слой уже есть: маршруты `/api/v1/hr` (ОК) и `/api/v1/ogs`
+(ОГС, модуль `app.welding`). PostgreSQL, SQLAlchemy 2, Alembic, Pydantic.
+
+Каталог `09_Разработка/src/` — legacy / импортный / переходный слой; новую
+функциональность разрабатывать в `backend/app/`, не в `src/`.
+
+Модуль `backend/app/workforce/` — legacy (ADR-005): не развивать и не использовать
+как основу для новых модулей. Функции ОК/ОГС — через актуальные модули `hr` и
+`welding`. Снятие legacy workforce — только отдельным архитектурным решением.
+
+**Следующий архитектурный рубеж:** перед полноценным `production/joints` нужен
+минимальный контур `projects` / `engineering`, потому что Joint рождается из
+инженерной структуры: `Project → Engineering Document / Isometric → Joint`
+(см. ADR-007).
 
 **Целевой стек MVP** (см. `docs/ARCHITECTURE.md`):
 
-- Backend: Python 3.12, FastAPI, SQLAlchemy 2, Alembic, Pydantic, PostgreSQL 16,
+- Backend: Python 3.12, FastAPI, SQLAlchemy 2, Alembic, Pydantic, PostgreSQL 18.x,
   Celery/Dramatiq + Redis для фоновых задач.
 - Frontend: React + TypeScript, Vite, React Query, React Hook Form, Ant Design/MUI.
 - Инфраструктура: Docker Compose, Timeweb Cloud, Nginx + TLS, Selectel Object
@@ -77,8 +95,9 @@ PostgreSQL. Это пока модели и служебные скрипты, �
 SQLite в качестве основной БД.**
 
 Архитектура backend — модульный монолит. Предметные модули (`identity`, `projects`,
-`engineering`, `workforce`, `admissions`, `production`, `quality`, `documents`,
-`reporting`, `audit`) не лезут напрямую в таблицы друг друга — только через сервисы.
+`engineering`, `hr`, `welding`, `production`, `quality`, `documents`, `reporting`,
+`audit`; legacy: `workforce`) не лезут напрямую в таблицы друг друга — только через
+сервисы.
 Слои: API → Application services → Domain rules → Repository → SQLAlchemy → PostgreSQL.
 
 ---
@@ -157,6 +176,44 @@ python scripts/create_tables.py
 - Авторизация — RBAC со scope (организация/проект/объект); проверка прав строго на
   backend, скрытие кнопки во frontend защитой не считается.
 
+## Правило модели организаций и проектов
+
+AI-агенты не должны создавать архитектуру по принципу «1 фирма = 1 проект».
+
+В WeldPassport используется модель:
+
+```text
+companies ↔ projects
+```
+
+Связь реализуется через таблицу `project_companies`, где указывается роль
+организации в проекте.
+
+Одна организация может участвовать во многих проектах.
+Один проект может включать несколько организаций.
+
+Подробнее — `docs/ARCHITECTURE.md`, раздел «Модель организаций и проектов».
+
+## Правило фиксации решений и работы с чатами
+
+AI-агенты не должны считать чат или длинную переписку единственным источником
+истины. Чаты используются как рабочие обсуждения и черновики.
+
+Если в чате принято важное архитектурное или проектное решение, его нужно
+зафиксировать в проектных файлах:
+
+- `docs/project/DECISIONS.md` — почему принято решение;
+- `docs/ARCHITECTURE.md` — как это устроено в текущей архитектуре;
+- `docs/project/PROJECT_SUMMARY.md` — если решение влияет на общую картину проекта;
+- `docs/project/ROADMAP.md` — если решение влияет на дальнейший план работ;
+- профильный файл в `docs/modules/`, если решение относится к конкретному модулю.
+
+Файл `docs/project/CHAT_INDEX.md` используется как карта рабочих чатов и статусов
+их разбора.
+
+Перед изменением архитектуры AI-агент должен проверить существующие решения в
+`docs/project/DECISIONS.md`.
+
 ---
 
 ## 6. Уточняющие вопросы (обязательно)
@@ -209,8 +266,9 @@ python scripts/create_tables.py
 | Назначение, жизненный цикл, модули | `docs/00_PROJECT_CONTEXT.md` |
 | Архитектура, модель данных, API, деплой | `docs/ARCHITECTURE.md` |
 | Правила проекта для агента (alwaysApply) | `.cursor/rules/weldpassport.mdc` |
-| Конфигурация и доступ к БД | `09_Разработка/src/config.py`, `db.py`, `database.py` |
-| ORM-модели | `09_Разработка/src/models/` |
+| Backend (основной) | `09_Разработка/backend/app/main.py`, модули `hr`, `welding` |
+| Конфигурация и доступ к БД (legacy/scripts) | `09_Разработка/src/config.py`, `db.py`, `database.py` |
+| ORM-модели (legacy) | `09_Разработка/src/models/` |
 | Служебные скрипты | `09_Разработка/scripts/` |
 | Профиль владельца и предпочтения | `Context/AboutMe.md`, `Context/WorkingPreferences.md` |
 
@@ -242,3 +300,47 @@ python scripts/create_tables.py
 
 Сырые материалы для базы знаний Obsidian (статьи, заметки на длительный разбор) —
 в `D:\Knowledge_Base\raw\`, а не в `_Входящее/`.
+
+---
+
+## 10. Git workflow и коммиты
+
+Основная ветка — `main`. Рабочие ветки по назначению:
+
+| Ветка | Назначение |
+|---|---|
+| `feature/*` | новая функциональность |
+| `fix/*` | исправления |
+| `refactor/*` | рефакторинг без изменения поведения |
+| `docs/*` | документация |
+| `cleanup/*` | уборка, реорганизация |
+
+Коммиты — Conventional Commits: `feat:`, `fix:`, `docs:`, `refactor:`, `cleanup:`,
+`style:`, `test:`, `chore:`.
+
+## 11. Definition of Done
+
+Задача считается завершённой, если:
+
+- код работает и реализует описанный сценарий;
+- написаны тесты, если это применимо;
+- обновлена документация (в первую очередь `docs/00_PROJECT_CONTEXT.md` и
+  `docs/ARCHITECTURE.md`, если меняется архитектура или модель данных);
+- изменения закоммичены;
+- нет ошибок линтера;
+- нет дублирующих документов или кода.
+
+Запрещается: хранить секреты в git, коммитить `node_modules`/`dist`, менять
+структуру БД вручную мимо Alembic-миграций, дублировать документы, заводить
+папки без явного назначения.
+
+## 12. Приоритет разработки
+
+При отсутствии иных указаний порядок работы: архитектура → база данных →
+backend → frontend → desktop-рабочие места → аналитика. Следующий рубеж после
+ОК/ОГС: минимальный контур `projects` / `engineering` перед `production/joints`.
+
+> Разделы 10–12 объединены из `PROJECT_RULES.md` 01.07.2026 (файл перенесён в
+> `_archive/2026-07-01_docs_consolidation/`, см.
+> `2026-07-01_Ревизия_md_файлов_v1.md`), чтобы не держать два места с
+> частично расходящимися правилами.
