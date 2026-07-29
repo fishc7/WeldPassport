@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+import hashlib
 from pathlib import Path
 import re
 
@@ -94,6 +95,35 @@ def classify_marker_state(snapshot: MarkerSnapshot) -> AdoptionState:
 
 
 VerificationResults = tuple[tuple[str, bool], ...]
+MANDATORY_VERIFICATION_RESULTS = (
+    "active_evidence_verified",
+    "backup_restore_verified",
+    "fingerprint_verified",
+    "marker_verified",
+    "repository_digests_verified",
+    "sessions_verified",
+)
+
+
+def database_identity_digest(
+    identity: DatabaseIdentity,
+    server_version_num: int,
+) -> str:
+    """Bind unredacted identity facts without publishing them in evidence."""
+
+    if isinstance(server_version_num, bool) or not isinstance(server_version_num, int):
+        raise ValueError("B04-IDENTITY-VERSION")
+    return hashlib.sha256(
+        canonical_json_bytes(
+            {
+                "database": identity.database,
+                "host": identity.host,
+                "port": identity.port,
+                "server_version_num": server_version_num,
+                "username": identity.username,
+            }
+        )
+    ).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +140,8 @@ class PreparedEvidence:
     fingerprint_sha256: str
     allowlist_sha256: str
     seed_sha256: str
+    database_identity_sha256: str
+    server_version_num: int
     prepared_at_utc: str
     verification_results: VerificationResults
 

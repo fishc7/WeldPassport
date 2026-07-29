@@ -11,7 +11,12 @@ from typing import Any, Mapping
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from migrations.b04.adoption_state import PreparedEvidence
+from migrations.b04.adoption_state import (
+    MANDATORY_VERIFICATION_RESULTS,
+    PreparedEvidence,
+    database_identity_digest,
+)
+from migrations.b04.disposable import DatabaseIdentity
 from migrations.b04.fingerprint import assert_supported_catalog, extract_fingerprint, fingerprint_digest
 from migrations.b04.source_contract import (
     BASELINE_REVISION,
@@ -24,7 +29,10 @@ from migrations.b04.source_contract import (
 ADVISORY_LOCK_KEY = 4_042_904
 IDENTITY_RECHECK_QUERY = """SELECT
     current_database() AS database,
-    inet_server_port() AS port"""
+    inet_server_addr()::text AS host,
+    inet_server_port() AS port,
+    current_user AS username,
+    current_setting('server_version_num')::integer AS server_version_num"""
 PUBLIC_MARKER_QUERY = "SELECT to_regclass('public.alembic_version')"
 PUBLIC_VERSION_QUERY = "SELECT version_num FROM public.alembic_version"
 TEST_MARKER_QUERY = "SELECT to_regclass('test.alembic_version')"
@@ -87,46 +95,63 @@ def _accepted_table_pairs(evidence: PreparedEvidence) -> tuple[tuple[str, str], 
 
 
 def _validate_prepared_evidence(evidence: PreparedEvidence) -> None:
+    result_keys = tuple(key for key, _ in evidence.verification_results)
     if (
         evidence.source_sha != SCHEMA_SOURCE_COMMIT
         or evidence.old_marker != HISTORICAL_HEAD
         or evidence.new_marker != BASELINE_REVISION
         or not evidence.adoption_id
-        or not all(passed is True for _, passed in evidence.verification_results)
+        or len(result_keys) != len(MANDATORY_VERIFICATION_RESULTS)
+        or len(set(result_keys)) != len(result_keys)
+        or set(result_keys) != set(MANDATORY_VERIFICATION_RESULTS)
+        or any(passed is not True for _, passed in evidence.verification_results)
     ):
         _fail("PREPARED")
 
 
 def _recheck_identity(connection: Connection, evidence: PreparedEvidence) -> None:
     row = connection.execute(text(IDENTITY_RECHECK_QUERY)).mappings().one()
+    try:
+        observed = DatabaseIdentity(
+            database=row["database"],
+            host=row["host"],
+            port=row["port"],
+            username=row["username"],
+        )
+        version = row["server_version_num"]
+        observed_digest = database_identity_digest(observed, version)
+    except (KeyError, TypeError, ValueError):
+        _fail("IDENTITY")
     if (
-        row.get("database") != evidence.database_identity.database
-        or row.get("port") != evidence.database_identity.port
+        observed_digest != evidence.database_identity_sha256
+        or version != evidence.server_version_num
+        or observed.database != evidence.database_identity.database
+        or observed.port != evidence.database_identity.port
     ):
         _fail("IDENTITY")
 
 
 def _recheck_historical_marker(connection: Connection, evidence: PreparedEvidence) -> None:
     public_marker = connection.execute(text(PUBLIC_MARKER_QUERY)).scalar_one()
+    if public_marker is not None:
+        _fail("MARKER")
     test_marker = connection.execute(text(TEST_MARKER_QUERY)).scalar_one()
+    if test_marker != "test.alembic_version":
+        _fail("MARKER")
     test_version = connection.execute(text(TEST_VERSION_QUERY)).scalar_one()
-    if (
-        public_marker is not None
-        or test_marker != "test.alembic_version"
-        or test_version != evidence.old_marker
-    ):
+    if test_version != evidence.old_marker:
         _fail("MARKER")
 
 
 def _recheck_baseline_marker(connection: Connection, evidence: PreparedEvidence) -> None:
     public_marker = connection.execute(text(PUBLIC_MARKER_QUERY)).scalar_one()
+    if public_marker != "public.alembic_version":
+        _fail("MARKER")
     public_version = connection.execute(text(PUBLIC_VERSION_QUERY)).scalar_one()
+    if public_version != evidence.new_marker:
+        _fail("MARKER")
     test_marker = connection.execute(text(TEST_MARKER_QUERY)).scalar_one()
-    if (
-        public_marker != "public.alembic_version"
-        or public_version != evidence.new_marker
-        or test_marker is not None
-    ):
+    if test_marker is not None:
         _fail("MARKER")
 
 

@@ -11,7 +11,11 @@ from typing import Any, Callable, Mapping
 
 from sqlalchemy import text
 
-from migrations.b04.adoption_state import PreparedEvidence
+from migrations.b04.adoption_state import (
+    MANDATORY_VERIFICATION_RESULTS,
+    PreparedEvidence,
+    database_identity_digest,
+)
 from migrations.b04.disposable import DatabaseIdentity
 from migrations.b04.evidence import resolve_authorizing_evidence
 from migrations.b04.fingerprint import fingerprint_digest
@@ -421,13 +425,13 @@ def run_preflight(connection: Any, config: PreflightConfig) -> PreparedEvidence:
         fingerprint_sha256=config.expected_fingerprint_sha256,
         allowlist_sha256=EMPTY_PLATFORM_ALLOWLIST_SHA256,
         seed_sha256=config.expected_seed_sha256,
+        database_identity_sha256=database_identity_digest(
+            observed_identity,
+            server_version_num,
+        ),
+        server_version_num=server_version_num,
         prepared_at_utc=config.prepared_at_utc,
-        verification_results=(
-            ("active_evidence_verified", True),
-            ("backup_restore_verified", True),
-            ("fingerprint_verified", True),
-            ("marker_verified", True),
-            ("repository_digests_verified", True),
-            ("sessions_verified", True),
+        verification_results=tuple(
+            (key, True) for key in MANDATORY_VERIFICATION_RESULTS
         ),
     )

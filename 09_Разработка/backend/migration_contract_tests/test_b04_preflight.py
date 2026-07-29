@@ -267,6 +267,11 @@ def test_b04b_preflight_003_success_returns_sanitized_prepared_evidence(
     assert prepared.source_sha == SCHEMA_SOURCE_COMMIT
     assert prepared.old_marker == HISTORICAL_HEAD
     assert prepared.new_marker == BASELINE_REVISION
+    assert prepared.database_identity_sha256 == hashlib.sha256(
+        b'{"database":"WeldPassport","host":"db.internal","port":5432,'
+        b'"server_version_num":180003,"username":"maintenance_operator"}\n'
+    ).hexdigest()
+    assert prepared.server_version_num == 180003
     assert prepared.allowlist_sha256 == EMPTY_PLATFORM_ALLOWLIST_SHA256
     assert prepared.allowlist_sha256 != prepared.fingerprint_sha256
     assert dict(prepared.verification_results) == {

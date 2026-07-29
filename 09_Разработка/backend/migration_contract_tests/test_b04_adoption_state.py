@@ -1,4 +1,5 @@
 from dataclasses import FrozenInstanceError, replace
+import hashlib
 import json
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from migrations.b04.adoption_state import (
     PreparedEvidence,
     canonical_report_bytes,
     classify_marker_state,
+    database_identity_digest,
     publish_report_once,
 )
 from migrations.b04.disposable import DatabaseIdentity
@@ -33,6 +35,10 @@ SHA256_B = "b" * 64
 SHA256_C = "c" * 64
 SHA256_D = "d" * 64
 SHA256_E = "e" * 64
+IDENTITY_DIGEST = hashlib.sha256(
+    b'{"database":"weldpassport","host":"db.internal","port":5432,'
+    b'"server_version_num":180003,"username":"maintenance_operator"}\n'
+).hexdigest()
 
 
 def _snapshot(
@@ -69,6 +75,8 @@ def _prepared() -> PreparedEvidence:
         fingerprint_sha256=SHA256_C,
         allowlist_sha256=SHA256_D,
         seed_sha256=SHA256_E,
+        database_identity_sha256=IDENTITY_DIGEST,
+        server_version_num=180003,
         prepared_at_utc="2026-07-29T09:00:00Z",
         verification_results=(
             ("manifest_verified", True),
@@ -283,3 +291,46 @@ def test_b04b_state_008_accepted_report_publication_is_create_exclusive(
 
     assert target.name == "b04b-adoption-001.json"
     assert target.read_bytes() == original
+
+
+def test_b04b_state_009_identity_digest_binds_all_raw_identity_facts() -> None:
+    """Changing host, username, or exact server version must change the digest."""
+
+    digest = database_identity_digest(
+        DatabaseIdentity(
+            database="weldpassport",
+            host="db.internal",
+            port=5432,
+            username="maintenance_operator",
+        ),
+        180003,
+    )
+
+    assert digest == IDENTITY_DIGEST
+    assert digest != database_identity_digest(
+        DatabaseIdentity(
+            database="weldpassport",
+            host="other.internal",
+            port=5432,
+            username="maintenance_operator",
+        ),
+        180003,
+    )
+    assert digest != database_identity_digest(
+        DatabaseIdentity(
+            database="weldpassport",
+            host="db.internal",
+            port=5432,
+            username="other_operator",
+        ),
+        180003,
+    )
+    assert digest != database_identity_digest(
+        DatabaseIdentity(
+            database="weldpassport",
+            host="db.internal",
+            port=5432,
+            username="maintenance_operator",
+        ),
+        180004,
+    )
