@@ -515,7 +515,6 @@ def test_b04_fp_023_pg18_named_not_null_constraint_is_fingerprinted() -> None:
 
     assert value["tables"][0]["not_nulls"] == [
         {
-            "name": "workers_id_not_null",
             "kind": "n",
             "column": "id",
             "validated": True,
@@ -541,7 +540,7 @@ def test_b04_fp_024_not_null_catalog_and_column_nullability_must_agree(mutation:
     elif mutation == "nullable":
         table["columns"][0]["nullable"] = True
     elif mutation == "duplicate_column":
-        table["not_nulls"].append(dict(not_null, name="workers_id_second_not_null"))
+        table["not_nulls"].append(dict(not_null))
     elif mutation == "not_validated":
         not_null["validated"] = False
     elif mutation == "not_enforced":
@@ -567,8 +566,28 @@ def test_b04_fp_025_not_null_order_is_canonical_and_semantics_change_digest() ->
     value, _ = _extract(routes)
     reordered = json.loads(json.dumps(value))
     reordered["tables"][0]["not_nulls"].reverse()
-    changed = json.loads(json.dumps(value))
-    changed["tables"][0]["not_nulls"][0]["name"] = "renamed_not_null"
+    base, _ = _extract(_base_routes())
 
     assert canonicalize_fingerprint(reordered) == canonicalize_fingerprint(value)
-    assert fingerprint_digest(changed) != fingerprint_digest(value)
+    assert fingerprint_digest(base) != fingerprint_digest(value)
+
+
+def test_b04_fp_026_not_null_constraint_name_is_not_part_of_fingerprint() -> None:
+    original, _ = _extract(_base_routes())
+    renamed_routes = _base_routes()
+    renamed_routes["constraints"][0] = dict(
+        renamed_routes["constraints"][0],
+        name="historical_path_dependent_name",
+    )
+    renamed, _ = _extract(renamed_routes)
+
+    assert original["tables"][0]["not_nulls"] == [
+        {
+            "kind": "n",
+            "column": "id",
+            "validated": True,
+            "enforced": True,
+            "no_inherit": False,
+        }
+    ]
+    assert fingerprint_digest(original) == fingerprint_digest(renamed)

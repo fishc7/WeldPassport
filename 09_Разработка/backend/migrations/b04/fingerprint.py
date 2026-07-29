@@ -212,7 +212,7 @@ def _validate_table(value: object) -> None:
     if [column["ordinal"] for column in table["columns"]] != list(range(1, len(table["columns"]) + 1)):
         raise FingerprintError("B04-FP-COLUMN")
     specs = {
-        "not_nulls": frozenset({"name", "kind", "column", "validated", "enforced", "no_inherit"}),
+        "not_nulls": frozenset({"kind", "column", "validated", "enforced", "no_inherit"}),
         "primary_keys_uniques": frozenset({"name", "kind", "columns", "deferrable", "deferred", "validated", "nulls_not_distinct"}),
         "foreign_keys": frozenset({"name", "kind", "columns", "target_schema", "target_table", "target_columns", "match_type", "update_action", "delete_action", "deferrable", "deferred", "validated"}),
         "checks": frozenset({"name", "kind", "definition", "validated", "no_inherit"}),
@@ -227,13 +227,14 @@ def _validate_table(value: object) -> None:
         for value in rows:
             item = _mapping(value, "B04-FP-OBJECT")
             _exact_fields(item, fields, "B04-FP-UNKNOWN")
-            names = index_ids if collection == "indexes" else constraint_ids
-            if not _str(item["name"], "B04-FP-OBJECT") or item["name"] in names: raise FingerprintError("B04-FP-DUPLICATE-INDEX" if collection == "indexes" else "B04-FP-DUPLICATE-CONSTRAINT")
-            names.add(item["name"])
             if collection == "not_nulls":
                 if item["kind"] != "n" or not _str(item["column"], "B04-FP-OBJECT"): raise FingerprintError("B04-FP-OBJECT")
                 for field in ("validated", "enforced", "no_inherit"): _bool(item[field], "B04-FP-OBJECT")
-            elif collection == "primary_keys_uniques":
+                continue
+            names = index_ids if collection == "indexes" else constraint_ids
+            if not _str(item["name"], "B04-FP-OBJECT") or item["name"] in names: raise FingerprintError("B04-FP-DUPLICATE-INDEX" if collection == "indexes" else "B04-FP-DUPLICATE-CONSTRAINT")
+            names.add(item["name"])
+            if collection == "primary_keys_uniques":
                 if item["kind"] not in {"p", "u"} or not isinstance(item["kind"], str): raise FingerprintError("B04-FP-OBJECT")
                 if not _ordered_strings(item["columns"], "B04-FP-OBJECT"): raise FingerprintError("B04-FP-OBJECT")
                 for field in ("deferrable", "deferred", "validated", "nulls_not_distinct"): _bool(item[field], "B04-FP-OBJECT")
@@ -419,7 +420,8 @@ def _table_normal(table: Mapping[str, object]) -> dict[str, object]:
     result["partition_key"] = normalize_deparsed_expression(result["partition_key"])
     result["bound"] = normalize_deparsed_expression(result["bound"])
     result["indexes"] = sorted([{**dict(row), "keys": [normalize_deparsed_expression(item) for item in _mapping(row, "B04-FP-OBJECT")["keys"]], "include": [normalize_deparsed_expression(item) for item in _mapping(row, "B04-FP-OBJECT")["include"]], "predicate": normalize_deparsed_expression(_mapping(row, "B04-FP-OBJECT")["predicate"])} for row in result["indexes"]], key=lambda row: str(row["name"]))
-    for key in ("not_nulls", "primary_keys_uniques", "foreign_keys"):
+    result["not_nulls"] = sorted([dict(row) for row in result["not_nulls"]], key=lambda row: str(row["column"]))
+    for key in ("primary_keys_uniques", "foreign_keys"):
         result[key] = sorted([dict(row) for row in result[key]], key=lambda row: str(row["name"]))
     return _normal(result)  # type: ignore[return-value]
 
@@ -552,7 +554,7 @@ def extract_fingerprint(connection: Connection) -> dict[str, object]:
         if kind == "n":
             columns = _catalog_strings(row.get("columns"), "B04-FP-CATALOG-ARRAY")
             if len(columns) != 1: raise FingerprintError("B04-FP-CATALOG-CONSTRAINT")
-            table["not_nulls"].append({"name": row.get("name"), "kind": kind, "column": columns[0], "validated": row.get("validated"), "enforced": row.get("enforced"), "no_inherit": row.get("no_inherit")})
+            table["not_nulls"].append({"kind": kind, "column": columns[0], "validated": row.get("validated"), "enforced": row.get("enforced"), "no_inherit": row.get("no_inherit")})
         elif kind in {"p", "u"}:
             table["primary_keys_uniques"].append({"name": row.get("name"), "kind": kind, "columns": _catalog_strings(row.get("columns"), "B04-FP-CATALOG-ARRAY"), "deferrable": row.get("deferrable"), "deferred": row.get("deferred"), "validated": row.get("validated"), "nulls_not_distinct": row.get("nulls_not_distinct")})
         elif kind == "f":
