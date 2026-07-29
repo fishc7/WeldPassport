@@ -41,6 +41,33 @@ _FINGERPRINT = {
 }
 
 
+def _pending_verification_index() -> dict[str, object]:
+    return {
+        "baseline_id": "canonical_baseline_v1",
+        "evidence_sets": [
+            {
+                "acceptance": None,
+                "artifact_sha256": dict(PG16_ARTIFACT_SHA256),
+                "contract_path": None,
+                "evidence_id": "postgresql-16-fingerprint-v1",
+                "fingerprint_format_version": 1,
+                "postgres_major": 16,
+                "status": "historical_non_authorizing",
+            },
+            {
+                "acceptance": None,
+                "artifact_sha256": {},
+                "contract_path": "postgresql-18/contract.json",
+                "evidence_id": PG18_EVIDENCE_ID,
+                "fingerprint_format_version": 2,
+                "postgres_major": 18,
+                "status": "candidate_pending_verification",
+            },
+        ],
+        "format_version": 1,
+    }
+
+
 class _CommandAdapter:
     def __init__(self, events: list[str], fail_at: str | None = None) -> None:
         self.events = events
@@ -131,9 +158,7 @@ def _config(
             (_CANONICAL_ARTIFACT_DIR / name).read_bytes()
         )
     index_path = artifact_root / "evidence-index.json"
-    index_path.write_bytes(
-        (_CANONICAL_ARTIFACT_DIR / "evidence-index.json").read_bytes()
-    )
+    index_path.write_bytes(canonical_json_bytes(_pending_verification_index()))
 
     return VerificationConfig(
         historical_url=_HISTORICAL_URL,

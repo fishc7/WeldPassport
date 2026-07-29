@@ -35,8 +35,31 @@ PG18_ARTIFACT_NAMES = (
 )
 
 
-def _initial_index() -> dict[str, object]:
-    return json.loads(INDEX_PATH.read_text(encoding="utf-8"))
+def _pending_verification_index() -> dict[str, object]:
+    return {
+        "baseline_id": "canonical_baseline_v1",
+        "evidence_sets": [
+            {
+                "acceptance": None,
+                "artifact_sha256": dict(PG16_ARTIFACT_SHA256),
+                "contract_path": None,
+                "evidence_id": "postgresql-16-fingerprint-v1",
+                "fingerprint_format_version": 1,
+                "postgres_major": 16,
+                "status": "historical_non_authorizing",
+            },
+            {
+                "acceptance": None,
+                "artifact_sha256": {},
+                "contract_path": "postgresql-18/contract.json",
+                "evidence_id": PG18_ID,
+                "fingerprint_format_version": 2,
+                "postgres_major": 18,
+                "status": "candidate_pending_verification",
+            },
+        ],
+        "format_version": 1,
+    }
 
 
 def _pg18_contract() -> dict[str, object]:
@@ -84,7 +107,7 @@ def test_b04_r18_evidence_000_report_has_exact_keys_and_rejects_unknown_keys() -
 
 
 def _active_index(root: Path) -> dict[str, object]:
-    value = _initial_index()
+    value = _pending_verification_index()
     entries = value["evidence_sets"]
     assert isinstance(entries, list)
     pg18 = next(item for item in entries if item["evidence_id"] == PG18_ID)
@@ -127,7 +150,7 @@ def test_b04_r18_evidence_001_pg16_artifacts_are_byte_identical() -> None:
         assert hashlib.sha256(data).hexdigest() == expected
 
 
-def test_b04_r18_evidence_002_initial_index_is_not_authorizing() -> None:
+def test_b04_r18_evidence_002_repository_index_is_active_authorizing() -> None:
     index_bytes = INDEX_PATH.read_bytes()
     value = json.loads(index_bytes)
     assert b"\r\n" not in index_bytes
@@ -138,9 +161,29 @@ def test_b04_r18_evidence_002_initial_index_is_not_authorizing() -> None:
     }
     assert statuses == {
         "postgresql-16-fingerprint-v1": "historical_non_authorizing",
-        PG18_ID: "candidate_pending_verification",
+        PG18_ID: "active_authorizing",
     }
-    assert all(status != "active_authorizing" for status in statuses.values())
+    pg18 = next(
+        item for item in value["evidence_sets"] if item["evidence_id"] == PG18_ID
+    )
+    assert pg18["acceptance"] == {
+        "accepted_at_utc": "2026-07-29T05:51:15Z",
+        "accepted_by": "repository_owner",
+        "verification_report_sha256": (
+            "f2ab657c702852d68e2c58620faab1d56434088bbbab63307ded27a39d1b8c17"
+        ),
+    }
+    assert set(pg18["artifact_sha256"]) == set(PG18_ARTIFACT_NAMES)
+    evidence_dir = ARTIFACT_DIR / "postgresql-18"
+    assert {path.name for path in evidence_dir.iterdir()} == set(
+        PG18_ARTIFACT_NAMES
+    )
+    for name, expected in pg18["artifact_sha256"].items():
+        observed = hashlib.sha256((evidence_dir / name).read_bytes()).hexdigest()
+        assert observed == expected
+    resolved = resolve_authorizing_evidence(value, ARTIFACT_DIR)
+    assert resolved.evidence_id == PG18_ID
+    assert resolved.status is EvidenceStatus.ACTIVE_AUTHORIZING
 
 
 def test_b04_r18_evidence_003_contract_and_models_are_typed_and_immutable() -> None:
@@ -152,7 +195,9 @@ def test_b04_r18_evidence_003_contract_and_models_are_typed_and_immutable() -> N
     with pytest.raises(FrozenInstanceError):
         contract.postgres_major = 16  # type: ignore[misc]
 
-    evidence = EvidenceSet.from_mapping(_initial_index()["evidence_sets"][0])
+    evidence = EvidenceSet.from_mapping(
+        _pending_verification_index()["evidence_sets"][0]
+    )
     assert evidence.status is EvidenceStatus.HISTORICAL_NON_AUTHORIZING
     with pytest.raises(FrozenInstanceError):
         evidence.status = EvidenceStatus.ACTIVE_AUTHORIZING  # type: ignore[misc]
@@ -202,14 +247,14 @@ def test_b04_r18_evidence_003_contract_and_models_are_typed_and_immutable() -> N
 def test_b04_r18_evidence_004_rejects_invalid_index_structure(
     mutation: object,
 ) -> None:
-    value = _initial_index()
+    value = _pending_verification_index()
     mutation(value)  # type: ignore[operator]
     with pytest.raises(EvidenceError, match="B04-EVIDENCE-"):
         validate_evidence_index(value)
 
 
 def test_b04_r18_evidence_005_rejects_more_than_one_active_set() -> None:
-    value = _initial_index()
+    value = _pending_verification_index()
     for item in value["evidence_sets"]:
         item["status"] = "active_authorizing"
         item["acceptance"] = {
@@ -273,7 +318,9 @@ def test_b04_r18_evidence_006_rejects_invalid_pg18_contract(
 
 def test_b04_r18_evidence_007_initial_resolver_fails_closed() -> None:
     with pytest.raises(EvidenceError, match="B04-EVIDENCE-NO-ACTIVE"):
-        resolve_authorizing_evidence(_initial_index(), ARTIFACT_DIR)
+        resolve_authorizing_evidence(
+            _pending_verification_index(), ARTIFACT_DIR
+        )
 
 
 def test_b04_r18_evidence_008_resolver_returns_verified_active_set(
