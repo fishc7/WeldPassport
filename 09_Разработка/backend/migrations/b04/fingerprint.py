@@ -1,4 +1,4 @@
-"""Fail-closed PostgreSQL 16 catalog fingerprint for B-04 verification only."""
+"""Fail-closed PostgreSQL 18 catalog fingerprint v2 for B-04 verification only."""
 
 from __future__ import annotations
 
@@ -18,15 +18,15 @@ if TYPE_CHECKING:
 
 
 CANONICAL_SCHEMAS = ("engineering", "hr", "project", "quality", "welding")
-FINGERPRINT_FORMAT_VERSION = 1
-SUPPORTED_POSTGRES_MAJOR = 16
+FINGERPRINT_FORMAT_VERSION = 2
+SUPPORTED_POSTGRES_MAJOR = 18
 _PARAMS = {"schemas": list(CANONICAL_SCHEMAS)}
 _FORBIDDEN = frozenset({"oid", "owner", "acl", "statistics", "stats", "row_count", "storage", "last_value", "is_called", "created_at", "updated_at"})
 _DOLLAR = re.compile(r"\$(?:[^\W\d]\w*)?\$", re.UNICODE)
 
 
 class FingerprintError(ValueError):
-    """Observed data is outside the frozen B-04 PostgreSQL 16 contract."""
+    """Observed data is outside the frozen B-04 PostgreSQL 18 contract."""
 
 
 def normalize_deparsed_expression(value: str | None) -> str | None:
@@ -190,7 +190,7 @@ def _validate_named(record: Mapping[str, object], code: str) -> None:
 
 def _validate_table(value: object) -> None:
     table = _mapping(value, "B04-FP-TABLE")
-    _exact_fields(table, frozenset({"schema", "name", "kind", "is_partition", "parent", "partition_key", "bound", "columns", "primary_keys_uniques", "foreign_keys", "checks", "indexes"}), "B04-FP-UNKNOWN")
+    _exact_fields(table, frozenset({"schema", "name", "kind", "is_partition", "parent", "partition_key", "bound", "columns", "not_nulls", "primary_keys_uniques", "foreign_keys", "checks", "indexes"}), "B04-FP-UNKNOWN")
     _validate_named(table, "B04-FP-TABLE")
     if table["kind"] not in {"r", "p"} or not isinstance(table["kind"], str):
         raise FingerprintError("B04-FP-TABLE")
@@ -212,6 +212,7 @@ def _validate_table(value: object) -> None:
     if [column["ordinal"] for column in table["columns"]] != list(range(1, len(table["columns"]) + 1)):
         raise FingerprintError("B04-FP-COLUMN")
     specs = {
+        "not_nulls": frozenset({"kind", "column", "validated", "enforced", "no_inherit"}),
         "primary_keys_uniques": frozenset({"name", "kind", "columns", "deferrable", "deferred", "validated", "nulls_not_distinct"}),
         "foreign_keys": frozenset({"name", "kind", "columns", "target_schema", "target_table", "target_columns", "match_type", "update_action", "delete_action", "deferrable", "deferred", "validated"}),
         "checks": frozenset({"name", "kind", "definition", "validated", "no_inherit"}),
@@ -226,6 +227,10 @@ def _validate_table(value: object) -> None:
         for value in rows:
             item = _mapping(value, "B04-FP-OBJECT")
             _exact_fields(item, fields, "B04-FP-UNKNOWN")
+            if collection == "not_nulls":
+                if item["kind"] != "n" or not _str(item["column"], "B04-FP-OBJECT"): raise FingerprintError("B04-FP-OBJECT")
+                for field in ("validated", "enforced", "no_inherit"): _bool(item[field], "B04-FP-OBJECT")
+                continue
             names = index_ids if collection == "indexes" else constraint_ids
             if not _str(item["name"], "B04-FP-OBJECT") or item["name"] in names: raise FingerprintError("B04-FP-DUPLICATE-INDEX" if collection == "indexes" else "B04-FP-DUPLICATE-CONSTRAINT")
             names.add(item["name"])
@@ -321,6 +326,19 @@ def assert_supported_catalog(fingerprint: Mapping[str, object]) -> None:
                 if candidate is None or candidate["kind"] != "I": raise FingerprintError("B04-FP-PARTITION")
     for table in data["tables"]:
         local_columns = {column["name"] for column in table["columns"]}
+        required_not_null_columns = {column["name"] for column in table["columns"] if not column["nullable"]}
+        not_null_columns = [constraint["column"] for constraint in table["not_nulls"]]
+        if (
+            len(not_null_columns) != len(set(not_null_columns))
+            or set(not_null_columns) != required_not_null_columns
+            or any(
+                not constraint["validated"]
+                or not constraint["enforced"]
+                or constraint["no_inherit"]
+                for constraint in table["not_nulls"]
+            )
+        ):
+            raise FingerprintError("B04-FP-NOT-NULL")
         constraints = {row["name"]: row for row in table["primary_keys_uniques"]}
         for constraint in table["primary_keys_uniques"]:
             if not set(constraint["columns"]).issubset(local_columns): raise FingerprintError("B04-FP-CATALOG-ORPHAN")
@@ -402,6 +420,7 @@ def _table_normal(table: Mapping[str, object]) -> dict[str, object]:
     result["partition_key"] = normalize_deparsed_expression(result["partition_key"])
     result["bound"] = normalize_deparsed_expression(result["bound"])
     result["indexes"] = sorted([{**dict(row), "keys": [normalize_deparsed_expression(item) for item in _mapping(row, "B04-FP-OBJECT")["keys"]], "include": [normalize_deparsed_expression(item) for item in _mapping(row, "B04-FP-OBJECT")["include"]], "predicate": normalize_deparsed_expression(_mapping(row, "B04-FP-OBJECT")["predicate"])} for row in result["indexes"]], key=lambda row: str(row["name"]))
+    result["not_nulls"] = sorted([dict(row) for row in result["not_nulls"]], key=lambda row: str(row["column"]))
     for key in ("primary_keys_uniques", "foreign_keys"):
         result[key] = sorted([dict(row) for row in result[key]], key=lambda row: str(row["name"]))
     return _normal(result)  # type: ignore[return-value]
@@ -429,7 +448,7 @@ SELECT n.nspname AS schema, c.relname AS table, row_number() over (partition by 
 FROM pg_attribute AS a JOIN pg_class AS c ON c.oid=a.attrelid JOIN pg_namespace AS n ON n.oid=c.relnamespace LEFT JOIN pg_attrdef AS ad ON ad.adrelid=a.attrelid AND ad.adnum=a.attnum LEFT JOIN pg_collation AS coll ON coll.oid=a.attcollation AND a.attcollation<>0
 WHERE n.nspname=ANY(:schemas) AND c.relkind IN ('r','p') AND a.attnum>0 AND NOT a.attisdropped ORDER BY n.nspname,c.relname,a.attnum"""
 _CONSTRAINTS_SQL = """/* b04:constraints */
-SELECT n.nspname AS schema,c.relname AS table,con.conname AS name,con.contype AS kind,ARRAY(SELECT a.attname FROM unnest(con.conkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=k.attnum ORDER BY k.ord) AS columns,tn.nspname AS target_schema,tc.relname AS target_table,ARRAY(SELECT a.attname FROM unnest(con.confkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=tc.oid AND a.attnum=k.attnum ORDER BY k.ord) AS target_columns,con.confmatchtype AS match_type,con.confupdtype AS update_action,con.confdeltype AS delete_action,con.condeferrable AS deferrable,con.condeferred AS deferred,con.convalidated AS validated,COALESCE(ix.indnullsnotdistinct,false) AS nulls_not_distinct,pg_get_constraintdef(con.oid,true) AS definition,con.connoinherit AS no_inherit
+SELECT n.nspname AS schema,c.relname AS table,con.conname AS name,con.contype AS kind,ARRAY(SELECT a.attname FROM unnest(con.conkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=k.attnum ORDER BY k.ord) AS columns,tn.nspname AS target_schema,tc.relname AS target_table,ARRAY(SELECT a.attname FROM unnest(con.confkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=tc.oid AND a.attnum=k.attnum ORDER BY k.ord) AS target_columns,con.confmatchtype AS match_type,con.confupdtype AS update_action,con.confdeltype AS delete_action,con.condeferrable AS deferrable,con.condeferred AS deferred,con.convalidated AS validated,con.conenforced AS enforced,COALESCE(ix.indnullsnotdistinct,false) AS nulls_not_distinct,pg_get_constraintdef(con.oid,true) AS definition,con.connoinherit AS no_inherit
 FROM pg_constraint con JOIN pg_class c ON c.oid=con.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_class tc ON tc.oid=con.confrelid LEFT JOIN pg_namespace tn ON tn.oid=tc.relnamespace LEFT JOIN pg_index ix ON ix.indexrelid=con.conindid
 WHERE n.nspname=ANY(:schemas) ORDER BY n.nspname,c.relname,con.conname"""
 _INDEXES_SQL = """/* b04:indexes */
@@ -526,13 +545,17 @@ def extract_fingerprint(connection: Connection) -> dict[str, object]:
             if not isinstance(partition_key, str): raise FingerprintError("B04-FP-PARTITION")
         elif partition_key is not None: raise FingerprintError("B04-FP-PARTITION")
         if (schema, name) in tables: raise FingerprintError("B04-FP-DUPLICATE-TABLE")
-        tables[(schema, name)] = {"schema": schema, "name": name, "kind": kind, "is_partition": is_partition, "parent": parent, "partition_key": partition_key, "bound": row.get("bound"), "columns": [], "primary_keys_uniques": [], "foreign_keys": [], "checks": [], "indexes": []}
+        tables[(schema, name)] = {"schema": schema, "name": name, "kind": kind, "is_partition": is_partition, "parent": parent, "partition_key": partition_key, "bound": row.get("bound"), "columns": [], "not_nulls": [], "primary_keys_uniques": [], "foreign_keys": [], "checks": [], "indexes": []}
     for row in _rows(connection, _COLUMNS_SQL):
         table = _table_for(tables, row)
         table["columns"].append({"ordinal": row.get("ordinal"), "name": row.get("name"), "format_type": row.get("format_type"), "nullable": row.get("nullable"), "collation": _catalog_optional_text(row.get("collation"), "B04-FP-CATALOG-COLUMN"), "default": normalize_deparsed_expression(_catalog_optional_text(row.get("default"), "B04-FP-CATALOG-COLUMN")), "identity": row.get("identity"), "generated": row.get("generated")})
     for row in _rows(connection, _CONSTRAINTS_SQL):
         table, kind = _table_for(tables, row), row.get("kind")
-        if kind in {"p", "u"}:
+        if kind == "n":
+            columns = _catalog_strings(row.get("columns"), "B04-FP-CATALOG-ARRAY")
+            if len(columns) != 1: raise FingerprintError("B04-FP-CATALOG-CONSTRAINT")
+            table["not_nulls"].append({"kind": kind, "column": columns[0], "validated": row.get("validated"), "enforced": row.get("enforced"), "no_inherit": row.get("no_inherit")})
+        elif kind in {"p", "u"}:
             table["primary_keys_uniques"].append({"name": row.get("name"), "kind": kind, "columns": _catalog_strings(row.get("columns"), "B04-FP-CATALOG-ARRAY"), "deferrable": row.get("deferrable"), "deferred": row.get("deferred"), "validated": row.get("validated"), "nulls_not_distinct": row.get("nulls_not_distinct")})
         elif kind == "f":
             table["foreign_keys"].append({"name": row.get("name"), "kind": kind, "columns": _catalog_strings(row.get("columns"), "B04-FP-CATALOG-ARRAY"), "target_schema": row.get("target_schema"), "target_table": row.get("target_table"), "target_columns": _catalog_strings(row.get("target_columns"), "B04-FP-CATALOG-ARRAY"), "match_type": row.get("match_type"), "update_action": row.get("update_action"), "delete_action": row.get("delete_action"), "deferrable": row.get("deferrable"), "deferred": row.get("deferred"), "validated": row.get("validated")})

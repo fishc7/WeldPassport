@@ -1,15 +1,15 @@
 project: WeldPassport
-current_stage: b04a_done
-current_branch: codex/b04a-baseline
-updated_at: 2026-07-28
+current_stage: b04a_r18_accepted_maintenance_readiness_blocked
+current_branch: codex/b04a-r18-reverification
+updated_at: 2026-07-29
 
 # Источник фактического статуса Tasks с коммитами — docs/project/TASK_REGISTRY.md.
 # Этот файл — машиночитаемая сводка по модулям для панелей/скриптов.
 
 summary:
-  total_progress: 77
-  current_focus: "B-04A — завершён и зафиксирован commit 4487127"
-  next_action: "B-04B не начинать до maintenance readiness и отдельного решения"
+  total_progress: 78
+  current_focus: "B-04A-R18 принят; B-04B остаётся BLOCKED"
+  next_action: "Провести новый READ-ONLY Maintenance Readiness Review; adoption не начинать"
 
 modules:
   - code: constitution
@@ -26,7 +26,7 @@ modules:
     status: stable
     progress: 100
     visible: true
-    note: "AGF, Architecture Sessions, ADR-004..029; AS-02 и Test DB Safety Interlock; TASK_REGISTRY.md — реестр Tasks."
+    note: "AGF, Architecture Sessions, ADR-004..030; PostgreSQL 18.x и versioned B-04 evidence по ADR-030; TASK_REGISTRY.md — реестр Tasks."
 
   - code: test_db_safety_interlock
     name: "Fail-closed защита integration pytest"
@@ -38,13 +38,22 @@ modules:
     note: "ADR-029, commit 2046384: guard до PostgreSQL/Alembic; focused 10 passed, migration contracts 45 passed. Полный TEST-DB Foundation остаётся после B-04."
 
   - code: canonical_baseline_b04a
-    name: "B-04A → Canonical Baseline Build & Verification"
+    name: "B-04A → PostgreSQL 16 historical verification"
     owner: "Архитектура / миграции"
     status: done
     progress: 100
     branch: codex/b04a-baseline
     visible: true
-    note: "Implementation commit 4487127a3042cf6a8ba003b85cffd143dc920f0e; source 6c56f99edbd4e7346264ee14658d2076b5fd0775; PostgreSQL 16.14; 73 tables; 15 seeds; fingerprint ce2cd0613eab20da8d0a93d8caf675aa32fce932d909dfa219533b0c12dfc9f6; equivalence OK; pure suite 246 passed, 1 skipped. Active graph/marker/working DB unchanged; migration freeze active."
+    note: "Historical non-authorizing evidence по ADR-030. Implementation 4487127; PostgreSQL 16.14; fingerprint v1 ce2cd0613eab20da8d0a93d8caf675aa32fce932d909dfa219533b0c12dfc9f6. Evidence неизменяем, но не разрешает PG18 adoption."
+
+  - code: canonical_baseline_b04a_r18
+    name: "B-04A-R18 → PostgreSQL 18 Re-verification"
+    owner: "Архитектура / миграции"
+    status: done
+    progress: 100
+    branch: codex/b04a-r18-reverification
+    visible: true
+    note: "ACCEPTED 2026-07-29. Implementation f5245ba; evidence b34538f; PostgreSQL 18.3; fingerprint v2 e9e5affd8544b10353f2139c6526bab819f6da2ed919eb279fc1357803e2649a; evidence active_authorizing; 314 passed, 1 skipped. Working DB не подключалась."
 
   - code: canonical_baseline_b04b
     name: "B-04B → Repository Cut, Maintenance and Adoption"
@@ -52,7 +61,7 @@ modules:
     status: planned
     progress: 0
     visible: true
-    note: "Blocked pending maintenance readiness и отдельного решения о старте. Repository cut, marker transfer и adoption не выполнялись."
+    note: "B-04A-R18 принят, но новый Maintenance Readiness Review ещё не дал READY. Repository cut, marker transfer и adoption не выполнялись; B-04B BLOCKED; migration freeze active."
 
   - code: hr_workers
     name: "ОК → Работники"

@@ -4252,3 +4252,29 @@ TEST-DB Foundation ADR-025. Он не создаёт отдельную БД и 
 Pure contract suite подтверждён без PostgreSQL: focused `10 passed`, полный
 `migration_contract_tests` — `45 passed`. Application regression и Alembic в этом gate
 не запускались. Реализация зафиксирована commit `2046384`.
+
+---
+
+## ADR-030. PostgreSQL 18 Target and B-04 Evidence Versioning
+
+Дата: 2026-07-28
+
+Статус: **ACCEPTED**
+
+Полный текст:
+[[docs/project/ADR-030-postgresql-18-b04-evidence-versioning|ADR-030 — PostgreSQL 18 Target and B-04 Evidence Versioning]].
+
+PostgreSQL 18.x подтверждён как единственная целевая major-версия WeldPassport.
+Точная minor-версия фиксируется в evidence, но не является постоянным архитектурным
+pin. Принятое B-04A evidence PostgreSQL 16.14 сохраняется неизменяемым как
+`historical_non_authorizing`: оно подтверждает историческую проверку, но не разрешает
+adoption рабочей PostgreSQL 18.
+
+Вводится отдельный блок `B-04A-R18`: fingerprint format v2, отдельный PG18 evidence
+set и повторная equivalence verification на двух owned disposable PostgreSQL 18.x.
+Source cut, 31 frozen revision, `canonical_baseline_v1`, active graph и marker state
+не меняются. Рабочая БД в R18 не подключается.
+
+B-04B остаётся `BLOCKED`, migration freeze остаётся active. Переход к B-04B возможен
+только после отдельной приёмки B-04A-R18 и нового READ-ONLY Maintenance Readiness
+Review с verdict `READY`.
