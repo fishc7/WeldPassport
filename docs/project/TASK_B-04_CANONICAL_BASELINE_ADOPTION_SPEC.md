@@ -4,8 +4,9 @@
 > [[docs/project/ADR-030-postgresql-18-b04-evidence-versioning|ADR-030]] фиксирует
 > PostgreSQL 18.x как target major, сохраняет PG16 B-04A evidence как
 > `historical_non_authorizing` и вводит отдельный gate B-04A-R18. B-04A-R18 принят
-> 2026-07-29; до нового Maintenance Readiness verdict `READY` B-04B остаётся
-> `BLOCKED`.
+> 2026-07-29. [[docs/project/ADR-031-b04-dual-state-live-restore-evidence|ADR-031]]
+> добавляет отдельный B-04R restore-roundtrip evidence gate. До его приёмки и нового
+> Maintenance Readiness verdict `READY` B-04B остаётся `BLOCKED`.
 
 Статус: **ACCEPTED**
 
@@ -268,6 +269,26 @@ PG16 evidence остаётся immutable и не включается в authori
 major, отличный от 18, является stop condition и требует отдельного ADR и новой
 версии fingerprint contract.
 
+### 8.2.1. Dual-state restore contract
+
+По ADR-031 live migration-built fingerprint v2 остаётся единственным evidence для
+working DB. Custom-format restore DB проверяется отдельным
+`postgresql-18-restore-roundtrip-v1` evidence.
+
+Прямое равенство live и restored digest не требуется. Вместо него обязательны:
+
+```text
+working live digest == active-authorizing live digest
+first restore digest == second restore digest
+first restore digest == active-restore-authorizing digest
+typed_diff(live, restore) == exact accepted equivalence-map
+```
+
+Новый restore contract не изменяет существующий `evidence-index.json` или принятые
+PG18 artifacts. Он хранится в отдельном versioned каталоге и разрешает только
+restored rehearsal/recovery state. Wildcard, regex-normalization и общее игнорирование
+CHECK/predicate definitions запрещены.
+
 ### 8.3. Platform allowlist
 
 Allowlist внутри пяти canonical-схем по умолчанию пуст.
@@ -354,8 +375,13 @@ historical fingerprint v2
 ```
 
 Существующие PG16 artifacts не изменяются. Рабочая БД в B-04A-R18 не подключается.
-B-04B разрешается только отдельно принятым PG18 evidence, выбранным как
-`active_authorizing` в `evidence-index.json`.
+B-04B разрешается только при одновременном наличии:
+
+- отдельно принятого live PG18 evidence, выбранного как `active_authorizing` в
+  `evidence-index.json`;
+- отдельно принятого restore PG18 evidence, выбранного как
+  `active_restore_authorizing` в `restore-evidence-index.json`;
+- нового Maintenance Readiness verdict `READY`.
 
 ## 10. Repository cut B-04B
 
@@ -401,10 +427,18 @@ Preflight не изменяет БД и требует:
    - содержит ровно одну строку;
    - значение равно `20260724_27_qd_rbac_sod`;
 10. `public.alembic_version` полностью отсутствует;
-11. live canonical fingerprint точно равен ожидаемому;
+11. live canonical fingerprint точно равен active-authorizing live evidence;
 12. 15 governed seeds совпадают точно;
 13. неизвестные canonical objects отсутствуют;
 14. активные DDL/migration sessions и долгие transactions отсутствуют.
+
+Для restored rehearsal DB дополнительно требуется принятый B-04R evidence:
+
+- status `active_restore_authorizing`;
+- restored fingerprint равен restore-roundtrip expected digest;
+- live/restore exact typed diff равен accepted equivalence map;
+- first/second restore fixed-point доказан;
+- existing live evidence остаётся byte-identical.
 
 Дополнительно target DB и отдельная restored rehearsal DB обязаны иметь одинаковую
 точную `server_version_num`. Изменение target minor после rehearsal блокирует adoption
@@ -553,7 +587,8 @@ window запрещён.
 - загрузке archive active Alembic;
 - импорте `app.*` baseline-файлом;
 - использовании `create_all`;
-- несовпадении fingerprints;
+- несовпадении live fingerprint с live evidence, restored fingerprint с restore
+  evidence или exact typed diff с принятой equivalence map;
 - неизвестном canonical object;
 - несовпадении seeds;
 - непроверенном restore backup;
@@ -589,6 +624,10 @@ B-04A-0 source verification + freeze
   → B-04A-R18 fingerprint v2 + disposable PG18 equivalence
   → B-04A-R18 acceptance
   → новый READ-ONLY Maintenance Readiness Review
+  → ADR-031
+  → B-04R restore-roundtrip evidence
+  → B-04R acceptance
+  → повторный READ-ONLY Maintenance Readiness Review
   → READY
   → B-04B-1 cut/adoption tooling
   → B-04B-2 restored-backup rehearsal

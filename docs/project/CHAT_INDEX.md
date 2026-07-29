@@ -347,6 +347,53 @@ archived     — чат сохранён как история, активных
 
 ---
 
+### 10. B-04R — dual-state evidence PostgreSQL 18
+
+Статус: `in_progress`
+
+Назначение:
+
+Разбор расхождения структурного fingerprint между рабочей базой после Alembic и
+той же базой после `pg_dump` / `pg_restore`, выбор архитектурного контракта и
+подготовка отдельного шлюза B-04R перед B-04B.
+
+Ключевые темы:
+
+- live migration-built fingerprint;
+- restore-roundtrip fingerprint;
+- PostgreSQL 18 deparser;
+- точная типизированная карта допустимой эквивалентности;
+- двухкратная проверка fixed point после восстановления;
+- запрет ослаблять существующий B-04A-R18 evidence.
+
+Ключевые решения:
+
+- принят вариант 1: dual-state evidence contract;
+- существующий `postgresql-18-fingerprint-v2` остаётся byte-identical и проверяет
+  только рабочую migration-built базу;
+- восстановленная база проверяется отдельным
+  `postgresql-18-restore-roundtrip-v1`;
+- B-04B запрещён до отдельной приёмки B-04R и повторной readiness-проверки.
+
+Связанные файлы:
+
+- `docs/project/ADR-031-b04-dual-state-live-restore-evidence.md`
+- `docs/project/TASK_B-04R_RESTORE_ROUNDTRIP_EVIDENCE_SPEC.md`
+- `docs/project/TASK_B-04R_RESTORE_ROUNDTRIP_EVIDENCE_IMPLEMENTATION_PLAN.md`
+- `docs/project/TASK_B-04R_RESTORE_ROUNDTRIP_EVIDENCE_CLAUDE_CODE_PROMPT.md`
+- `docs/project/TASK_B-04B_CUT_MAINTENANCE_ADOPTION_IMPLEMENTATION_PLAN.md`
+- `docs/project/ROADMAP.md`
+- `docs/project/PROJECT_STATUS.yaml`
+
+Что ещё сделать:
+
+- зафиксировать accepted documentation отдельным owner-authorized commit;
+- реализовать B-04R отдельным этапом;
+- провести Diff и приёмку B-04R;
+- повторить B-04B readiness только после приёмки B-04R.
+
+---
+
 ## Шаблон записи нового чата
 
 Для новых рабочих чатов использовать шаблон:

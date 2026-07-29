@@ -10,7 +10,7 @@
 План развития WeldPassport. Машиночитаемое состояние выполнения —
 `docs/project/PROJECT_STATUS.yaml`; постатейный статус — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]].
 
-## Текущий этап (обновлено 2026-07-28)
+## Текущий этап (обновлено 2026-07-29)
 
 **Инженерный контур, WeldOperation, термообработка и ядро контроля качества (Tasks 1–7,
 8A–8F, 9A–9C) реализованы.** Идёт **Task 9D — Quality / Defect Management**: блоки
@@ -38,7 +38,8 @@ pure suite — `246 passed, 1 skipped`.
 
 По [[docs/project/ADR-030-postgresql-18-b04-evidence-versioning|ADR-030]] это evidence
 сохраняется как `historical_non_authorizing`. Целевая версия проекта — PostgreSQL
-18.x; до B-04B требуется отдельный `B-04A-R18` с fingerprint v2 и новым PG18 evidence.
+18.x. B-04A-R18 с fingerprint v2 уже принят; до B-04B теперь требуется отдельный
+B-04R restore-roundtrip evidence по ADR-031.
 
 Реализовано и задокументировано (полный перечень — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]):
 
@@ -55,7 +56,7 @@ pure suite — `246 passed, 1 skipped`.
 
 ## Следующий этап
 
-### 0. B-04A-R18 принят; Maintenance Readiness — следующий gate
+### 0. B-04A-R18 принят; B-04R restore evidence — следующий gate
 
 - B-04A PG16 evidence опубликовано вне активного `migrations/versions` и сохраняется
   неизменяемым как historical non-authorizing;
@@ -67,9 +68,21 @@ pure suite — `246 passed, 1 skipped`.
   `e9e5affd8544b10353f2139c6526bab819f6da2ed919eb279fc1357803e2649a`;
 - PG18 evidence имеет статус `active_authorizing`; verification report —
   `B04A_VERIFIED`; pure verification — `314 passed, 1 skipped`;
-- следующий отдельный gate — новый READ-ONLY Maintenance Readiness Review;
-- B-04B repository cut, marker transfer и adoption не начинать до нового
-  Maintenance Readiness verdict `READY`; текущий статус B-04B — `BLOCKED`.
+- новый READ-ONLY Maintenance Readiness Review выявил стабильное отличие PostgreSQL
+  deparser после custom-format restore: live `e9e5affd...`, restore fixed point
+  `3a9e682c...`, exact diff 133 CHECK + 2 predicates;
+- [[docs/project/ADR-031-b04-dual-state-live-restore-evidence|ADR-031]] принят:
+  live и restore states получают отдельные exact authorizing contracts;
+- [[docs/project/TASK_B-04R_RESTORE_ROUNDTRIP_EVIDENCE_SPEC|B-04R Spec]] принята
+  2026-07-29;
+- [[docs/project/TASK_B-04R_RESTORE_ROUNDTRIP_EVIDENCE_IMPLEMENTATION_PLAN|B-04R
+  implementation plan]] принят 2026-07-29;
+- следующий gate — owner-authorized documentation commit, фиксация exact
+  implementation base SHA и pure TDD implementation; code/evidence review остаются
+  отдельными;
+- B-04B repository cut, marker transfer и adoption не начинать до принятого B-04R
+  evidence и нового Maintenance Readiness verdict `READY`; текущий статус —
+  `BLOCKED`.
 
 ### 1. Test DB Safety Interlock — завершён
 

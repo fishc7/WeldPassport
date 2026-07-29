@@ -1392,6 +1392,15 @@ evidence commit `b34538f5ddd4ed31d8094bc5d96f42ada7d1f28d`. До нового RE
 Maintenance Readiness Review с verdict `READY` B-04B остаётся `BLOCKED`, а
 migration freeze — active.
 
+[[docs/project/ADR-031-b04-dual-state-live-restore-evidence|ADR-031]] разделяет
+два exact authorizing состояния PostgreSQL 18.3: migration-built working DB
+проверяется по неизменному live fingerprint v2, а DB после custom-format restore —
+по отдельному versioned restore-roundtrip fingerprint. Принятые PG16/PG18 artifacts
+не переписываются; новый B-04R contract добавляется отдельными files и exact typed
+equivalence map без wildcard или expression normalization. B-04B требует одновременно
+`active_authorizing` live evidence, `active_restore_authorizing` restore evidence и
+новый Maintenance Readiness verdict `READY`.
+
 До полного TEST-DB Foundation действует предварительный
 [[docs/project/ADR-029-test-db-safety-interlock|Test DB Safety Interlock]]. Integration
 pytest по умолчанию fail-closed до первого соединения и запуска Alembic; оператор обязан

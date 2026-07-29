@@ -4278,3 +4278,31 @@ Source cut, 31 frozen revision, `canonical_baseline_v1`, active graph и marker 
 B-04B остаётся `BLOCKED`, migration freeze остаётся active. Переход к B-04B возможен
 только после отдельной приёмки B-04A-R18 и нового READ-ONLY Maintenance Readiness
 Review с verdict `READY`.
+
+---
+
+## ADR-031. B-04 Dual-State Live and Restore-Roundtrip Evidence
+
+Дата: 2026-07-29
+
+Статус: **ACCEPTED**
+
+Полный текст:
+[[docs/project/ADR-031-b04-dual-state-live-restore-evidence|ADR-031 — B-04 Dual-State Live and Restore-Roundtrip Evidence]].
+
+Maintenance Readiness Review подтвердил, что migration-built working PostgreSQL 18.3
+имеет принятый live fingerprint `e9e5affd...`, а custom-format restore стабильно
+переходит в fingerprint `3a9e682c...`. Повторный restore сохраняет `3a9e682c...`.
+Все 135 leaf differences ограничены текстовой формой PostgreSQL deparser:
+133 `CHECK` definitions и 2 partial-index predicates; прочего structural/data drift нет.
+
+Принято разделение на два exact authorizing contract:
+
+- существующий `active_authorizing` live fingerprint v2 — только для working DB;
+- новый `active_restore_authorizing` restore-roundtrip evidence — только для restored
+  rehearsal/recovery DB.
+
+Existing PG16/PG18 evidence остаётся byte-identical. B-04R добавляет только новые
+versioned artifacts и exact typed equivalence map без wildcard, regex-normalization
+или игнорирования CHECK/predicate. B-04B остаётся `BLOCKED` до отдельной приёмки B-04R
+и нового Maintenance Readiness verdict `READY`.

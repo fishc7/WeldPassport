@@ -4,6 +4,11 @@
 
 Статус: **ACCEPTED**
 
+Уточнено:
+[[docs/project/ADR-031-b04-dual-state-live-restore-evidence|ADR-031]] разделяет
+live migration-built и restore-roundtrip authorizing evidence без изменения
+принятого fingerprint v2.
+
 Связано:
 
 - [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025]];
@@ -183,6 +188,9 @@ ADR-030
   → immutable PG18 evidence
   → отдельная приёмка B-04A-R18
   → новый READ-ONLY Maintenance Readiness Review
+  → ADR-031 / B-04R restore-roundtrip evidence
+  → отдельная приёмка B-04R
+  → повторный READ-ONLY Maintenance Readiness Review
   → READY
   → B-04B-1
   → review

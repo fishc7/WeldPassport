@@ -70,7 +70,7 @@ WeldPassport — внутренняя система для отдела гла�
 [[docs/project/DECISIONS#ADR-017. Quality Decision, Defect, Repair and Quality Documents Canon (Session 008)|ADR-017: решения по качеству, дефекты, ремонт и документы качества]] (`PARTIALLY_SUPERSEDED_BY_ADR-019`) ·
 [[docs/project/DECISIONS#ADR-019. Quality Finding and Engineering Evaluation Canon (Session 008-07)|ADR-019: Quality Finding и Engineering Evaluation (углублённая архитектура Task 9D)]].
 
-## Текущий статус архитектуры (обновлено 2026-07-24)
+## Текущий статус архитектуры (обновлено 2026-07-29)
 
 - **Architecture Session 003 завершена** — доменная модель Production/Joints MVP
   (ADR-008, решения 003-A — 003-AM).
@@ -113,6 +113,13 @@ WeldPassport — внутренняя система для отдела гла�
   назначение роли сохраняется в immutable `authorization_context`, а совмещение OGS/OTK
   отмечается governance warning без блокировки HR-назначения. Архитектура и implementation
   plan приняты 2026-07-24; код и migration revision 27 ещё не реализованы.
+- **Контур управления миграциями B-04:** B-04A-R18 принят для рабочей PostgreSQL 18,
+  но восстановленная из `pg_dump` база имеет устойчивое round-trip-представление
+  выражений PostgreSQL. ADR-031 разделяет live evidence и restore-roundtrip evidence
+  без ослабления структурного сравнения. Спецификация и implementation plan B-04R
+  приняты 2026-07-29; текущий шлюз — owner-authorized documentation commit и
+  фиксация implementation base SHA. B-04B остаётся заблокирован до отдельной
+  реализации и приёмки B-04R и повторной readiness-проверки.
 - **Task 9D — реализация в процессе (обновлено 2026-07-21; актуальный статус по подблокам —
   [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]).** Блоки **9D-1** (`QualityFinding` Core),
   **9D-2** (`EngineeringEvaluation`, ADR-021; блоки 9D-2A — 9D-2E), **9D-3** (`Defect Technical

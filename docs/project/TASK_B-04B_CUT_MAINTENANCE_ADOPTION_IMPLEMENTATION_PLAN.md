@@ -2,18 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status:** `BLOCKED`. Do not execute any task until B-04A-R18 is separately
-> accepted and a subsequent Maintenance Readiness Review returns `READY`.
+> **Status:** `BLOCKED`. Do not execute any task until B-04A-R18 and B-04R are
+> separately accepted and a subsequent Maintenance Readiness Review returns `READY`.
 
 **Goal:** Активировать принятый `canonical_baseline_v1` и атомарно принять
 существующую PostgreSQL-БД через перенос version marker в `public`.
 
-**Architecture:** B-04B выполняется только после отдельной приёмки B-04A-R18.
+**Architecture:** B-04B выполняется только после отдельной приёмки B-04A-R18 и B-04R.
 PG16 B-04A evidence сохраняется immutable со статусом `historical_non_authorizing`;
-авторизующим является только PG18 fingerprint v2 evidence. Repository cut и
-maintenance tooling готовятся на изолированной stacked-ветке; полный процесс сначала
-репетируется на восстановленной копии backup. Рабочая БД изменяется только отдельным
-разрешённым maintenance run.
+working DB разрешает только PG18 live fingerprint v2 evidence, restored rehearsal DB —
+только отдельный restore-roundtrip evidence по ADR-031. Repository cut и maintenance
+tooling готовятся на изолированной stacked-ветке; полный процесс сначала репетируется
+на восстановленной копии backup. Рабочая БД изменяется только отдельным разрешённым
+maintenance run.
 
 **Tech Stack:** Python 3.12, pytest 8, SQLAlchemy 2, Alembic, PostgreSQL 18.x,
 `pg_dump --format=custom`, `pg_restore`, SHA-256, canonical JSON.
@@ -23,6 +24,9 @@ maintenance tooling готовятся на изолированной stacked-�
 - B-04A-R18 status must be accepted with evidence digest and exact accepted head SHA.
 - `evidence-index.json` must identify one active-authorizing PG18 fingerprint v2
   evidence set; PG16 evidence remains historical and non-authorizing.
+- `restore-evidence-index.json` must identify one `active_restore_authorizing`
+  PostgreSQL 18 restore-roundtrip evidence set linked to the accepted live evidence.
+- Existing accepted PG16 and PG18 artifacts must remain byte-identical.
 - Migration freeze remains active through B-04B closure.
 - Active historical head before adoption:
   `20260724_27_qd_rbac_sod`.
@@ -455,7 +459,9 @@ Only against the approved isolated restored copy:
 Expected:
 
 - restore verified;
-- fingerprint equals B-04A-R18 active-authorizing fingerprint v2 digest;
+- working fingerprint equals B-04A-R18 active-authorizing live digest;
+- restored fingerprint equals B-04R active-restore-authorizing digest;
+- exact typed live/restore diff equals the accepted equivalence map;
 - restored and target `server_version_num` values match exactly;
 - marker transaction and postflight pass;
 - recovery from a separately restored backup is demonstrated;
