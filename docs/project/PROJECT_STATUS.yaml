@@ -1,5 +1,5 @@
 project: WeldPassport
-current_stage: b04r_db_run_authorization
+current_stage: b04r_remediation_sha_acceptance
 current_branch: codex/b04b-maintenance-readiness-review
 updated_at: 2026-07-29
 
@@ -8,8 +8,8 @@ updated_at: 2026-07-29
 
 summary:
   total_progress: 78
-  current_focus: "B-04R pure implementation принята и зафиксирована implementation commit"
-  next_action: "Подтвердить exact implementation commit SHA и получить отдельное разрешение на DB preflight/run; evidence generation и B-04B не начинать"
+  current_focus: "B-04R psycopg percent-paramstyle remediation закоммичена по разрешению владельца"
+  next_action: "Согласовать новый remediation SHA; затем отдельно повторить operator run"
 
 modules:
   - code: constitution
@@ -58,11 +58,11 @@ modules:
   - code: canonical_baseline_b04r
     name: "B-04R → PostgreSQL 18 Restore-Roundtrip Evidence"
     owner: "Архитектура / миграции"
-    status: implementation_committed_evidence_pending
-    progress: 85
+    status: remediation_committed_awaiting_sha_acceptance
+    progress: 90
     branch: codex/b04b-maintenance-readiness-review
     visible: true
-    note: "ADR-031, Spec, plan и pure implementation ACCEPTED 2026-07-29; documentation base 08bc6a0. Pure implementation включена в текущий implementation commit; exact SHA сообщается после создания. Focused 58 passed, migration contracts 378 passed, 1 skipped. DB run и evidence generation отсутствуют."
+    note: "Implementation 2c1a0d9 принят. Первый operator run остановлен до restore: psycopg трактовал одиночный % в exec_driver_sql как placeholder. Remediation %→%% реализована TDD, ACCEPTED и закоммичена по разрешению владельца 2026-07-29; точный remediation SHA ожидает принятия; focused 59 passed, migration contracts 379 passed, 1 skipped; real read-only preflight B04R-PREFLIGHT-OK. Restore и evidence generation отсутствуют."
 
   - code: canonical_baseline_b04b
     name: "B-04B → Repository Cut, Maintenance and Adoption"

@@ -119,8 +119,12 @@ WeldPassport — внутренняя система для отдела гла�
   без ослабления структурного сравнения. Спецификация и implementation plan B-04R
   приняты 2026-07-29, documentation base зафиксирован commit
   `08bc6a09974e0272ff27938511af5d4d6ba33403`; pure implementation принята
-  владельцем и зафиксирована implementation commit 2026-07-29. DB run и restore
-  evidence не выполнялись.
+  владельцем и зафиксирована implementation commit
+  `2c1a0d9fc66683a1119b496f767f57156e7e3390`. Первый operator run остановился
+  fail-closed до restore на psycopg percent-paramstyle; минимальная TDD remediation
+  реализована, принята и закоммичена по разрешению владельца 2026-07-29;
+  real read-only preflight прошёл. Новый remediation SHA ожидает отдельного
+  принятия; restore evidence отсутствует.
   B-04B остаётся заблокирован до отдельной evidence acceptance B-04R и повторной
   readiness-проверки.
 - **Task 9D — реализация в процессе (обновлено 2026-07-21; актуальный статус по подблокам —

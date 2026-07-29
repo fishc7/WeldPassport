@@ -2,13 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-Статус: **IMPLEMENTATION COMMITTED 2026-07-29 — evidence pending**
+Статус: **OPERATOR REMEDIATION COMMITTED — awaiting SHA acceptance**
 
 Implementation base:
 `08bc6a09974e0272ff27938511af5d4d6ba33403`.
 
-Pure verification: focused `58 passed`; полный `migration_contract_tests` —
-`378 passed, 1 skipped`. DB run и генерация restore evidence не выполнялись.
+Pure verification after remediation: focused `59 passed`; полный
+`migration_contract_tests` — `379 passed, 1 skipped`; real read-only preflight —
+`B04R-PREFLIGHT-OK`. Restore и генерация evidence не выполнялись.
 
 **Goal:** Реализовать отдельный fail-closed PostgreSQL 18 restore-roundtrip
 evidence contract, который сохраняет live evidence byte-identical, доказывает

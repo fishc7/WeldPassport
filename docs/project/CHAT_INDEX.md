@@ -393,7 +393,12 @@ archived     — чат сохранён как история, активных
   `378 passed, 1 skipped`;
 - Diff и отдельная code acceptance B-04R завершены 2026-07-29;
 - implementation commit разрешён и создан 2026-07-29;
-- получить отдельное разрешение на DB preflight/run;
+- первый operator run остановлен до restore с `B04R-DISPOSABLE-SAFETY`;
+- root cause: одиночный `%` в direct psycopg SQL;
+- remediation реализована TDD и принята владельцем 2026-07-29;
+- remediation commit разрешён и создан;
+- получить отдельное принятие нового remediation SHA;
+- после принятия SHA отдельно повторить operator run;
 - только после этого отдельно разрешать DB run, генерацию и приёмку evidence;
 - повторить B-04B readiness только после приёмки B-04R.
 

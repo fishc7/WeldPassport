@@ -79,9 +79,14 @@ B-04R restore-roundtrip evidence по ADR-031.
   implementation plan]] принят 2026-07-29;
 - documentation commit `08bc6a09974e0272ff27938511af5d4d6ba33403` принят как
   exact implementation base;
-- pure TDD implementation принята владельцем и зафиксирована implementation
-  commit 2026-07-29: focused `58 passed`, полный `migration_contract_tests` —
-  `378 passed, 1 skipped`; текущий gate — отдельное разрешение на DB preflight/run;
+- pure TDD implementation принята владельцем и зафиксирована commit
+  `2c1a0d9fc66683a1119b496f767f57156e7e3390`;
+- первый operator run остановился fail-closed до restore из-за неэкранированного
+  `%` в direct psycopg SQL; минимальная remediation `%` → `%%` реализована TDD:
+  focused `59 passed`, полный `379 passed, 1 skipped`, real read-only preflight
+  `B04R-PREFLIGHT-OK`;
+- remediation принята и закоммичена по разрешению владельца 2026-07-29;
+  текущий gate — принятие нового SHA; повтор operator run остаётся отдельным;
 - DB run, генерация restore evidence, implementation commit и evidence acceptance
   остаются отдельными запрещёнными до явного разрешения этапами;
 - B-04B repository cut, marker transfer и adoption не начинать до принятого B-04R

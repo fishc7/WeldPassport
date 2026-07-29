@@ -207,6 +207,10 @@ def test_b04r_readonly_001_begin_is_first_working_statement() -> None:
     assert snapshot.governed_seed_count == 15
 
 
+def test_b04r_preflight_000_escapes_percent_for_psycopg_driver_sql() -> None:
+    assert "n.nspname NOT LIKE 'pg_toast%%'" in restore_runner._EMPTY_SQL
+
+
 def test_b04r_preflight_001_returns_sanitized_verified_state() -> None:
     config, connections = _config()
     result = preflight_restore_verification(config)
