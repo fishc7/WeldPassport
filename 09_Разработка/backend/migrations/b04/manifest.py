@@ -322,7 +322,12 @@ def _write_artifacts(manifest: Mapping[str, object], output_dir: Path) -> None:
     (output_dir / CUT_FILENAME).write_bytes(canonical_json_bytes(_cut_document()))
 
 
-def verify_manifest_artifact(manifest_path: Path, root: Path) -> None:
+def _verify_manifest_artifact(
+    manifest_path: Path,
+    root: Path,
+    *,
+    archived: bool,
+) -> None:
     manifest_bytes = manifest_path.read_bytes()
     try:
         manifest = json.loads(manifest_bytes)
@@ -334,7 +339,19 @@ def verify_manifest_artifact(manifest_path: Path, root: Path) -> None:
     expected_digest = f"{sha256_hex(manifest_bytes)}  {MANIFEST_FILENAME}\n"
     if digest_path.read_bytes() != expected_digest.encode("ascii"):
         raise ManifestError("B04-MANIFEST-DIGEST")
-    verify_manifest_files(manifest, root, archived=False)
+    verify_manifest_files(manifest, root, archived=archived)
+
+
+def verify_manifest_artifact(manifest_path: Path, root: Path) -> None:
+    """Verify the accepted manifest against the pre-cut source directory."""
+
+    _verify_manifest_artifact(manifest_path, root, archived=False)
+
+
+def verify_archived_manifest_artifact(manifest_path: Path, root: Path) -> None:
+    """Verify the accepted manifest against the immutable post-cut archive."""
+
+    _verify_manifest_artifact(manifest_path, root, archived=True)
 
 
 def main() -> None:

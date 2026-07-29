@@ -10,9 +10,9 @@ import pytest
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-EXPECTED_ROOT = "20260702_02_hr_core"
-EXPECTED_HEAD = "20260724_27_qd_rbac_sod"
-EXPECTED_REVISION_COUNT = 31
+EXPECTED_ROOT = "canonical_baseline_v1"
+EXPECTED_HEAD = "canonical_baseline_v1"
+EXPECTED_REVISION_COUNT = 1
 
 
 def _run_alembic(arguments: list[str]) -> subprocess.CompletedProcess[str]:

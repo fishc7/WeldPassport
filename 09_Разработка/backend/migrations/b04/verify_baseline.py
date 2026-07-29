@@ -40,7 +40,11 @@ from migrations.b04.fingerprint import (
     canonicalize_fingerprint,
     extract_fingerprint,
 )
-from migrations.b04.manifest import canonical_json_bytes, sha256_hex, verify_manifest_artifact
+from migrations.b04.manifest import (
+    canonical_json_bytes,
+    sha256_hex,
+    verify_archived_manifest_artifact,
+)
 from migrations.b04.seeds import seed_manifest
 from migrations.b04.source_contract import CANONICAL_TABLE_COUNT, SCHEMA_SOURCE_COMMIT
 
@@ -147,7 +151,7 @@ class VerificationConfig:
     baseline_alembic_ini: Path = Path("migrations/b04/candidate_alembic.ini")
     frozen_manifest_path: Path = Path("migrations/baselines/canonical_baseline_v1/frozen-revision-manifest.json")
     repository_root: Path = Path(".")
-    manifest_verifier: ManifestVerifier = verify_manifest_artifact
+    manifest_verifier: ManifestVerifier = verify_archived_manifest_artifact
     artifact_linker: ArtifactLinker = _hard_link_no_clobber
     temporary_writer: TemporaryWriter = lambda target, data: _write_temporary(target, data)
     index_replacer: IndexReplacer = os.replace
@@ -241,6 +245,7 @@ def _historical_environment(
             "POSTGRES_USER": parsed.username,
             "POSTGRES_PASSWORD": parsed.password,
             "POSTGRES_SCHEMA": "test",
+            "PYTHONDONTWRITEBYTECODE": "1",
         }
     except Exception as exc:
         raise VerificationError("B04-VERIFY-HISTORICAL-URL") from exc
@@ -266,6 +271,7 @@ def _baseline_environment(
         "WELDPASSPORT_B04_OWNERSHIP_TOKEN": config.ownership_token,
         "WELDPASSPORT_B04_EXPECTED_DATABASE": config.baseline_expected_database,
         "WELDPASSPORT_B04_DATABASE_URL": config.baseline_url,
+        "PYTHONDONTWRITEBYTECODE": "1",
     }
     if any(not isinstance(value, str) or not value for value in values.values()):
         raise VerificationError("B04-VERIFY-BASELINE-CONTEXT")

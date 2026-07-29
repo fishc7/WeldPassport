@@ -1,4 +1,4 @@
-"""Pure AST contracts for the active historical migration graph."""
+"""Pure AST contracts for the active canonical baseline graph."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from pathlib import Path
 
 
 VERSIONS_DIR = Path(__file__).resolve().parents[1] / "migrations" / "versions"
-EXPECTED_ROOT = "20260702_02_hr_core"
-EXPECTED_HEAD = "20260724_27_qd_rbac_sod"
-EXPECTED_REVISION_COUNT = 31
+EXPECTED_ROOT = "canonical_baseline_v1"
+EXPECTED_HEAD = "canonical_baseline_v1"
+EXPECTED_REVISION_COUNT = 1
 
 
 @dataclass(frozen=True)
@@ -93,7 +93,7 @@ def test_graph_002_has_exactly_one_expected_head() -> None:
     assert heads == {EXPECTED_HEAD}
 
 
-def test_graph_003_has_31_unique_revision_ids() -> None:
+def test_graph_003_has_one_unique_revision_id() -> None:
     """TEST-B03-GRAPH-003."""
     revisions = _revisions()
     revision_ids = [node.revision for node in revisions]

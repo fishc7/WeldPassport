@@ -21,29 +21,7 @@ class OfflineFinding:
         return f"{self.path}:{self.line}:{self.call}:{self.rule}"
 
 
-# Историческое исключение принято осознанно и не должно расширяться.
-HISTORICAL_OFFLINE_DEBT = frozenset(
-    {
-        OfflineFinding(
-            "migrations/versions/20260721_23_disp_events.py",
-            42,
-            "op.get_bind",
-            "runtime-bind",
-        ),
-        OfflineFinding(
-            "migrations/versions/20260721_23_disp_events.py",
-            43,
-            "bind.execute",
-            "runtime-execute",
-        ),
-        OfflineFinding(
-            "migrations/versions/20260721_23_disp_events.py",
-            46,
-            "scalar",
-            "runtime-result-read",
-        ),
-    }
-)
+HISTORICAL_OFFLINE_DEBT = frozenset()
 
 
 def _import_aliases(tree: ast.AST) -> dict[str, str]:
@@ -118,7 +96,7 @@ def _scan_migrations() -> frozenset[OfflineFinding]:
     )
 
 
-def test_offline_001_migration_23_is_the_exact_current_exception() -> None:
+def test_offline_001_active_graph_has_no_offline_debt() -> None:
     """TEST-B03-OFFLINE-001."""
     actual = _scan_migrations()
 

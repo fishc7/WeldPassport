@@ -30,7 +30,8 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         include_schemas=True,
-        version_table_schema=settings.postgres_schema,
+        version_table_schema="public",
+        version_table_pk=True,
         include_name=include_name,
         include_object=include_object,
     )
@@ -60,7 +61,8 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             include_schemas=True,
-            version_table_schema=settings.postgres_schema,
+            version_table_schema="public",
+            version_table_pk=True,
             include_name=include_name,
             include_object=fk_aware_include_object,
         )

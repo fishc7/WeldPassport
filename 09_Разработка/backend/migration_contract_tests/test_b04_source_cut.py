@@ -21,7 +21,13 @@ from migrations.b04.source_contract import (
 )
 
 
-VERSIONS_DIR = Path(__file__).resolve().parents[1] / "migrations" / "versions"
+ARCHIVE_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "migrations"
+    / "archive"
+    / "canonical_baseline_v1"
+    / "revisions"
+)
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -66,7 +72,7 @@ def _parse_revision(path: Path) -> RevisionNode:
 
 
 def _revisions() -> list[RevisionNode]:
-    return [_parse_revision(path) for path in sorted(VERSIONS_DIR.glob("*.py"))]
+    return [_parse_revision(path) for path in sorted(ARCHIVE_DIR.glob("*.py"))]
 
 
 def _source_commit_provenance() -> tuple[tuple[str, ...], str]:
@@ -106,7 +112,7 @@ def test_b04_cut_002_source_commit_has_accepted_provenance() -> None:
     assert subject == "Merge pull request #4 from fishc7/codex/test-db-safety"
 
 
-def test_b04_cut_003_active_graph_matches_accepted_snapshot() -> None:
+def test_b04_cut_003_archived_graph_matches_accepted_snapshot() -> None:
     revisions = _revisions()
     revision_ids = [node.revision for node in revisions]
     parent_ids = {parent for node in revisions for parent in node.parents}

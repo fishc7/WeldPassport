@@ -17,6 +17,7 @@ from migrations.b04.manifest import (
     canonical_json_bytes,
     parse_revision,
     sha256_hex,
+    verify_archived_manifest_artifact,
     verify_manifest_artifact,
     verify_manifest_files,
 )
@@ -29,7 +30,13 @@ from migrations.b04.source_contract import (
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-VERSIONS_DIR = BACKEND_ROOT / "migrations" / "versions"
+ARCHIVE_DIR = (
+    BACKEND_ROOT
+    / "migrations"
+    / "archive"
+    / "canonical_baseline_v1"
+    / "revisions"
+)
 ARCHIVE_PREFIX = "migrations/archive/canonical_baseline_v1/revisions/"
 SOURCE_PREFIX = "migrations/versions/"
 
@@ -81,7 +88,7 @@ def test_b04_manifest_003_raw_byte_digest_changes_after_any_edit(tmp_path: Path)
 
 
 def test_b04_manifest_004_builds_the_accepted_closed_linear_graph() -> None:
-    manifest = build_frozen_manifest(VERSIONS_DIR)
+    manifest = build_frozen_manifest(ARCHIVE_DIR)
     entries = manifest["revisions"]
 
     assert manifest["source_commit"] == SCHEMA_SOURCE_COMMIT
@@ -99,7 +106,7 @@ def test_b04_manifest_004_builds_the_accepted_closed_linear_graph() -> None:
 
 
 def test_b04_manifest_005_uses_exact_portable_source_and_archive_paths() -> None:
-    manifest = build_frozen_manifest(VERSIONS_DIR)
+    manifest = build_frozen_manifest(ARCHIVE_DIR)
 
     for entry in manifest["revisions"]:
         filename = entry["filename"]
@@ -172,22 +179,22 @@ def test_b04_manifest_006a_verification_rejects_a_missing_expected_file(
 
 
 def test_b04_manifest_007_rejects_duplicate_non_linear_and_out_of_bound_entries() -> None:
-    manifest = build_frozen_manifest(VERSIONS_DIR)
+    manifest = build_frozen_manifest(ARCHIVE_DIR)
 
     duplicate = copy.deepcopy(manifest)
     duplicate["revisions"][1]["revision"] = duplicate["revisions"][0]["revision"]
     with pytest.raises(ManifestError):
-        verify_manifest_files(duplicate, BACKEND_ROOT, archived=False)
+        verify_manifest_files(duplicate, BACKEND_ROOT, archived=True)
 
     non_linear = copy.deepcopy(manifest)
     non_linear["revisions"][1]["down_revision"] = None
     with pytest.raises(ManifestError):
-        verify_manifest_files(non_linear, BACKEND_ROOT, archived=False)
+        verify_manifest_files(non_linear, BACKEND_ROOT, archived=True)
 
     out_of_bound = copy.deepcopy(manifest)
     out_of_bound["revisions"][0]["archive_path"] = "migrations/versions/other.py"
     with pytest.raises(ManifestError):
-        verify_manifest_files(out_of_bound, BACKEND_ROOT, archived=False)
+        verify_manifest_files(out_of_bound, BACKEND_ROOT, archived=True)
 
 
 def test_b04_manifest_008_generated_artifacts_have_a_verified_digest() -> None:
@@ -210,7 +217,7 @@ def test_b04_manifest_008_generated_artifacts_have_a_verified_digest() -> None:
         "historical_root": HISTORICAL_ROOT,
         "source_commit": SCHEMA_SOURCE_COMMIT,
     }
-    verify_manifest_files(json.loads(manifest_bytes), BACKEND_ROOT, archived=False)
+    verify_manifest_files(json.loads(manifest_bytes), BACKEND_ROOT, archived=True)
 
 
 def test_b04_manifest_009_rejects_crlf_digest_bytes(tmp_path: Path) -> None:
@@ -224,12 +231,28 @@ def test_b04_manifest_009_rejects_crlf_digest_bytes(tmp_path: Path) -> None:
     digest_path = tmp_path / "frozen-revision-manifest.sha256"
     shutil.copyfile(output_dir / "frozen-revision-manifest.json", manifest_path)
     shutil.copyfile(output_dir / "frozen-revision-manifest.sha256", digest_path)
-    verify_manifest_artifact(manifest_path, BACKEND_ROOT)
+    source_root = tmp_path / "source-root"
+    source_versions = source_root / "migrations" / "versions"
+    source_versions.mkdir(parents=True)
+    for path in ARCHIVE_DIR.glob("*.py"):
+        shutil.copyfile(path, source_versions / path.name)
+    verify_manifest_artifact(manifest_path, source_root)
 
     digest_path.write_bytes(digest_path.read_bytes().replace(b"\n", b"\r\n"))
 
     with pytest.raises(ManifestError, match="B04-MANIFEST-DIGEST"):
-        verify_manifest_artifact(manifest_path, BACKEND_ROOT)
+        verify_manifest_artifact(manifest_path, source_root)
+
+
+def test_b04_manifest_009a_repository_archive_artifact_verifies() -> None:
+    artifact_dir = (
+        BACKEND_ROOT / "migrations" / "baselines" / "canonical_baseline_v1"
+    )
+
+    verify_archived_manifest_artifact(
+        artifact_dir / "frozen-revision-manifest.json",
+        BACKEND_ROOT,
+    )
 
 
 def test_b04_manifest_010_verifies_source_and_archived_files_are_regular(tmp_path: Path) -> None:
@@ -289,8 +312,10 @@ def test_b04_manifest_011_rejects_root_and_expected_directory_symlinks_or_mocked
     expected_directory_root = tmp_path / "expected-directory-root"
     expected_directory_root.joinpath("migrations").mkdir(parents=True)
     expected_directory_link = expected_directory_root / "migrations" / "versions"
-    expected_directory_link.symlink_to(VERSIONS_DIR, target_is_directory=True)
+    expected_directory_link.symlink_to(ARCHIVE_DIR, target_is_directory=True)
     with pytest.raises(ManifestError, match="B04-MANIFEST-SYMLINK"):
         verify_manifest_files(
-            build_frozen_manifest(VERSIONS_DIR), expected_directory_root, archived=False
+            build_frozen_manifest(ARCHIVE_DIR),
+            expected_directory_root,
+            archived=False,
         )

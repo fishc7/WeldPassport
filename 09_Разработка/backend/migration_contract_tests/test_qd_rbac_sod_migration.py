@@ -13,7 +13,9 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REVISION_PATH = (
     BACKEND_ROOT
     / "migrations"
-    / "versions"
+    / "archive"
+    / "canonical_baseline_v1"
+    / "revisions"
     / "20260724_27_qd_rbac_sod.py"
 )
 

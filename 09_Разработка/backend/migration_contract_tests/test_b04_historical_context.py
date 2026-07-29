@@ -27,7 +27,11 @@ def test_b04_historical_context_001_is_isolated_to_frozen_history_and_test_marke
     )
     config = CONFIG_PATH.read_text(encoding="utf-8")
     assert "script_location = migrations/b04/historical_context" in config
-    assert "version_locations = migrations/versions" in config
+    assert (
+        "version_locations = "
+        "migrations/archive/canonical_baseline_v1/revisions"
+    ) in config
+    assert "path_separator = os" in config
 
     tree = ast.parse(CONTEXT_PATH.read_text(encoding="utf-8"))
     imports = {_import_name(node) for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))}

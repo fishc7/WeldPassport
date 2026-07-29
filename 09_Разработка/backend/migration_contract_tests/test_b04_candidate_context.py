@@ -49,17 +49,15 @@ def test_b04_context_001_candidate_ini_has_exact_isolated_locations() -> None:
     parser.read(INI_PATH, encoding="utf-8")
 
     assert parser.get("alembic", "script_location") == "migrations/b04/candidate_context"
-    assert parser.get("alembic", "version_locations") == "migrations/baseline_candidates"
+    assert parser.get("alembic", "version_locations") == "migrations/versions"
+    assert parser.get("alembic", "path_separator") == "os"
     assert parser.get("alembic", "file_template") == "%(rev)s"
     assert not parser.has_option("alembic", "recursive_version_locations")
-    assert "migrations/versions" not in INI_PATH.read_text(encoding="utf-8")
-    assert CANDIDATES_DIR.is_dir()
     assert ACTIVE_VERSIONS_DIR.is_dir()
-    candidate_files = list(CANDIDATES_DIR.glob("*.py"))
-    assert candidate_files in (
-        [],
-        [CANDIDATES_DIR / "canonical_baseline_v1.py"],
-    )
+    assert (
+        ACTIVE_VERSIONS_DIR / "canonical_baseline_v1.py"
+    ).is_file()
+    assert not list(CANDIDATES_DIR.glob("*.py"))
 
 
 def test_b04_context_002_uses_only_explicit_b04_environment_contract() -> None:

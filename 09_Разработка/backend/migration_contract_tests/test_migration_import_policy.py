@@ -25,59 +25,7 @@ class ImportFinding:
         return f"{self.path}:{self.line}:{self.module}:{self.rule}"
 
 
-# Историческое исключение принято осознанно и не должно расширяться.
-HISTORICAL_IMPORT_DEBT = frozenset(
-    {
-        ImportFinding(
-            "migrations/versions/20260713_14_heat_treatment.py",
-            26,
-            "app.engineering.heat_treatment_workflow",
-            "forbidden-runtime-import",
-        ),
-        ImportFinding(
-            "migrations/versions/20260713_15_inspection_core.py",
-            28,
-            "app.quality.inspection_workflow",
-            "forbidden-runtime-import",
-        ),
-        ImportFinding(
-            "migrations/versions/20260713_16_method_assignments.py",
-            36,
-            "app.quality.method_assignment_workflow",
-            "forbidden-runtime-import",
-        ),
-        ImportFinding(
-            "migrations/versions/20260719_19_quality_finding_core.py",
-            30,
-            "app.quality.quality_finding_workflow",
-            "forbidden-runtime-import",
-        ),
-        ImportFinding(
-            "migrations/versions/20260719_20_eng_evaluation_core.py",
-            29,
-            "app.quality.engineering_evaluation_workflow",
-            "forbidden-runtime-import",
-        ),
-        ImportFinding(
-            "migrations/versions/20260720_21_defect_model.py",
-            27,
-            "app.quality.defect_seed",
-            "forbidden-runtime-import",
-        ),
-        ImportFinding(
-            "migrations/versions/20260720_21_defect_model.py",
-            28,
-            "app.quality.defect_workflow",
-            "forbidden-runtime-import",
-        ),
-        ImportFinding(
-            "migrations/versions/20260721_22_defect_dispositions.py",
-            29,
-            "app.quality.defect_disposition_models",
-            "forbidden-runtime-import",
-        ),
-    }
-)
+HISTORICAL_IMPORT_DEBT = frozenset()
 
 
 def _import_aliases(tree: ast.AST) -> dict[str, str]:
@@ -207,15 +155,14 @@ def test_import_002_diagnostic_contains_path_line_module_and_rule() -> None:
     )
 
 
-def test_import_003_historical_debt_is_exactly_seven_files_eight_statements() -> None:
+def test_import_003_active_graph_has_no_import_debt() -> None:
     """TEST-B03-IMPORT-003."""
     actual = _scan_migrations()
 
     assert actual == HISTORICAL_IMPORT_DEBT, "\n".join(
         item.diagnostic() for item in sorted(actual ^ HISTORICAL_IMPORT_DEBT)
     )
-    assert len(actual) == 8
-    assert len({item.path for item in actual}) == 7
+    assert not actual
 
 
 def test_import_004_blocks_importlib_module_alias() -> None:

@@ -10,6 +10,7 @@ import subprocess
 from typing import Any, Mapping, Sequence
 
 import pytest
+from alembic.config import Config
 
 import migrations.b04.verify_baseline as verify_runner
 from migrations.b04.evidence import (
@@ -185,6 +186,26 @@ def _config(
         baseline_alembic_ini=Path("baseline.ini"),
         python_executable="python.exe",
     )
+
+
+def test_b04_verify_000_post_cut_configs_resolve_exact_graph_directories() -> None:
+    expected = {
+        "historical_alembic.ini": (
+            _BACKEND_ROOT
+            / "migrations"
+            / "archive"
+            / "canonical_baseline_v1"
+            / "revisions"
+        ),
+        "candidate_alembic.ini": _BACKEND_ROOT / "migrations" / "versions",
+    }
+    for filename, expected_location in expected.items():
+        config = Config(_BACKEND_ROOT / "migrations" / "b04" / filename)
+        configured = config.get_main_option("version_locations")
+
+        assert configured is not None
+        assert Path(configured).resolve() == expected_location.resolve()
+        assert config.get_main_option("path_separator") == "os"
 
 
 def test_b04_r18_report_001_is_pending_not_authorizing(tmp_path: Path) -> None:
@@ -421,6 +442,7 @@ def test_b04_verify_003_subprocesses_receive_only_explicit_context_environments(
         "POSTGRES_HOST": "127.0.0.1", "POSTGRES_PORT": "5432",
         "POSTGRES_DB": "wp_b04_r18_historical_disposable", "POSTGRES_USER": "runner",
         "POSTGRES_PASSWORD": "history-pass", "POSTGRES_SCHEMA": "test",
+        "PYTHONDONTWRITEBYTECODE": "1",
     }
     if os.name == "nt":
         expected_historical["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
@@ -430,6 +452,7 @@ def test_b04_verify_003_subprocesses_receive_only_explicit_context_environments(
         expected_baseline = {
             "WELDPASSPORT_B04_ALLOW_DESTRUCTIVE", "WELDPASSPORT_B04_OWNERSHIP_TOKEN",
             "WELDPASSPORT_B04_EXPECTED_DATABASE", "WELDPASSPORT_B04_DATABASE_URL",
+            "PYTHONDONTWRITEBYTECODE",
         }
         if os.name == "nt":
             expected_baseline.add("SYSTEMROOT")
@@ -451,18 +474,19 @@ def test_b04_verify_003a_historical_environment_adds_only_windows_systemroot_and
         "POSTGRES_HOST": "127.0.0.1", "POSTGRES_PORT": "5432",
         "POSTGRES_DB": "wp_b04_r18_historical_disposable", "POSTGRES_USER": "runner",
         "POSTGRES_PASSWORD": "history-pass", "POSTGRES_SCHEMA": "test",
+        "PYTHONDONTWRITEBYTECODE": "1",
         "SYSTEMROOT": "C:\\Windows",
     }
 
 
-def test_b04_verify_003b_historical_environment_is_exactly_six_variables_off_windows() -> None:
+def test_b04_verify_003b_historical_environment_is_exactly_seven_variables_off_windows() -> None:
     environment = _historical_environment(
         _HISTORICAL_URL, platform_name="posix", systemroot="ignored"
     )
 
     assert set(environment) == {
         "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_DB", "POSTGRES_USER",
-        "POSTGRES_PASSWORD", "POSTGRES_SCHEMA",
+        "POSTGRES_PASSWORD", "POSTGRES_SCHEMA", "PYTHONDONTWRITEBYTECODE",
     }
 
 
@@ -474,7 +498,7 @@ def test_b04_verify_003c_historical_environment_fails_closed_without_windows_sys
         _historical_environment(_HISTORICAL_URL, platform_name="nt", systemroot=systemroot)
 
 
-def test_b04_verify_003d_baseline_environment_is_exactly_four_variables_off_windows(
+def test_b04_verify_003d_baseline_environment_is_exactly_five_variables_off_windows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("PATH", "must-not-inherit")
@@ -491,6 +515,7 @@ def test_b04_verify_003d_baseline_environment_is_exactly_four_variables_off_wind
         "WELDPASSPORT_B04_OWNERSHIP_TOKEN": _TOKEN,
         "WELDPASSPORT_B04_EXPECTED_DATABASE": "wp_b04_r18_baseline_disposable",
         "WELDPASSPORT_B04_DATABASE_URL": _BASELINE_URL,
+        "PYTHONDONTWRITEBYTECODE": "1",
     }
 
 
@@ -511,6 +536,7 @@ def test_b04_verify_003e_baseline_environment_adds_only_windows_systemroot_and_n
         "WELDPASSPORT_B04_OWNERSHIP_TOKEN": _TOKEN,
         "WELDPASSPORT_B04_EXPECTED_DATABASE": "wp_b04_r18_baseline_disposable",
         "WELDPASSPORT_B04_DATABASE_URL": _BASELINE_URL,
+        "PYTHONDONTWRITEBYTECODE": "1",
         "SYSTEMROOT": "C:\\Windows",
     }
 
