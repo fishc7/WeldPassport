@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "adoption_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "allowlist_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "attempt_status": {
+      "enum": [
+        "READY",
+        "ALREADY_ADOPTED",
+        "AMBIGUOUS",
+        "COMMITTED_UNVERIFIED",
+        "ACCEPTED"
+      ],
+      "type": "string"
+    },
+    "backup_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "completed_at_utc": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "database_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "database": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "host": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "username": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "database",
+        "host",
+        "port",
+        "username"
+      ],
+      "type": "object"
+    },
+    "fingerprint_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "manifest_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "new_marker": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "old_marker": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "seed_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "source_sha": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "started_at_utc": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "verification_results": {
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "minProperties": 1,
+      "type": "object"
+    }
+  },
+  "required": [
+    "adoption_id",
+    "database_identity",
+    "source_sha",
+    "old_marker",
+    "new_marker",
+    "backup_sha256",
+    "manifest_sha256",
+    "fingerprint_sha256",
+    "allowlist_sha256",
+    "seed_sha256",
+    "attempt_status",
+    "started_at_utc",
+    "completed_at_utc",
+    "verification_results"
+  ],
+  "title": "B-04B Adoption Report",
+  "type": "object"
+}
