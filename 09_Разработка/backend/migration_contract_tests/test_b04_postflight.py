@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 import pytest
@@ -17,6 +19,7 @@ from migrations.b04.disposable import DatabaseIdentity
 from migrations.b04.postflight import (
     PUBLIC_MARKER_QUERY,
     PUBLIC_VERSION_QUERY,
+    PostflightError,
     TEST_MARKER_QUERY,
     report_digest,
     run_postflight,
@@ -140,8 +143,13 @@ def _fingerprint(_: _Connection) -> dict[str, object]:
     return ACCEPTED_FINGERPRINT
 
 
+@contextmanager
+def _external_report_directory() -> Any:
+    with TemporaryDirectory(prefix="b04-postflight-") as raw_directory:
+        yield Path(raw_directory)
+
+
 def test_b04b_postflight_001_success_stays_unverified_until_owner_signing(
-    tmp_path: Path,
 ) -> None:
     """Self-accepting a clean machine postflight would bypass the Task 7 owner gate."""
 
@@ -152,15 +160,17 @@ def test_b04b_postflight_001_success_stays_unverified_until_owner_signing(
     fingerprint = _fingerprint(connection)
     evidence = replace(_prepared(), fingerprint_sha256=ACCEPTED_FINGERPRINT_DIGEST)
 
-    report = run_postflight(
-        lambda: context,
-        evidence,
-        fingerprint_extractor=_fingerprint,
-        alembic_runner=lambda command: commands.append(command) is None,
-        read_only_smoke=lambda observed: smoke_connections.append(observed) is None,
-        completed_at_utc="2026-07-29T10:05:00Z",
-        report_directory=tmp_path,
-    )
+    with _external_report_directory() as report_directory:
+        report = run_postflight(
+            lambda: context,
+            evidence,
+            fingerprint_extractor=_fingerprint,
+            alembic_runner=lambda command: commands.append(command) is None,
+            read_only_smoke=lambda observed: smoke_connections.append(observed) is None,
+            completed_at_utc="2026-07-29T10:05:00Z",
+            report_directory=report_directory,
+        )
+        report_bytes = (report_directory / "b04b-postflight-001.json").read_bytes()
 
     assert connection.operations == [
         PUBLIC_MARKER_QUERY,
@@ -182,9 +192,7 @@ def test_b04b_postflight_001_success_stays_unverified_until_owner_signing(
         port=5432,
         username="[redacted]",
     )
-    assert (tmp_path / "b04b-postflight-001.json").read_bytes() == canonical_report_bytes(
-        report
-    )
+    assert report_bytes == canonical_report_bytes(report)
     assert report_digest(report) == hashlib.sha256(canonical_report_bytes(report)).hexdigest()
     assert "db.internal.example" not in canonical_report_bytes(report).decode("utf-8")
     assert "maintenance_operator" not in canonical_report_bytes(report).decode("utf-8")
@@ -192,22 +200,23 @@ def test_b04b_postflight_001_success_stays_unverified_until_owner_signing(
 
 
 def test_b04b_postflight_002_failed_postcommit_marker_check_never_retries_transfer(
-    tmp_path: Path,
 ) -> None:
     """A post-commit marker mismatch must preserve the committed-unverified stop state."""
 
     connection = _Connection(public_version="wrong_revision")
     commands: list[str] = []
 
-    report = run_postflight(
-        lambda: _ConnectionContext(connection),
-        _prepared(),
-        fingerprint_extractor=_fingerprint,
-        alembic_runner=lambda command: commands.append(command) is None,
-        read_only_smoke=lambda _: True,
-        completed_at_utc="2026-07-29T10:05:00Z",
-        report_directory=tmp_path,
-    )
+    with _external_report_directory() as report_directory:
+        report = run_postflight(
+            lambda: _ConnectionContext(connection),
+            _prepared(),
+            fingerprint_extractor=_fingerprint,
+            alembic_runner=lambda command: commands.append(command) is None,
+            read_only_smoke=lambda _: True,
+            completed_at_utc="2026-07-29T10:05:00Z",
+            report_directory=report_directory,
+        )
+        report_bytes = (report_directory / "b04b-postflight-001.json").read_bytes()
 
     assert report.attempt_status is AdoptionState.COMMITTED_UNVERIFIED
     assert report.completed_at_utc == "2026-07-29T10:05:00Z"
@@ -218,9 +227,7 @@ def test_b04b_postflight_002_failed_postcommit_marker_check_never_retries_transf
         operation.startswith(("CREATE", "INSERT", "DROP", "ALTER"))
         for operation in connection.operations
     )
-    assert (tmp_path / "b04b-postflight-001.json").read_bytes() == canonical_report_bytes(
-        report
-    )
+    assert report_bytes == canonical_report_bytes(report)
 
 
 def test_b04b_postflight_003_failed_alembic_check_stops_before_read_only_smoke() -> None:
@@ -234,16 +241,18 @@ def test_b04b_postflight_003_failed_alembic_check_stops_before_read_only_smoke()
         fingerprint_sha256=ACCEPTED_FINGERPRINT_DIGEST,
     )
 
-    report = run_postflight(
-        lambda: _ConnectionContext(connection),
-        evidence,
-        fingerprint_extractor=_fingerprint,
-        alembic_runner=lambda command: (
-            commands.append(command) is None and command != "history"
-        ),
-        read_only_smoke=lambda observed: smoke_calls.append(observed) is None,
-        completed_at_utc="2026-07-29T10:05:00Z",
-    )
+    with _external_report_directory() as report_directory:
+        report = run_postflight(
+            lambda: _ConnectionContext(connection),
+            evidence,
+            fingerprint_extractor=_fingerprint,
+            alembic_runner=lambda command: (
+                commands.append(command) is None and command != "history"
+            ),
+            read_only_smoke=lambda observed: smoke_calls.append(observed) is None,
+            completed_at_utc="2026-07-29T10:05:00Z",
+            report_directory=report_directory,
+        )
 
     assert report.attempt_status is AdoptionState.COMMITTED_UNVERIFIED
     assert report.verification_results[-1] == ("postflight_verified", False)
@@ -252,23 +261,246 @@ def test_b04b_postflight_003_failed_alembic_check_stops_before_read_only_smoke()
 
 
 def test_b04b_postflight_004_external_report_is_append_only(
-    tmp_path: Path,
 ) -> None:
     """Replacing an operator evidence record would destroy the audit trail."""
 
     evidence = replace(_prepared(), fingerprint_sha256=ACCEPTED_FINGERPRINT_DIGEST)
+    with _external_report_directory() as report_directory:
+        kwargs = {
+            "fingerprint_extractor": _fingerprint,
+            "alembic_runner": lambda _: True,
+            "read_only_smoke": lambda _: True,
+            "completed_at_utc": "2026-07-29T10:05:00Z",
+            "report_directory": report_directory,
+        }
+
+        run_postflight(lambda: _ConnectionContext(_Connection()), evidence, **kwargs)
+        original = (report_directory / "b04b-postflight-001.json").read_bytes()
+
+        with pytest.raises(FileExistsError):
+            run_postflight(lambda: _ConnectionContext(_Connection()), evidence, **kwargs)
+
+        assert (report_directory / "b04b-postflight-001.json").read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "verification_results",
+    (
+        _prepared().verification_results
+        + (("postflight_verified", True),),
+        _prepared().verification_results
+        + (
+            ("postflight_verified", True),
+            ("postflight_verified", True),
+        ),
+    ),
+)
+def test_b04b_postflight_005_rejects_spoofed_postflight_results_before_connection(
+    verification_results: tuple[tuple[str, bool], ...],
+) -> None:
+    """Prepared evidence must not predeclare machine postflight success or duplicate report keys."""
+
+    factory_calls: list[None] = []
+    evidence = replace(
+        _prepared(),
+        fingerprint_sha256=ACCEPTED_FINGERPRINT_DIGEST,
+        verification_results=verification_results,
+    )
+
+    with _external_report_directory() as report_directory:
+        with pytest.raises(PostflightError, match="B04-POSTFLIGHT-PREPARED"):
+            run_postflight(
+                lambda: factory_calls.append(None),
+                evidence,
+                fingerprint_extractor=_fingerprint,
+                alembic_runner=lambda _: True,
+                read_only_smoke=lambda _: True,
+                report_directory=report_directory,
+            )
+
+    assert factory_calls == []
+
+
+@pytest.mark.parametrize(
+    "report_directory",
+    (
+        None,
+        Path(__file__).resolve().parents[3],
+        Path(__file__).resolve().parents[1],
+    ),
+)
+def test_b04b_postflight_006_requires_an_existing_external_report_directory(
+    report_directory: Path | None,
+) -> None:
+    """A repository-local or omitted evidence destination would make audit evidence mutable."""
+
+    factory_calls: list[None] = []
+
+    with pytest.raises(PostflightError, match="B04-POSTFLIGHT-REPORT"):
+        run_postflight(
+            lambda: factory_calls.append(None),
+            replace(_prepared(), fingerprint_sha256=ACCEPTED_FINGERPRINT_DIGEST),
+            fingerprint_extractor=_fingerprint,
+            alembic_runner=lambda _: True,
+            read_only_smoke=lambda _: True,
+            report_directory=report_directory,
+        )
+
+    assert factory_calls == []
+
+
+def test_b04b_postflight_007_rejects_external_symlink_resolving_into_worktree() -> None:
+    """A symlink must not disguise a repository-local report directory as external evidence."""
+
+    with _external_report_directory() as external_directory:
+        link = external_directory / "worktree-link"
+        try:
+            link.symlink_to(Path(__file__).resolve().parents[3], target_is_directory=True)
+        except OSError:
+            pytest.skip("directory symlink is not supported by this Windows test environment")
+
+        with pytest.raises(PostflightError, match="B04-POSTFLIGHT-REPORT"):
+            run_postflight(
+                lambda: _ConnectionContext(_Connection()),
+                replace(_prepared(), fingerprint_sha256=ACCEPTED_FINGERPRINT_DIGEST),
+                fingerprint_extractor=_fingerprint,
+                alembic_runner=lambda _: True,
+                read_only_smoke=lambda _: True,
+                report_directory=link,
+            )
+
+
+class _CardinalityErrorResult:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def scalar_one(self) -> object:
+        raise self.error
+
+
+class _CardinalityErrorConnection(_Connection):
+    def __init__(self, error: Exception) -> None:
+        super().__init__()
+        self.error = error
+
+    def execute(self, statement: Any, _parameters: Any = None) -> _CardinalityErrorResult:
+        self.operations.append(str(statement))
+        return _CardinalityErrorResult(self.error)
+
+
+class _BrokenContext:
+    def __init__(self, phase: str, connection: _Connection) -> None:
+        self.phase = phase
+        self.connection = connection
+
+    def __enter__(self) -> _Connection:
+        if self.phase == "enter":
+            raise RuntimeError("enter failed")
+        return self.connection
+
+    def __exit__(self, *_: object) -> None:
+        if self.phase == "exit":
+            raise RuntimeError("exit failed")
+
+
+@pytest.mark.parametrize(
+    ("phase", "connection", "fingerprint_extractor", "expected_operations"),
+    (
+        ("enter", _Connection(), _fingerprint, []),
+        ("body", _CardinalityErrorConnection(RuntimeError("zero rows")), _fingerprint, [PUBLIC_MARKER_QUERY]),
+        ("body", _CardinalityErrorConnection(RuntimeError("multiple rows")), _fingerprint, [PUBLIC_MARKER_QUERY]),
+        ("exit", _Connection(), _fingerprint, [PUBLIC_MARKER_QUERY, PUBLIC_VERSION_QUERY, TEST_MARKER_QUERY]),
+    ),
+)
+def test_b04b_postflight_008_context_failures_produce_published_unverified_report(
+    phase: str,
+    connection: _Connection,
+    fingerprint_extractor: Any,
+    expected_operations: list[str],
+) -> None:
+    """Enter, body, and exit failures after commit must stop without a marker retry."""
+
+    commands: list[str] = []
+    smoke_calls: list[object] = []
+    evidence = replace(_prepared(), fingerprint_sha256=ACCEPTED_FINGERPRINT_DIGEST)
+    with _external_report_directory() as report_directory:
+        report = run_postflight(
+            lambda: _BrokenContext(phase, connection),
+            evidence,
+            fingerprint_extractor=fingerprint_extractor,
+            alembic_runner=lambda command: commands.append(command) is None,
+            read_only_smoke=lambda observed: smoke_calls.append(observed) is None,
+            report_directory=report_directory,
+        )
+        assert (report_directory / "b04b-postflight-001.json").read_bytes() == canonical_report_bytes(report)
+
+    assert report.attempt_status is AdoptionState.COMMITTED_UNVERIFIED
+    assert report.verification_results[-1] == ("postflight_verified", False)
+    assert connection.operations == expected_operations
+    if phase == "exit":
+        assert commands == ["heads", "current", "history", "check"]
+        assert smoke_calls == [connection]
+    else:
+        assert commands == []
+        assert smoke_calls == []
+
+
+@pytest.mark.parametrize(
+    ("fingerprint_sha256", "alembic_result", "smoke_result", "expected_commands"),
+    (
+        ("f" * 64, True, True, []),
+        (ACCEPTED_FINGERPRINT_DIGEST, 1, True, ["heads"]),
+        (ACCEPTED_FINGERPRINT_DIGEST, True, 1, ["heads", "current", "history", "check"]),
+    ),
+)
+def test_b04b_postflight_009_rejects_fingerprint_mismatch_and_truthy_dependencies(
+    fingerprint_sha256: str,
+    alembic_result: object,
+    smoke_result: object,
+    expected_commands: list[str],
+) -> None:
+    """Digest drift and truthy dependency answers must not be accepted as postflight proof."""
+
+    connection = _Connection()
+    commands: list[str] = []
+    with _external_report_directory() as report_directory:
+        report = run_postflight(
+            lambda: _ConnectionContext(connection),
+            replace(_prepared(), fingerprint_sha256=fingerprint_sha256),
+            fingerprint_extractor=_fingerprint,
+            alembic_runner=lambda command: commands.append(command) is None and alembic_result,
+            read_only_smoke=lambda _: smoke_result,
+            report_directory=report_directory,
+        )
+
+    assert report.verification_results[-1] == ("postflight_verified", False)
+    assert commands == expected_commands
+
+
+def test_b04b_postflight_010_failed_report_collision_preserves_first_failure() -> None:
+    """A second failed post-commit attempt must not overwrite the first immutable failure evidence."""
+
     kwargs = {
         "fingerprint_extractor": _fingerprint,
         "alembic_runner": lambda _: True,
         "read_only_smoke": lambda _: True,
-        "completed_at_utc": "2026-07-29T10:05:00Z",
-        "report_directory": tmp_path,
     }
+    with _external_report_directory() as report_directory:
+        first = run_postflight(
+            lambda: _ConnectionContext(_Connection(public_version="wrong_revision")),
+            _prepared(),
+            report_directory=report_directory,
+            **kwargs,
+        )
+        original = (report_directory / "b04b-postflight-001.json").read_bytes()
 
-    run_postflight(lambda: _ConnectionContext(_Connection()), evidence, **kwargs)
-    original = (tmp_path / "b04b-postflight-001.json").read_bytes()
+        with pytest.raises(FileExistsError):
+            run_postflight(
+                lambda: _ConnectionContext(_Connection(public_version="wrong_revision")),
+                _prepared(),
+                report_directory=report_directory,
+                **kwargs,
+            )
 
-    with pytest.raises(FileExistsError):
-        run_postflight(lambda: _ConnectionContext(_Connection()), evidence, **kwargs)
-
-    assert (tmp_path / "b04b-postflight-001.json").read_bytes() == original
+        assert (report_directory / "b04b-postflight-001.json").read_bytes() == original
+    assert first.verification_results[-1] == ("postflight_verified", False)

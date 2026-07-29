@@ -15,18 +15,13 @@ from migrations.b04.adoption_state import (
     AdoptionReport,
     AdoptionState,
     PreparedEvidence,
+    PreparedEvidenceError,
     canonical_report_bytes,
     publish_report_once,
+    validate_prepared_evidence,
 )
 from migrations.b04.disposable import DatabaseIdentity
 from migrations.b04.fingerprint import extract_fingerprint, fingerprint_digest
-from migrations.b04.source_contract import (
-    BASELINE_REVISION,
-    HISTORICAL_HEAD,
-    SCHEMA_SOURCE_COMMIT,
-)
-
-
 PUBLIC_MARKER_QUERY = "SELECT to_regclass('public.alembic_version')"
 PUBLIC_VERSION_QUERY = "SELECT version_num FROM public.alembic_version"
 TEST_MARKER_QUERY = "SELECT to_regclass('test.alembic_version')"
@@ -43,6 +38,7 @@ _POSTFLIGHT_RESULT_KEYS = (
     "postflight_verified",
 )
 _ALEMBIC_CHECKS = ("heads", "current", "history", "check")
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
 ConnectionFactory = Callable[[], AbstractContextManager[Any]]
 AlembicRunner = Callable[[str], bool]
@@ -109,12 +105,23 @@ def _report(
 
 
 def _validate_evidence(evidence: PreparedEvidence) -> None:
-    if (
-        evidence.source_sha != SCHEMA_SOURCE_COMMIT
-        or evidence.old_marker != HISTORICAL_HEAD
-        or evidence.new_marker != BASELINE_REVISION
-    ):
-        _fail("EVIDENCE")
+    try:
+        validate_prepared_evidence(evidence)
+    except PreparedEvidenceError as exc:
+        raise PostflightError("B04-POSTFLIGHT-PREPARED") from exc
+
+
+def _external_report_directory(directory: Path | None) -> Path:
+    if directory is None:
+        _fail("REPORT")
+    try:
+        resolved = directory.resolve(strict=True)
+        repository_root = _REPOSITORY_ROOT.resolve(strict=True)
+    except OSError:
+        _fail("REPORT")
+    if not resolved.is_dir() or resolved == repository_root or repository_root in resolved.parents:
+        _fail("REPORT")
+    return resolved
 
 
 def _verify_markers(connection: Any, evidence: PreparedEvidence) -> None:
@@ -172,10 +179,11 @@ def run_postflight(
     """
 
     completed = _completed_at(completed_at_utc)
+    resolved_report_directory = _external_report_directory(report_directory)
+    _validate_evidence(evidence)
     try:
         if alembic_runner is None or read_only_smoke is None:
             _fail("DEPENDENCY")
-        _validate_evidence(evidence)
         with connection_factory() as connection:
             _verify_markers(connection, evidence)
             _verify_fingerprint(connection, evidence, fingerprint_extractor)
@@ -184,11 +192,9 @@ def run_postflight(
                 _fail("SMOKE")
     except Exception:
         report = _report(evidence, completed_at_utc=completed, verified=False)
-        if report_directory is not None:
-            publish_report_once(report_directory, report)
+        publish_report_once(resolved_report_directory, report)
         return report
 
     report = _report(evidence, completed_at_utc=completed, verified=True)
-    if report_directory is not None:
-        publish_report_once(report_directory, report)
+    publish_report_once(resolved_report_directory, report)
     return report

@@ -12,17 +12,15 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from migrations.b04.adoption_state import (
-    MANDATORY_VERIFICATION_RESULTS,
     PreparedEvidence,
+    PreparedEvidenceError,
     database_identity_digest,
+    validate_prepared_evidence,
 )
 from migrations.b04.disposable import DatabaseIdentity
 from migrations.b04.fingerprint import assert_supported_catalog, extract_fingerprint, fingerprint_digest
 from migrations.b04.source_contract import (
-    BASELINE_REVISION,
     CANONICAL_TABLE_COUNT,
-    HISTORICAL_HEAD,
-    SCHEMA_SOURCE_COMMIT,
 )
 
 
@@ -95,18 +93,10 @@ def _accepted_table_pairs(evidence: PreparedEvidence) -> tuple[tuple[str, str], 
 
 
 def _validate_prepared_evidence(evidence: PreparedEvidence) -> None:
-    result_keys = tuple(key for key, _ in evidence.verification_results)
-    if (
-        evidence.source_sha != SCHEMA_SOURCE_COMMIT
-        or evidence.old_marker != HISTORICAL_HEAD
-        or evidence.new_marker != BASELINE_REVISION
-        or not evidence.adoption_id
-        or len(result_keys) != len(MANDATORY_VERIFICATION_RESULTS)
-        or len(set(result_keys)) != len(result_keys)
-        or set(result_keys) != set(MANDATORY_VERIFICATION_RESULTS)
-        or any(passed is not True for _, passed in evidence.verification_results)
-    ):
-        _fail("PREPARED")
+    try:
+        validate_prepared_evidence(evidence)
+    except PreparedEvidenceError as exc:
+        raise MarkerTransferError("B04-ADOPT-PREPARED") from exc
 
 
 def _recheck_identity(connection: Connection, evidence: PreparedEvidence) -> None:

@@ -13,6 +13,7 @@ from migrations.b04.manifest import canonical_json_bytes
 from migrations.b04.source_contract import (
     BASELINE_REVISION,
     HISTORICAL_HEAD,
+    SCHEMA_SOURCE_COMMIT,
 )
 
 
@@ -104,6 +105,34 @@ MANDATORY_VERIFICATION_RESULTS = (
     "sessions_verified",
 )
 
+_ADOPTION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
+
+
+class PreparedEvidenceError(ValueError):
+    """Prepared evidence is not an exact B-04B preflight proof."""
+
+
+def validate_prepared_evidence(evidence: PreparedEvidence) -> None:
+    """Fail closed unless the preflight proof has the exact trusted shape."""
+
+    try:
+        results = tuple(evidence.verification_results)
+        result_keys = tuple(key for key, _ in results)
+    except (TypeError, ValueError):
+        raise PreparedEvidenceError("B04-PREPARED") from None
+    if (
+        not isinstance(evidence.adoption_id, str)
+        or _ADOPTION_ID.fullmatch(evidence.adoption_id) is None
+        or evidence.source_sha != SCHEMA_SOURCE_COMMIT
+        or evidence.old_marker != HISTORICAL_HEAD
+        or evidence.new_marker != BASELINE_REVISION
+        or len(results) != len(MANDATORY_VERIFICATION_RESULTS)
+        or len(result_keys) != len(set(result_keys))
+        or set(result_keys) != set(MANDATORY_VERIFICATION_RESULTS)
+        or any(passed is not True for _, passed in results)
+    ):
+        raise PreparedEvidenceError("B04-PREPARED")
+
 
 def database_identity_digest(
     identity: DatabaseIdentity,
@@ -193,9 +222,6 @@ def canonical_report_bytes(report: AdoptionReport) -> bytes:
             "verification_results": dict(report.verification_results),
         }
     )
-
-
-_ADOPTION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 
 
 def publish_report_once(directory: Path, report: AdoptionReport) -> Path:

@@ -14,6 +14,7 @@ from migrations.b04.adoption_state import (
     classify_marker_state,
     database_identity_digest,
     publish_report_once,
+    validate_prepared_evidence,
 )
 from migrations.b04.disposable import DatabaseIdentity
 from migrations.b04.source_contract import (
@@ -334,3 +335,88 @@ def test_b04b_state_009_identity_digest_binds_all_raw_identity_facts() -> None:
         ),
         180004,
     )
+
+
+@pytest.mark.parametrize(
+    "verification_results",
+    (
+        (),
+        (
+            ("active_evidence_verified", True),
+            ("backup_restore_verified", True),
+            ("fingerprint_verified", True),
+            ("marker_verified", True),
+            ("repository_digests_verified", True),
+        ),
+        (
+            ("active_evidence_verified", True),
+            ("backup_restore_verified", True),
+            ("fingerprint_verified", True),
+            ("marker_verified", False),
+            ("repository_digests_verified", True),
+            ("sessions_verified", True),
+        ),
+        (
+            ("active_evidence_verified", True),
+            ("backup_restore_verified", True),
+            ("fingerprint_verified", True),
+            ("marker_verified", True),
+            ("repository_digests_verified", True),
+            ("unexpected", True),
+        ),
+        (
+            ("active_evidence_verified", True),
+            ("backup_restore_verified", True),
+            ("fingerprint_verified", True),
+            ("marker_verified", True),
+            ("marker_verified", True),
+            ("sessions_verified", True),
+        ),
+        (
+            ("active_evidence_verified", 1),
+            ("backup_restore_verified", True),
+            ("fingerprint_verified", True),
+            ("marker_verified", True),
+            ("repository_digests_verified", True),
+            ("sessions_verified", True),
+        ),
+    ),
+)
+def test_b04b_state_010_prepared_evidence_validation_is_exact_and_true_only(
+    verification_results: tuple[tuple[str, object], ...],
+) -> None:
+    """Missing, forged, duplicate, false, or truthy evidence must not cross B-04 boundaries."""
+
+    with pytest.raises(ValueError, match="B04-PREPARED"):
+        validate_prepared_evidence(
+            replace(_prepared(), verification_results=verification_results)
+        )
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    (
+        {"adoption_id": ""},
+        {"source_sha": "0" * 40},
+        {"old_marker": "not-the-historical-head"},
+        {"new_marker": "not-the-baseline"},
+    ),
+)
+def test_b04b_state_011_prepared_evidence_validation_binds_adoption_invariants(
+    replacement: dict[str, str],
+) -> None:
+    """Accepting another source, marker pair, or blank adoption ID would enable spoofed adoption."""
+
+    valid_results = (
+        ("active_evidence_verified", True),
+        ("backup_restore_verified", True),
+        ("fingerprint_verified", True),
+        ("marker_verified", True),
+        ("repository_digests_verified", True),
+        ("sessions_verified", True),
+    )
+
+    with pytest.raises(ValueError, match="B04-PREPARED"):
+        validate_prepared_evidence(
+            replace(_prepared(), verification_results=valid_results, **replacement)
+        )
