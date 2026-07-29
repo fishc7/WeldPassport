@@ -85,8 +85,27 @@ B-04R restore-roundtrip evidence по ADR-031.
   `%` в direct psycopg SQL; минимальная remediation `%` → `%%` реализована TDD:
   focused `59 passed`, полный `379 passed, 1 skipped`, real read-only preflight
   `B04R-PREFLIGHT-OK`;
-- remediation принята и закоммичена по разрешению владельца 2026-07-29;
-  текущий gate — принятие нового SHA; повтор operator run остаётся отдельным;
+- remediation commit `65f3a28855eb0830077117fa26d9bbf789f50cb5` принят
+  владельцем 2026-07-29; повторный operator run завершён
+  `B04_RESTORE_ROUNDTRIP_VERIFIED`, candidate evidence опубликован как
+  `candidate_pending_acceptance`;
+- artifact review и secret scan прошли, но candidate-state focused suite дал
+  `44 passed, 15 failed`: тесты предполагают пустой pre-generation index и
+  fixture `copytree` наследует опубликованный restore-каталог; evidence
+  acceptance/promotion blocked до отдельной test-state remediation;
+- remediation option 1 принят 2026-07-29: live-only allowlist fixtures, exact
+  empty sandbox index и stage-exact repository assertion; письменная
+  [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_SPEC|Specification]]
+  принята; test-only
+  [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_IMPLEMENTATION_PLAN|Implementation Plan]]
+  и [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_CLAUDE_CODE_PROMPT|Prompt]]
+  приняты 2026-07-29; два test-файла реализованы и дали focused
+  `59 passed`; full suite дал `378 passed, 1 skipped, 1 failed` на третьем
+  pre-restore directory assertion; scope amendment для
+  `test_b04_evidence_versioning.py` и continuation implementation приняты
+  2026-07-29; exact `1 passed`, three-file `98 passed`, full
+  `379 passed, 1 skipped`; code acceptance и implementation commit отдельно
+  разрешены 2026-07-29; полученный SHA требует отдельной owner acceptance;
 - DB run, генерация restore evidence, implementation commit и evidence acceptance
   остаются отдельными запрещёнными до явного разрешения этапами;
 - B-04B repository cut, marker transfer и adoption не начинать до принятого B-04R

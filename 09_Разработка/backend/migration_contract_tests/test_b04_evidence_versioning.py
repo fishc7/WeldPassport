@@ -169,9 +169,12 @@ def test_b04_r18_evidence_002_repository_index_is_active_authorizing() -> None:
     }
     assert set(pg18["artifact_sha256"]) == set(PG18_ARTIFACT_NAMES)
     evidence_dir = ARTIFACT_DIR / "postgresql-18"
-    assert {path.name for path in evidence_dir.iterdir()} == set(
-        PG18_ARTIFACT_NAMES
-    )
+    assert {
+        path.name for path in evidence_dir.iterdir() if path.is_file()
+    } == set(PG18_ARTIFACT_NAMES)
+    assert {
+        path.name for path in evidence_dir.iterdir() if path.is_dir()
+    } == {"restore-roundtrip-v1"}
     for name, expected in pg18["artifact_sha256"].items():
         observed = hashlib.sha256((evidence_dir / name).read_bytes()).hexdigest()
         assert observed == expected

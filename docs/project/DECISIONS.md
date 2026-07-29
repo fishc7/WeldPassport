@@ -4306,3 +4306,42 @@ Existing PG16/PG18 evidence остаётся byte-identical. B-04R добавл�
 versioned artifacts и exact typed equivalence map без wildcard, regex-normalization
 или игнорирования CHECK/predicate. B-04B остаётся `BLOCKED` до отдельной приёмки B-04R
 и нового Maintenance Readiness verdict `READY`.
+
+### B-04R candidate-state test harness decision
+
+Дата: 2026-07-29
+
+Статус: **CODE ACCEPTED / IMPLEMENTATION COMMIT AUTHORIZED 2026-07-29**
+
+После operator publication candidate-state regression выявил 15 test-harness
+failures: repository assertion ожидал пустой restore index, а fixtures копировали
+`postgresql-18/` целиком вместе с новым `restore-roundtrip-v1/`.
+
+Принят вариант 1: test sandboxes строятся по explicit allowlist только из четырёх
+live artifacts и exact empty restore index; repository-state test строго проверяет
+текущий lifecycle stage. До promotion он требует
+`candidate_pending_acceptance` и non-authorizing resolver failure; при отдельно
+разрешённом promotion assertion отдельно переключается на exact
+`active_restore_authorizing`. Общий допуск «pending или active» запрещён.
+
+Specification:
+[[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_SPEC|B-04R Candidate-State Test Remediation]].
+
+Implementation Plan и Cursor/Claude Code Prompt подготовлены отдельно и не
+разрешают менять runtime/evidence/index или подключаться к PostgreSQL:
+
+- [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_IMPLEMENTATION_PLAN|Implementation Plan]];
+- [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_CLAUDE_CODE_PROMPT|Cursor / Claude Code Prompt]].
+
+Implementation checkpoint: два разрешённых test-файла дали focused
+`59 passed`, но полный suite дал `378 passed, 1 skipped, 1 failed`.
+Оставшийся test `test_b04_evidence_versioning.py` сохраняет pre-B-04R
+предположение, что `postgresql-18/` не содержит versioned child directory.
+Scope amendment принят владельцем 2026-07-29: третий test-файл точечно добавлен
+в scope и обязан требовать exact четыре live files плюс exact directory
+`restore-roundtrip-v1`. Continuation pure implementation отдельно разрешён и
+выполнен: exact `1 passed`, three-file `98 passed`, full
+`379 passed, 1 skipped`; 11 governed hashes неизменны. Stage/commit/promotion
+не выполнялись на verification checkpoint. Code acceptance и implementation
+commit отдельно разрешены владельцем 2026-07-29; полученный commit SHA требует
+отдельной owner acceptance.

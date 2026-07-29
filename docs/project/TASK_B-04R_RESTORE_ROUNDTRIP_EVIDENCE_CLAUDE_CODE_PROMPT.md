@@ -1,6 +1,6 @@
 # Prompt для Claude Code / Cursor — B-04R Restore-Roundtrip Evidence
 
-> **Статус:** `OPERATOR REMEDIATION COMMITTED — awaiting SHA acceptance`.
+> **Статус:** `CANDIDATE TEST REMEDIATION CODE ACCEPTED / IMPLEMENTATION COMMIT AUTHORIZED`.
 > Implementation base:
 > `08bc6a09974e0272ff27938511af5d4d6ba33403`.
 > DB run, evidence generation, implementation commit и B-04B остаются запрещены

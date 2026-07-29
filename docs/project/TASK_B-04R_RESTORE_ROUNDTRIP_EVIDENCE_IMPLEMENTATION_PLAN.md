@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-Статус: **OPERATOR REMEDIATION COMMITTED — awaiting SHA acceptance**
+Статус: **CANDIDATE TEST REMEDIATION CODE ACCEPTED / IMPLEMENTATION COMMIT AUTHORIZED**
 
 Implementation base:
 `08bc6a09974e0272ff27938511af5d4d6ba33403`.

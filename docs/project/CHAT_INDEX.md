@@ -396,9 +396,25 @@ archived     — чат сохранён как история, активных
 - первый operator run остановлен до restore с `B04R-DISPOSABLE-SAFETY`;
 - root cause: одиночный `%` в direct psycopg SQL;
 - remediation реализована TDD и принята владельцем 2026-07-29;
-- remediation commit разрешён и создан;
-- получить отдельное принятие нового remediation SHA;
-- после принятия SHA отдельно повторить operator run;
+- remediation commit `65f3a28855eb0830077117fa26d9bbf789f50cb5` принят
+  владельцем 2026-07-29;
+- повторный operator run завершён `B04_RESTORE_ROUNDTRIP_VERIFIED`, candidate
+  evidence опубликован как `candidate_pending_acceptance`;
+- artifact review прошёл, но candidate-state focused suite выявил 15
+  state-transition failures в test fixtures; согласовать отдельную минимальную
+  test-state remediation до evidence acceptance/promotion;
+- candidate-state test remediation option 1 согласован 2026-07-29;
+- письменная Specification принята 2026-07-29;
+- отдельные test-only Implementation Plan и Cursor/Claude Code Prompt
+  приняты 2026-07-29;
+- pure implementation двух разрешённых test-файлов: focused `59 passed`;
+- full suite: `378 passed, 1 skipped, 1 failed` на неизменённом
+  `test_b04_evidence_versioning.py`, который запрещает новый versioned
+  restore-каталог;
+- scope amendment и continuation pure implementation третьего test-файла
+  приняты 2026-07-29; exact `1 passed`, three-file `98 passed`, full
+  `379 passed, 1 skipped`; code acceptance и implementation commit отдельно
+  разрешены 2026-07-29; полученный SHA требует отдельной owner acceptance;
 - только после этого отдельно разрешать DB run, генерацию и приёмку evidence;
 - повторить B-04B readiness только после приёмки B-04R.
 

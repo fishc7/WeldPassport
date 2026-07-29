@@ -13,6 +13,7 @@ import pytest
 
 import migrations.b04.verify_restore_roundtrip as restore_runner
 from migrations.b04.disposable import DatabaseIdentity
+from migrations.b04.manifest import canonical_json_bytes
 from migrations.b04.restore_evidence import HISTORICAL_MARKER
 from migrations.b04.verify_restore_roundtrip import (
     RestoreVerificationReport,
@@ -50,6 +51,12 @@ FIRST_URL = (
 SECOND_URL = (
     "postgresql+psycopg://b04_runner:database-password@"
     f"127.0.0.1:5432/{SECOND_DATABASE}"
+)
+LIVE_ARTIFACT_NAMES = (
+    "contract.json",
+    "expected-fingerprint.json",
+    "expected-fingerprint.sha256",
+    "verification-report.json",
 )
 
 
@@ -463,15 +470,41 @@ def test_b04r_roundtrip_005_rejects_missing_or_symlink_backup(
         execute_restore_roundtrip(config, preflight)
 
 
+def _empty_restore_index() -> dict[str, object]:
+    return {
+        "format_version": 1,
+        "baseline_id": "canonical_baseline_v1",
+        "live_evidence_id": "postgresql-18-fingerprint-v2",
+        "evidence_sets": [],
+    }
+
+
+def _copy_live_evidence_only(root: Path) -> Path:
+    live_dir = root / "postgresql-18"
+    live_dir.mkdir()
+    for name in LIVE_ARTIFACT_NAMES:
+        source = ARTIFACT_ROOT / "postgresql-18" / name
+        target = live_dir / name
+        if source.is_symlink() or not source.is_file() or target.exists():
+            raise AssertionError(
+                "B04R publication fixture live artifact boundary"
+            )
+        shutil.copy2(source, target)
+    if (live_dir / "restore-roundtrip-v1").exists():
+        raise AssertionError(
+            "B04R publication fixture inherited restore evidence"
+        )
+    return live_dir
+
+
 def _publication_root(tmp_path: Path) -> Path:
     root = tmp_path / "canonical_baseline_v1"
     root.mkdir()
     shutil.copy2(ARTIFACT_ROOT / "evidence-index.json", root / "evidence-index.json")
-    shutil.copy2(
-        ARTIFACT_ROOT / "restore-evidence-index.json",
-        root / "restore-evidence-index.json",
+    (root / "restore-evidence-index.json").write_bytes(
+        canonical_json_bytes(_empty_restore_index())
     )
-    shutil.copytree(ARTIFACT_ROOT / "postgresql-18", root / "postgresql-18")
+    _copy_live_evidence_only(root)
     return root
 
 

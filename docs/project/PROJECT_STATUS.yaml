@@ -1,5 +1,5 @@
 project: WeldPassport
-current_stage: b04r_remediation_sha_acceptance
+current_stage: b04r_candidate_test_remediation_commit_execution
 current_branch: codex/b04b-maintenance-readiness-review
 updated_at: 2026-07-29
 
@@ -8,8 +8,8 @@ updated_at: 2026-07-29
 
 summary:
   total_progress: 78
-  current_focus: "B-04R psycopg percent-paramstyle remediation закоммичена по разрешению владельца"
-  next_action: "Согласовать новый remediation SHA; затем отдельно повторить operator run"
+  current_focus: "B-04R candidate-state test remediation CODE ACCEPTED; IMPLEMENTATION COMMIT AUTHORIZED 2026-07-29"
+  next_action: "Создать scoped implementation commit и получить отдельную owner acceptance его SHA; evidence acceptance/promotion остаются отдельными gates"
 
 modules:
   - code: constitution
@@ -58,11 +58,11 @@ modules:
   - code: canonical_baseline_b04r
     name: "B-04R → PostgreSQL 18 Restore-Roundtrip Evidence"
     owner: "Архитектура / миграции"
-    status: remediation_committed_awaiting_sha_acceptance
-    progress: 90
+    status: candidate_test_remediation_commit_authorized
+    progress: 99
     branch: codex/b04b-maintenance-readiness-review
     visible: true
-    note: "Implementation 2c1a0d9 принят. Первый operator run остановлен до restore: psycopg трактовал одиночный % в exec_driver_sql как placeholder. Remediation %→%% реализована TDD, ACCEPTED и закоммичена по разрешению владельца 2026-07-29; точный remediation SHA ожидает принятия; focused 59 passed, migration contracts 379 passed, 1 skipped; real read-only preflight B04R-PREFLIGHT-OK. Restore и evidence generation отсутствуют."
+    note: "Remediation commit 65f3a28855eb0830077117fa26d9bbf789f50cb5 ACCEPTED. Operator run: B04_RESTORE_ROUNDTRIP_VERIFIED; candidate_pending_acceptance. Candidate-state test remediation verified: initial two-file focused 59 passed; exact amended test 1 passed; three-file 98 passed; full 379 passed, 1 skipped; py_compile/diff-check clean; 11 governed hashes unchanged; secret scan 0 matches; runtime/Alembic/DB/promotion untouched. CODE ACCEPTED and IMPLEMENTATION COMMIT AUTHORIZED 2026-07-29; resulting SHA requires separate owner acceptance."
 
   - code: canonical_baseline_b04b
     name: "B-04B → Repository Cut, Maintenance and Adoption"

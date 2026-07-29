@@ -60,6 +60,20 @@ def _empty_index() -> dict[str, object]:
     }
 
 
+def _copy_live_evidence_only(root: Path) -> Path:
+    live_dir = root / "postgresql-18"
+    live_dir.mkdir()
+    for name in LIVE_ARTIFACT_SHA256:
+        source = ARTIFACT_ROOT / "postgresql-18" / name
+        target = live_dir / name
+        if source.is_symlink() or not source.is_file() or target.exists():
+            raise AssertionError("B04R test fixture live artifact boundary")
+        shutil.copy2(source, target)
+    if (live_dir / "restore-roundtrip-v1").exists():
+        raise AssertionError("B04R test fixture inherited restore evidence")
+    return live_dir
+
+
 def _diff_fingerprints() -> tuple[dict[str, object], dict[str, object]]:
     live = {
         "format_version": 2,
@@ -102,8 +116,8 @@ def _write_candidate_artifacts(
     *,
     fingerprint_override: Mapping[str, object] | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
-    shutil.copytree(ARTIFACT_ROOT / "postgresql-18", root / "postgresql-18")
-    restore_dir = root / "postgresql-18" / "restore-roundtrip-v1"
+    live_dir = _copy_live_evidence_only(root)
+    restore_dir = live_dir / "restore-roundtrip-v1"
     restore_dir.mkdir()
 
     fingerprint = copy.deepcopy(
@@ -218,12 +232,30 @@ def _write_candidate_artifacts(
     return accepted, report
 
 
-def test_b04r_index_001_repository_index_is_empty_and_non_authorizing() -> None:
+def test_b04r_index_001_repository_candidate_is_exact_and_non_authorizing() -> None:
     raw = RESTORE_INDEX.read_bytes()
     value = json.loads(raw)
     assert raw == canonical_json_bytes(value)
     validate_restore_evidence_index(value)
-    assert value == _empty_index()
+    assert len(value["evidence_sets"]) == 1
+    entry = value["evidence_sets"][0]
+    assert entry["evidence_id"] == "postgresql-18-restore-roundtrip-v1"
+    assert entry["status"] == "candidate_pending_acceptance"
+    assert entry["acceptance"] is None
+    assert set(entry["artifact_sha256"]) == set(RESTORE_EXPECTED_ARTIFACTS)
+
+    restore_dir = ARTIFACT_ROOT / "postgresql-18" / "restore-roundtrip-v1"
+    for name, expected in entry["artifact_sha256"].items():
+        actual = hashlib.sha256((restore_dir / name).read_bytes()).hexdigest()
+        assert actual == expected
+
+    live_index = json.loads(LIVE_INDEX.read_bytes())
+    with pytest.raises(RestoreEvidenceError, match="B04R-ACCEPTANCE"):
+        resolve_restore_authorizing_evidence(
+            value,
+            ARTIFACT_ROOT,
+            live_index,
+        )
 
 
 def test_b04r_index_002_runner_transition_stops_pending_acceptance() -> None:

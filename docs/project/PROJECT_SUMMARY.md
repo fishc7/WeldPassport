@@ -122,9 +122,29 @@ WeldPassport — внутренняя система для отдела гла�
   владельцем и зафиксирована implementation commit
   `2c1a0d9fc66683a1119b496f767f57156e7e3390`. Первый operator run остановился
   fail-closed до restore на psycopg percent-paramstyle; минимальная TDD remediation
-  реализована, принята и закоммичена по разрешению владельца 2026-07-29;
-  real read-only preflight прошёл. Новый remediation SHA ожидает отдельного
-  принятия; restore evidence отсутствует.
+  реализована и зафиксирована commit
+  `65f3a28855eb0830077117fa26d9bbf789f50cb5`, SHA принят владельцем
+  2026-07-29. Повторный operator run завершён
+  `B04_RESTORE_ROUNDTRIP_VERIFIED`; 5 restore artifacts опубликованы как
+  `candidate_pending_acceptance` и прошли hash/schema/secret review. Evidence
+  acceptance/promotion остановлены: candidate-state focused suite дал
+  `44 passed, 15 failed`, потому что pre-generation tests требуют пустой index
+  и fixture `copytree` наследует опубликованный restore-каталог. Clean-Git
+  suite на implementation SHA остаётся `379 passed, 1 skipped`. Вариант 1
+  test remediation принят 2026-07-29; письменная
+  [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_SPEC|Specification]]
+  с live-only fixtures и stage-exact assertion принята. Test-only
+  [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_IMPLEMENTATION_PLAN|Implementation Plan]]
+  и [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_CLAUDE_CODE_PROMPT|Prompt]]
+  приняты 2026-07-29. Два test-файла реализованы: focused
+  `59 passed`; full `378 passed, 1 skipped, 1 failed`. Единственный failure —
+  неизменённый `test_b04_evidence_versioning.py`, который требует отсутствия
+  versioned child directory. 11 governed hashes совпадают, candidate/runtime/DB
+  не изменены; scope amendment и continuation pure implementation третьего
+  test-файла приняты 2026-07-29. После exact assertion remediation:
+  `1 passed`, three-file `98 passed`, full `379 passed, 1 skipped`; 11 hashes
+  неизменны. Code acceptance и implementation commit отдельно разрешены
+  2026-07-29; полученный SHA требует отдельной owner acceptance.
   B-04B остаётся заблокирован до отдельной evidence acceptance B-04R и повторной
   readiness-проверки.
 - **Task 9D — реализация в процессе (обновлено 2026-07-21; актуальный статус по подблокам —
