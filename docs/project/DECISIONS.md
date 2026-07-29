@@ -4311,7 +4311,7 @@ versioned artifacts и exact typed equivalence map без wildcard, regex-normal
 
 Дата: 2026-07-29
 
-Статус: **CODE ACCEPTED / IMPLEMENTATION COMMIT AUTHORIZED 2026-07-29**
+Статус: **EVIDENCE PROMOTED / PROMOTION COMMIT AUTHORIZED 2026-07-29**
 
 После operator publication candidate-state regression выявил 15 test-harness
 failures: repository assertion ожидал пустой restore index, а fixtures копировали
@@ -4342,6 +4342,11 @@ Scope amendment принят владельцем 2026-07-29: третий test-
 `restore-roundtrip-v1`. Continuation pure implementation отдельно разрешён и
 выполнен: exact `1 passed`, three-file `98 passed`, full
 `379 passed, 1 skipped`; 11 governed hashes неизменны. Stage/commit/promotion
-не выполнялись на verification checkpoint. Code acceptance и implementation
-commit отдельно разрешены владельцем 2026-07-29; полученный commit SHA требует
-отдельной owner acceptance.
+не выполнялись на verification checkpoint. Code acceptance, implementation
+commit и SHA `1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b` отдельно приняты
+владельцем 2026-07-29. Evidence promotion отдельно разрешён и выполнен:
+`accepted_at_utc=2026-07-29T08:55:32Z`,
+`accepted_by=repository_owner`,
+`verification_report_sha256=5480a2e4e02a085f8378ee9617da0b9ad4c04aca4a42fd0a52b933b4b75554be`.
+Это не разрешает B-04B: требуется новый отдельный READ-ONLY Maintenance
+Readiness Review.

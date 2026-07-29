@@ -18,7 +18,7 @@ evidence is physically valid but non-authorizing.
 **Tech Stack:** Python 3, pytest, pathlib, shutil, hashlib, canonical JSON,
 Git/PowerShell.
 
-Статус: **CODE ACCEPTED / IMPLEMENTATION COMMIT AUTHORIZED 2026-07-29**
+Статус: **EVIDENCE PROMOTED / PROMOTION COMMIT AUTHORIZED 2026-07-29**
 
 ## Global Constraints
 
@@ -27,7 +27,8 @@ Git/PowerShell.
 - Accepted runtime implementation SHA:
   `65f3a28855eb0830077117fa26d9bbf789f50cb5`.
 - Current restore evidence status:
-  `candidate_pending_acceptance`; `acceptance=null`.
+  `active_restore_authorizing`; exact repository-owner acceptance recorded at
+  `2026-07-29T08:55:32Z`.
 - Modify test code only in:
   - `migration_contract_tests/test_b04_restore_evidence.py`;
   - `migration_contract_tests/test_b04_restore_roundtrip_runner.py`;
@@ -659,7 +660,25 @@ assert {
 
 The owner separately authorized continuation pure implementation. The exact
 test now returns `1 passed`, the three-file regression returns `98 passed`, and
-the full suite returns `379 passed, 1 skipped`. The owner accepted the code and
-separately authorized the implementation commit on 2026-07-29. No other code
-or artifact change is permitted; the resulting commit SHA requires separate
-owner acceptance.
+the full suite returns `379 passed, 1 skipped`. The owner accepted the code,
+separately authorized the implementation commit, and accepted SHA
+`1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b` on 2026-07-29. No other code
+or artifact change is permitted; evidence promotion requires a separate owner
+authorization.
+
+## Promotion completion checkpoint
+
+The owner separately authorized evidence acceptance/promotion. The repository
+index is canonical and exact:
+
+```text
+status=active_restore_authorizing
+accepted_at_utc=2026-07-29T08:55:32Z
+accepted_by=repository_owner
+verification_report_sha256=5480a2e4e02a085f8378ee9617da0b9ad4c04aca4a42fd0a52b933b4b75554be
+```
+
+Promotion verification: exact `1 passed`, focused `98 passed`, full
+`379 passed, 1 skipped`; ten non-index governed files remain byte-identical.
+Promotion commit is separately authorized. After commit, stop for resulting SHA
+acceptance before the new READ-ONLY Maintenance Readiness Review.

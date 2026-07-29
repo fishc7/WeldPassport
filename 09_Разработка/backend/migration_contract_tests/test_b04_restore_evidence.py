@@ -232,7 +232,7 @@ def _write_candidate_artifacts(
     return accepted, report
 
 
-def test_b04r_index_001_repository_candidate_is_exact_and_non_authorizing() -> None:
+def test_b04r_index_001_repository_active_is_exact_and_authorizing() -> None:
     raw = RESTORE_INDEX.read_bytes()
     value = json.loads(raw)
     assert raw == canonical_json_bytes(value)
@@ -240,8 +240,14 @@ def test_b04r_index_001_repository_candidate_is_exact_and_non_authorizing() -> N
     assert len(value["evidence_sets"]) == 1
     entry = value["evidence_sets"][0]
     assert entry["evidence_id"] == "postgresql-18-restore-roundtrip-v1"
-    assert entry["status"] == "candidate_pending_acceptance"
-    assert entry["acceptance"] is None
+    assert entry["status"] == "active_restore_authorizing"
+    assert entry["acceptance"] == {
+        "accepted_at_utc": "2026-07-29T08:55:32Z",
+        "accepted_by": "repository_owner",
+        "verification_report_sha256": (
+            "5480a2e4e02a085f8378ee9617da0b9ad4c04aca4a42fd0a52b933b4b75554be"
+        ),
+    }
     assert set(entry["artifact_sha256"]) == set(RESTORE_EXPECTED_ARTIFACTS)
 
     restore_dir = ARTIFACT_ROOT / "postgresql-18" / "restore-roundtrip-v1"
@@ -250,12 +256,14 @@ def test_b04r_index_001_repository_candidate_is_exact_and_non_authorizing() -> N
         assert actual == expected
 
     live_index = json.loads(LIVE_INDEX.read_bytes())
-    with pytest.raises(RestoreEvidenceError, match="B04R-ACCEPTANCE"):
-        resolve_restore_authorizing_evidence(
-            value,
-            ARTIFACT_ROOT,
-            live_index,
-        )
+    evidence = resolve_restore_authorizing_evidence(
+        value,
+        ARTIFACT_ROOT,
+        live_index,
+    )
+    assert evidence.evidence_id == "postgresql-18-restore-roundtrip-v1"
+    assert evidence.status is RestoreEvidenceStatus.ACTIVE_RESTORE_AUTHORIZING
+    assert evidence.acceptance == entry["acceptance"]
 
 
 def test_b04r_index_002_runner_transition_stops_pending_acceptance() -> None:

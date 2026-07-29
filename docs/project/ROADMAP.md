@@ -104,10 +104,12 @@ B-04R restore-roundtrip evidence по ADR-031.
   pre-restore directory assertion; scope amendment для
   `test_b04_evidence_versioning.py` и continuation implementation приняты
   2026-07-29; exact `1 passed`, three-file `98 passed`, full
-  `379 passed, 1 skipped`; code acceptance и implementation commit отдельно
-  разрешены 2026-07-29; полученный SHA требует отдельной owner acceptance;
-- DB run, генерация restore evidence, implementation commit и evidence acceptance
-  остаются отдельными запрещёнными до явного разрешения этапами;
+  `379 passed, 1 skipped`; implementation SHA
+  `1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b` принят 2026-07-29;
+  evidence promotion отдельно разрешён и выполнен в
+  `active_restore_authorizing` с `accepted_at_utc=2026-07-29T08:55:32Z`;
+- promotion commit отдельно разрешён; resulting SHA acceptance и новый
+  READ-ONLY Maintenance Readiness Review остаются отдельными gates;
 - B-04B repository cut, marker transfer и adoption не начинать до принятого B-04R
   evidence и нового Maintenance Readiness verdict `READY`; текущий статус —
   `BLOCKED`.

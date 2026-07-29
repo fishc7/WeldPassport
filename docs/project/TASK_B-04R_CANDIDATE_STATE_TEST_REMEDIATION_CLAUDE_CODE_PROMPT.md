@@ -1,6 +1,6 @@
 # B-04R Candidate-State Test Remediation — Cursor / Claude Code Prompt
 
-Статус: **CODE ACCEPTED / IMPLEMENTATION COMMIT AUTHORIZED 2026-07-29**
+Статус: **EVIDENCE PROMOTED / PROMOTION COMMIT AUTHORIZED 2026-07-29**
 
 Работай только в:
 
@@ -311,7 +311,12 @@ assert {
 ```
 
 Не ослабляй hash/index/status/resolver assertions и не разрешай другие entries.
-Scope amendment, continuation pure implementation и code acceptance разрешены
-владельцем. Получено: exact `1 passed`, three-file `98 passed`, full
-`379 passed, 1 skipped`. Implementation commit отдельно разрешён 2026-07-29;
-после commit остановись для отдельной owner acceptance полученного SHA.
+Scope amendment, continuation pure implementation, code acceptance,
+implementation commit и SHA
+`1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b` приняты владельцем.
+Получено: exact `1 passed`, three-file `98 passed`, full
+`379 passed, 1 skipped`. Evidence promotion отдельно разрешён и выполнен с
+`accepted_at_utc=2026-07-29T08:55:32Z`,
+`accepted_by=repository_owner` и report SHA
+`5480a2e4e02a085f8378ee9617da0b9ad4c04aca4a42fd0a52b933b4b75554be`.
+Остановись перед commit и новым READ-ONLY Maintenance Readiness Review.

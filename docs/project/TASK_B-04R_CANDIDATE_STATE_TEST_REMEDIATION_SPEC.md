@@ -1,7 +1,10 @@
 # B-04R Candidate-State Test Remediation — Specification
 
 Дата: 2026-07-29
-Статус: **CODE ACCEPTED / IMPLEMENTATION COMMIT AUTHORIZED 2026-07-29**
+Статус: **EVIDENCE PROMOTED / PROMOTION COMMIT AUTHORIZED 2026-07-29**
+
+Accepted implementation SHA:
+`1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b`.
 
 ## 1. Контекст
 
@@ -203,9 +206,10 @@ git diff --check
   evidence bytes;
 - focused и полный `migration_contract_tests` проходят в текущем candidate
   worktree;
-- B-04R остаётся `candidate_pending_acceptance`;
+- B-04R переведён в `active_restore_authorizing`;
 - B-04B остаётся `BLOCKED`;
-- promotion, commit и cleanup не выполнены.
+- promotion выполнен по отдельному owner authorization; promotion commit,
+  cleanup и Maintenance Readiness Review не выполнены.
 
 ## 8. Отклонённые варианты
 
@@ -268,6 +272,15 @@ assert {
 Scope amendment и continuation pure implementation разрешены владельцем.
 Третий test-файл изменён только в принятой assertion boundary; exact test дал
 `1 passed`, three-file regression — `98 passed`, полный suite —
-`379 passed, 1 skipped`. Code acceptance и implementation commit отдельно
-разрешены владельцем 2026-07-29; полученный commit SHA требует отдельной
-owner acceptance.
+`379 passed, 1 skipped`. Code acceptance, implementation commit и resulting
+SHA `1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b` отдельно приняты владельцем
+2026-07-29. Evidence promotion отдельно разрешён и выполнен:
+
+```text
+status=active_restore_authorizing
+accepted_at_utc=2026-07-29T08:55:32Z
+accepted_by=repository_owner
+verification_report_sha256=5480a2e4e02a085f8378ee9617da0b9ad4c04aca4a42fd0a52b933b4b75554be
+```
+
+Новый READ-ONLY Maintenance Readiness Review остаётся отдельным gate.

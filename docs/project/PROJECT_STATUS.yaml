@@ -1,5 +1,5 @@
 project: WeldPassport
-current_stage: b04r_candidate_test_remediation_commit_execution
+current_stage: b04r_evidence_promotion_commit_execution
 current_branch: codex/b04b-maintenance-readiness-review
 updated_at: 2026-07-29
 
@@ -8,8 +8,8 @@ updated_at: 2026-07-29
 
 summary:
   total_progress: 78
-  current_focus: "B-04R candidate-state test remediation CODE ACCEPTED; IMPLEMENTATION COMMIT AUTHORIZED 2026-07-29"
-  next_action: "Создать scoped implementation commit и получить отдельную owner acceptance его SHA; evidence acceptance/promotion остаются отдельными gates"
+  current_focus: "B-04R evidence PROMOTED to active_restore_authorizing at 2026-07-29T08:55:32Z"
+  next_action: "Создать scoped promotion commit и получить отдельную acceptance его SHA; затем отдельно разрешить новый READ-ONLY Maintenance Readiness Review"
 
 modules:
   - code: constitution
@@ -58,11 +58,11 @@ modules:
   - code: canonical_baseline_b04r
     name: "B-04R → PostgreSQL 18 Restore-Roundtrip Evidence"
     owner: "Архитектура / миграции"
-    status: candidate_test_remediation_commit_authorized
-    progress: 99
+    status: active_restore_authorizing_promotion_commit_authorized
+    progress: 100
     branch: codex/b04b-maintenance-readiness-review
     visible: true
-    note: "Remediation commit 65f3a28855eb0830077117fa26d9bbf789f50cb5 ACCEPTED. Operator run: B04_RESTORE_ROUNDTRIP_VERIFIED; candidate_pending_acceptance. Candidate-state test remediation verified: initial two-file focused 59 passed; exact amended test 1 passed; three-file 98 passed; full 379 passed, 1 skipped; py_compile/diff-check clean; 11 governed hashes unchanged; secret scan 0 matches; runtime/Alembic/DB/promotion untouched. CODE ACCEPTED and IMPLEMENTATION COMMIT AUTHORIZED 2026-07-29; resulting SHA requires separate owner acceptance."
+    note: "Implementation SHA 1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b ACCEPTED. Evidence promotion separately authorized and completed 2026-07-29T08:55:32Z: active_restore_authorizing, accepted_by repository_owner, report SHA 5480a2e4e02a085f8378ee9617da0b9ad4c04aca4a42fd0a52b933b4b75554be. Promotion verification: exact 1 passed, focused 98 passed, full 379 passed, 1 skipped; 10 non-index governed hashes unchanged; secret scan clean; runtime/Alembic/DB untouched. Promotion commit separately AUTHORIZED; resulting SHA requires separate acceptance before READ-ONLY Maintenance Readiness Review."
 
   - code: canonical_baseline_b04b
     name: "B-04B → Repository Cut, Maintenance and Adoption"
@@ -70,7 +70,7 @@ modules:
     status: planned
     progress: 0
     visible: true
-    note: "B-04A-R18 принят. ADR-031/B-04R обязателен после выявленного restore-roundtrip deparser drift; B-04R ещё не реализован/не принят. Repository cut, marker transfer и adoption не выполнялись; B-04B BLOCKED; migration freeze active."
+    note: "B-04A-R18 active_authorizing и B-04R active_restore_authorizing приняты. Repository cut, marker transfer и adoption не выполнялись; B-04B остаётся BLOCKED до нового отдельного READ-ONLY Maintenance Readiness verdict READY; migration freeze active."
 
   - code: hr_workers
     name: "ОК → Работники"

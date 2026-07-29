@@ -143,10 +143,12 @@ WeldPassport — внутренняя система для отдела гла�
   не изменены; scope amendment и continuation pure implementation третьего
   test-файла приняты 2026-07-29. После exact assertion remediation:
   `1 passed`, three-file `98 passed`, full `379 passed, 1 skipped`; 11 hashes
-  неизменны. Code acceptance и implementation commit отдельно разрешены
-  2026-07-29; полученный SHA требует отдельной owner acceptance.
-  B-04B остаётся заблокирован до отдельной evidence acceptance B-04R и повторной
-  readiness-проверки.
+  неизменны. Implementation SHA
+  `1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b` принят 2026-07-29.
+  Evidence promotion отдельно разрешён и выполнен:
+  `active_restore_authorizing`, `accepted_at_utc=2026-07-29T08:55:32Z`,
+  `accepted_by=repository_owner`. B-04B остаётся заблокирован до отдельного
+  нового READ-ONLY Maintenance Readiness verdict `READY`.
 - **Task 9D — реализация в процессе (обновлено 2026-07-21; актуальный статус по подблокам —
   [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]).** Блоки **9D-1** (`QualityFinding` Core),
   **9D-2** (`EngineeringEvaluation`, ADR-021; блоки 9D-2A — 9D-2E), **9D-3** (`Defect Technical
