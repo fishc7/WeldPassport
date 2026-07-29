@@ -18,7 +18,7 @@ evidence is physically valid but non-authorizing.
 **Tech Stack:** Python 3, pytest, pathlib, shutil, hashlib, canonical JSON,
 Git/PowerShell.
 
-Статус: **EVIDENCE PROMOTED / PROMOTION COMMIT AUTHORIZED 2026-07-29**
+Статус: **COMPLETED / PROMOTION COMMIT ACCEPTED / B-04B-1 READINESS READY 2026-07-29**
 
 ## Global Constraints
 
@@ -680,5 +680,7 @@ verification_report_sha256=5480a2e4e02a085f8378ee9617da0b9ad4c04aca4a42fd0a52b93
 
 Promotion verification: exact `1 passed`, focused `98 passed`, full
 `379 passed, 1 skipped`; ten non-index governed files remain byte-identical.
-Promotion commit is separately authorized. After commit, stop for resulting SHA
-acceptance before the new READ-ONLY Maintenance Readiness Review.
+Promotion commit `abaada5aad7e53d94c00395adb1a0ff742c27dd5` was
+separately accepted. The subsequent READ-ONLY Maintenance Readiness Review
+returned owner-accepted `READY` for B-04B-1 on 2026-07-29. This does not
+authorize marker transfer, production adoption, a DB run, commit, or push.

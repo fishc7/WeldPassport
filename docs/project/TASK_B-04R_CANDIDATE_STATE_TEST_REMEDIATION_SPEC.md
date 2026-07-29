@@ -1,7 +1,7 @@
 # B-04R Candidate-State Test Remediation — Specification
 
 Дата: 2026-07-29
-Статус: **EVIDENCE PROMOTED / PROMOTION COMMIT AUTHORIZED 2026-07-29**
+Статус: **COMPLETED / PROMOTION COMMIT ACCEPTED / B-04B-1 READINESS READY 2026-07-29**
 
 Accepted implementation SHA:
 `1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b`.
@@ -283,4 +283,7 @@ accepted_by=repository_owner
 verification_report_sha256=5480a2e4e02a085f8378ee9617da0b9ad4c04aca4a42fd0a52b933b4b75554be
 ```
 
-Новый READ-ONLY Maintenance Readiness Review остаётся отдельным gate.
+Promotion commit `abaada5aad7e53d94c00395adb1a0ff742c27dd5`
+принят. Новый READ-ONLY Maintenance Readiness Review выполнен отдельно;
+verdict `READY` к B-04B-1 принят 2026-07-29. Marker transfer, production
+adoption и DB run этим verdict не разрешены.

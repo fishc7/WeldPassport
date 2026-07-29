@@ -4311,7 +4311,7 @@ versioned artifacts и exact typed equivalence map без wildcard, regex-normal
 
 Дата: 2026-07-29
 
-Статус: **EVIDENCE PROMOTED / PROMOTION COMMIT AUTHORIZED 2026-07-29**
+Статус: **EVIDENCE PROMOTED / PROMOTION COMMIT ACCEPTED 2026-07-29**
 
 После operator publication candidate-state regression выявил 15 test-harness
 failures: repository assertion ожидал пустой restore index, а fixtures копировали
@@ -4350,3 +4350,25 @@ commit и SHA `1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b` отдельно при
 `verification_report_sha256=5480a2e4e02a085f8378ee9617da0b9ad4c04aca4a42fd0a52b933b4b75554be`.
 Это не разрешает B-04B: требуется новый отдельный READ-ONLY Maintenance
 Readiness Review.
+
+### B-04B READ-ONLY Maintenance Readiness verdict
+
+Дата: 2026-07-29
+
+Статус: **ACCEPTED — READY к B-04B-1**
+
+Promotion commit B-04R
+`abaada5aad7e53d94c00395adb1a0ff742c27dd5` принят владельцем. Новый
+READ-ONLY review на этом HEAD подтвердил:
+
+- frozen revisions 31/31 и нулевой revision diff после source cut
+  `6c56f99edbd4e7346264ee14658d2076b5fd0775`;
+- live evidence `active_authorizing`;
+- restore evidence `active_restore_authorizing`;
+- полный pure suite `379 passed, 1 skipped`;
+- чистый worktree.
+
+Вердикт `READY` ограничен началом B-04B-1 по принятому Implementation Plan.
+Он не разрешает repository cut, marker transfer, production adoption, DB run,
+commit или push. Migration freeze остаётся active; последующие gates B-04B
+принимаются отдельно.

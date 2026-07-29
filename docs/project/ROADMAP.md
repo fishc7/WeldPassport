@@ -108,11 +108,13 @@ B-04R restore-roundtrip evidence по ADR-031.
   `1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b` принят 2026-07-29;
   evidence promotion отдельно разрешён и выполнен в
   `active_restore_authorizing` с `accepted_at_utc=2026-07-29T08:55:32Z`;
-- promotion commit отдельно разрешён; resulting SHA acceptance и новый
-  READ-ONLY Maintenance Readiness Review остаются отдельными gates;
-- B-04B repository cut, marker transfer и adoption не начинать до принятого B-04R
-  evidence и нового Maintenance Readiness verdict `READY`; текущий статус —
-  `BLOCKED`.
+- promotion commit `abaada5aad7e53d94c00395adb1a0ff742c27dd5` принят;
+- новый READ-ONLY Maintenance Readiness Review выполнен: frozen revisions 31/31,
+  zero revision diff since source cut, оба evidence resolver активны, full suite
+  `379 passed, 1 skipped`; verdict `READY` к B-04B-1 принят 2026-07-29;
+- B-04B-1 может начинаться только как отдельная pure implementation стадия.
+  Repository cut, marker transfer, production adoption и DB run этим verdict
+  не разрешены; migration freeze остаётся active.
 
 ### 1. Test DB Safety Interlock — завершён
 

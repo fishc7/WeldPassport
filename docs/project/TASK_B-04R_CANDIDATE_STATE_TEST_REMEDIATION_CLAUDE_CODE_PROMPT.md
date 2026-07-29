@@ -1,6 +1,6 @@
 # B-04R Candidate-State Test Remediation — Cursor / Claude Code Prompt
 
-Статус: **EVIDENCE PROMOTED / PROMOTION COMMIT AUTHORIZED 2026-07-29**
+Статус: **COMPLETED / PROMOTION COMMIT ACCEPTED / B-04B-1 READINESS READY 2026-07-29**
 
 Работай только в:
 
@@ -319,4 +319,7 @@ implementation commit и SHA
 `accepted_at_utc=2026-07-29T08:55:32Z`,
 `accepted_by=repository_owner` и report SHA
 `5480a2e4e02a085f8378ee9617da0b9ad4c04aca4a42fd0a52b933b4b75554be`.
-Остановись перед commit и новым READ-ONLY Maintenance Readiness Review.
+Promotion commit `abaada5aad7e53d94c00395adb1a0ff742c27dd5`
+принят. Последующий READ-ONLY Maintenance Readiness Review дал принятый
+verdict `READY` к B-04B-1 2026-07-29. Marker transfer, production adoption,
+DB run, новый commit и push остаются отдельными gates.

@@ -418,8 +418,13 @@ archived     — чат сохранён как история, активных
 - evidence promotion отдельно разрешён и выполнен:
   `active_restore_authorizing`, `2026-07-29T08:55:32Z`,
   `repository_owner`, report SHA `5480a2e4e02a085f8378ee9617da0b9ad4c04aca4a42fd0a52b933b4b75554be`;
-- отдельно разрешить новый READ-ONLY B-04B Maintenance Readiness Review;
-- B-04B остаётся blocked до verdict `READY`.
+- promotion commit `abaada5aad7e53d94c00395adb1a0ff742c27dd5`
+  принят владельцем;
+- новый READ-ONLY B-04B Maintenance Readiness Review выполнен: frozen
+  revisions 31/31, zero revision diff since source cut, full suite
+  `379 passed, 1 skipped`;
+- verdict `READY` к B-04B-1 принят 2026-07-29; marker transfer, production
+  adoption и DB run остаются отдельными gates.
 
 ---
 

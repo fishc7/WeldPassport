@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-Статус: **EVIDENCE PROMOTED — active_restore_authorizing; promotion commit authorized**
+Статус: **COMPLETED — active_restore_authorizing; promotion commit accepted; B-04B-1 readiness READY**
 
 Accepted candidate-state remediation SHA:
 `1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b`.
@@ -873,6 +873,12 @@ owner-authorized implementation commit
 ```
 
 No later arrow is implied by acceptance of this plan.
+
+Completion update 2026-07-29: evidence is `active_restore_authorizing`,
+promotion commit `abaada5aad7e53d94c00395adb1a0ff742c27dd5` is
+owner-accepted, and the subsequent READ-ONLY Maintenance Readiness verdict is
+owner-accepted `READY` for B-04B-1. No marker transfer, production adoption or
+DB run is implied.
 
 ---
 

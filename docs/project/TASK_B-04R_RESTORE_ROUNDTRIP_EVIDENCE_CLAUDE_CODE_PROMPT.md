@@ -1,6 +1,6 @@
 # Prompt для Claude Code / Cursor — B-04R Restore-Roundtrip Evidence
 
-> **Статус:** `EVIDENCE PROMOTED — active_restore_authorizing; promotion commit authorized`.
+> **Статус:** `COMPLETED — active_restore_authorizing; promotion commit accepted; B-04B-1 readiness READY`.
 > Accepted candidate-state remediation SHA:
 > `1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b`.
 > Promotion acceptance: `repository_owner`, `2026-07-29T08:55:32Z`,
