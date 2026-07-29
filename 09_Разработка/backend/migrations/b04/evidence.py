@@ -537,6 +537,7 @@ def resolve_authorizing_evidence(
     )
     validate_pg18_contract(contract)
     report = _load_canonical_json(report_path, "B04-EVIDENCE-REPORT-JSON")
+    validate_pg18_report(report)
 
     if (
         contract["evidence_id"] != evidence.evidence_id
@@ -549,8 +550,10 @@ def resolve_authorizing_evidence(
         ("evidence_id", evidence.evidence_id),
         ("postgres_major", evidence.postgres_major),
         ("fingerprint_format_version", evidence.fingerprint_format_version),
+        ("source_sha", contract["source_sha"]),
+        ("implementation_sha", contract["implementation_sha"]),
     ):
-        if report.get(key) != expected:
+        if report[key] != expected:
             raise EvidenceError("B04-EVIDENCE-REPORT-MISMATCH")
 
     contract_sha = sha256_hex(contract_path.read_bytes())

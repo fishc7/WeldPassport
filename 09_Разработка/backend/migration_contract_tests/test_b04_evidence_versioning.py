@@ -115,13 +115,7 @@ def _active_index(root: Path) -> dict[str, object]:
     evidence_dir.mkdir()
 
     contract_bytes = canonical_json_bytes(_pg18_contract())
-    report_bytes = canonical_json_bytes(
-        {
-            "evidence_id": PG18_ID,
-            "fingerprint_format_version": 2,
-            "postgres_major": 18,
-        }
-    )
+    report_bytes = canonical_json_bytes(_pg18_report())
     (evidence_dir / "contract.json").write_bytes(contract_bytes)
     (evidence_dir / "verification-report.json").write_bytes(report_bytes)
 
@@ -346,6 +340,10 @@ def test_b04_r18_evidence_008_resolver_returns_verified_active_set(
         "report-evidence-id",
         "report-major",
         "report-format",
+        "report-status",
+        "report-server-version",
+        "report-source",
+        "report-implementation-mismatch",
     ],
 )
 def test_b04_r18_evidence_009_resolver_rejects_corrupt_active_set(
@@ -380,21 +378,25 @@ def test_b04_r18_evidence_009_resolver_rejects_corrupt_active_set(
             canonical_json_bytes(contract)
         )
     else:
-        report = {
-            "evidence_id": PG18_ID,
-            "fingerprint_format_version": 2,
-            "postgres_major": 18,
-        }
+        report = _pg18_report()
         suffix = failure.removeprefix("report-")
         field = {
             "evidence-id": "evidence_id",
             "major": "postgres_major",
             "format": "fingerprint_format_version",
+            "status": "status",
+            "server-version": "server_version_num",
+            "source": "source_sha",
+            "implementation-mismatch": "implementation_sha",
         }[suffix]
         report[field] = {
             "evidence-id": "other",
             "major": 17,
             "format": 1,
+            "status": "NOT_VERIFIED",
+            "server-version": 180004,
+            "source": "b" * 40,
+            "implementation-mismatch": "b" * 40,
         }[suffix]
         report_bytes = canonical_json_bytes(report)
         (evidence_dir / "verification-report.json").write_bytes(report_bytes)
