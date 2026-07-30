@@ -1,5 +1,8 @@
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 from uuid import UUID
 
 import pytest
@@ -17,6 +20,8 @@ from scripts.run_test_db_f2_operator_preflight import main as cli_main
 
 PREFLIGHT_ID = UUID("12345678-1234-4234-8234-123456789abc")
 SOURCE_SHA = "a" * 40
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+CLI_PATH = BACKEND_ROOT / "scripts" / "run_test_db_f2_operator_preflight.py"
 
 
 def _environment(root: Path) -> dict[str, str]:
@@ -204,3 +209,36 @@ def test_f2_operator_runner_006_cli_exit_and_output_are_safe(
     assert output["preflight_id"] == str(PREFLIGHT_ID)
     assert output["status"] == "TEST_DB_F2_OPERATOR_PREFLIGHT_READY"
     assert len(output["artifact_digest"]) == 64
+
+
+def test_f2_operator_runner_007_direct_script_launch_reaches_safe_cli() -> None:
+    environment = {
+        name: os.environ[name]
+        for name in (
+            "SystemRoot",
+            "WINDIR",
+            "SystemDrive",
+            "TEMP",
+            "TMP",
+            "PATH",
+        )
+        if name in os.environ
+    }
+
+    completed = subprocess.run(
+        (sys.executable, str(CLI_PATH)),
+        cwd=BACKEND_ROOT,
+        env=environment,
+        shell=False,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert completed.stderr == ""
+    assert json.loads(completed.stdout) == {
+        "artifact_digest": None,
+        "preflight_id": None,
+        "status": "TEST_DB_F2_OPERATOR_PREFLIGHT_FAILED",
+    }

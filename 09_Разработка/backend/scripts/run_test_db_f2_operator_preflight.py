@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
+import sys
 from typing import Mapping
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.testing.f2_operator_preflight import (
     F2OperatorPreflightStatus,
