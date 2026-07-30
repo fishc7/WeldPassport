@@ -158,3 +158,29 @@ def test_f2_process_004_timeout_is_safe_and_not_retried(
     assert result.timed_out is True
     assert result.exit_code != 0
     assert result.stdout == result.stderr == ""
+
+
+def test_f2_process_005_redacts_url_components(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Completed:
+        returncode = 1
+        stdout = "driver exposed pw-123 for test_canonical"
+        stderr = ""
+
+    monkeypatch.setattr(
+        "app.testing.f2_process.subprocess.run",
+        lambda *args, **kwargs: Completed(),
+    )
+    result = ProcessExecutor().run(
+        ("python",),
+        {
+            "TEST_DATABASE_URL": (
+                "postgresql+psycopg://worker:pw-123@localhost/test_canonical"
+            )
+        },
+        10,
+    )
+
+    assert "pw-123" not in result.stdout
+    assert "test_canonical" not in result.stdout

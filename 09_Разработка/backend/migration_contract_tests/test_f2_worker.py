@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from uuid import UUID
 
@@ -193,3 +194,30 @@ def test_f2_worker_004_existing_output_fails_before_authorization(
         )
 
     assert events == []
+
+
+def test_f2_worker_005_rejects_adapter_secret_before_publication(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+
+    class LeakingAdapter:
+        def run(self, role: F2Role) -> dict[str, object]:
+            events.append("adapter")
+            return {"opaque_value": "token-canonical"}
+
+    dependencies = replace(
+        _dependencies(events),
+        role_adapter=LeakingAdapter(),
+    )
+
+    with pytest.raises(F2Error) as exc_info:
+        run_worker(
+            _request(),
+            _environment(tmp_path, F2Role.CANONICAL),
+            dependencies,
+        )
+
+    assert exc_info.value.code == "TEST-DB-F2-EVIDENCE-UNSAFE"
+    assert "publish" not in events
+    assert events[-1] == "close"

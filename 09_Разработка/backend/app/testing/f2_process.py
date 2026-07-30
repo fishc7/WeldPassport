@@ -7,6 +7,9 @@ from pathlib import Path
 import subprocess
 from typing import Mapping
 
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
+
 from app.testing.f2_contract import (
     F2Error,
     F2_PROTOCOL_VERSION,
@@ -49,11 +52,7 @@ class ProcessExecutor:
         environment: Mapping[str, str],
         timeout_seconds: int,
     ) -> ProcessResult:
-        secret_values = tuple(
-            value
-            for key, value in environment.items()
-            if key in _SECRET_KEYS and value
-        )
+        secret_values = _secret_values(environment)
         if any(secret in argument for secret in secret_values for argument in argv):
             raise F2Error(
                 "TEST-DB-F2-WORKER-PROTOCOL",
@@ -89,6 +88,33 @@ def _redact(value: str, secrets: tuple[str, ...]) -> str:
     return rendered
 
 
+def _secret_values(environment: Mapping[str, str]) -> tuple[str, ...]:
+    values: set[str] = {
+        value
+        for key, value in environment.items()
+        if key in _SECRET_KEYS and value
+    }
+    for key in ("TEST_DATABASE_URL", "WELDPASSPORT_F2_WORKING_DATABASE_URL"):
+        raw_url = environment.get(key)
+        if not raw_url:
+            continue
+        try:
+            url = make_url(raw_url)
+        except (ArgumentError, TypeError, ValueError):
+            continue
+        values.update(
+            value
+            for value in (
+                url.username,
+                url.password,
+                url.host,
+                url.database,
+            )
+            if value
+        )
+    return tuple(sorted(values, key=len, reverse=True))
+
+
 def build_worker_environment(
     plan: F2OfflinePlan,
     target: F2AuthorizedTarget,
@@ -103,6 +129,7 @@ def build_worker_environment(
     authorization = target.authorization
     child.update(
         {
+            "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
             "WELDPASSPORT_F2_PROTOCOL_VERSION": F2_PROTOCOL_VERSION,
             "WELDPASSPORT_F2_RUN_ID": str(plan.run_id),
             "WELDPASSPORT_F2_SOURCE_SHA": plan.source_sha,

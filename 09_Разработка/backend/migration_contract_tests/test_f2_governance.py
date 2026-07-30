@@ -63,3 +63,9 @@ def test_f2_governance_003_worker_has_no_eager_db_import() -> None:
         and "app.shared.db" in ast.unparse(node)
     ]
     assert eager_imports == []
+
+    source = worker_path.read_text(encoding="utf-8")
+    run_worker_source = source[source.index("def run_worker("):]
+    assert run_worker_source.index("os.chdir(artifact_path.parent)") < (
+        run_worker_source.index("_default_dependencies()")
+    )

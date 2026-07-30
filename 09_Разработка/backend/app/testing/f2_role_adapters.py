@@ -88,8 +88,8 @@ def build_role_plan(
             "negative_upgrade",
             _alembic(python_executable, "upgrade", "head"),
         ),
-        RoleStep("negative_snapshot_before", callable_name="negative_before"),
         RoleStep("negative_fixture", callable_name="negative_fixture"),
+        RoleStep("negative_snapshot_before", callable_name="negative_before"),
         RoleStep(
             "negative_runtime_rejected",
             callable_name="negative_runtime",

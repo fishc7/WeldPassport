@@ -1,6 +1,8 @@
 from pathlib import Path
 from uuid import UUID
 
+import pytest
+
 from app.shared.database_target import authorize_test_database
 from app.testing.f2_contract import F2MachineStatus, F2Role
 from app.testing.f2_coordinator import (
@@ -173,3 +175,54 @@ def test_f2_coordinator_003_evidence_failure_has_precedence(
 
     assert result.status is F2MachineStatus.EVIDENCE_FAILED
     assert result.manifest_digest is None
+
+
+@pytest.mark.parametrize("failure_index", [0, 1, 2])
+@pytest.mark.parametrize("failure_mode", ["nonzero", "timeout", "malformed"])
+def test_f2_coordinator_004_every_role_failure_short_circuits(
+    tmp_path: Path,
+    failure_index: int,
+    failure_mode: str,
+) -> None:
+    plan = _plan(tmp_path)
+
+    class SelectiveExecutor(SuccessfulExecutor):
+        def run(
+            self,
+            argv: tuple[str, ...],
+            environment: dict[str, str],
+            timeout_seconds: int,
+        ) -> ProcessResult:
+            current_index = len(self.roles)
+            if current_index != failure_index:
+                return super().run(argv, environment, timeout_seconds)
+            self.roles.append(environment["WELDPASSPORT_F2_ROLE"])
+            if failure_mode == "malformed":
+                Path(environment["WELDPASSPORT_F2_ARTIFACT_PATH"]).write_text(
+                    "not-json",
+                    encoding="utf-8",
+                )
+                return ProcessResult(0, "", "", False)
+            return ProcessResult(
+                9 if failure_mode == "nonzero" else 124,
+                "",
+                "",
+                failure_mode == "timeout",
+            )
+
+    executor = SelectiveExecutor()
+    result = run_f2(
+        _environment(tmp_path),
+        F2CoordinatorDependencies(
+            preflight=lambda _inputs: plan,
+            executor=executor,
+            clock=lambda: "2026-07-30T12:00:00Z",
+            publisher=publish_artifact,
+        ),
+    )
+
+    assert result.status is F2MachineStatus.REHEARSAL_FAILED
+    assert executor.roles == [
+        role.value for role in list(F2Role)[: failure_index + 1]
+    ]
+    assert not (plan.namespace / "90_manifest.json").exists()
