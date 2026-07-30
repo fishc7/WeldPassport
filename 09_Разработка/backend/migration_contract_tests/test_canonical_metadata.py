@@ -72,12 +72,26 @@ def test_metadata_002_excludes_workforce_and_test_schema() -> None:
     provider = _provider()
 
     assert "app.workforce.models" not in provider.CANONICAL_MODEL_MODULES
-    assert "app.workforce.models" not in sys.modules
     assert "test" not in provider.CANONICAL_SCHEMAS
     assert all(
         table.schema in EXPECTED_CANONICAL_SCHEMAS
         for table in provider.canonical_metadata.tables.values()
     )
+
+    code = """
+import sys
+assert "app.workforce.models" not in sys.modules
+import app.shared.canonical_metadata
+assert "app.workforce.models" not in sys.modules
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=BACKEND_DIR,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_metadata_003_registry_matches_filesystem_and_has_73_tables() -> None:

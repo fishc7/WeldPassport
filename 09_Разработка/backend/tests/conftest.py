@@ -28,12 +28,6 @@ try:
 except DatabaseTargetError as exc:
     raise pytest.UsageError(str(exc)) from None
 
-# Импортируем первым, до app.main: там регистрируется legacy app.workforce.models
-# (schema=POSTGRES_SCHEMA, обычно "test"), что иначе загрязняет Base.metadata до
-# проверки validate_canonical_metadata() и валит её на схеме "test". Сам workforce
-# не трогаем (ADR-005, legacy) — только порядок импорта в тестовом бутстрапе.
-import app.shared.canonical_metadata  # noqa: F401
-
 from app.engineering.models import (
     DocumentRevision,
     EngineeringDocument,
