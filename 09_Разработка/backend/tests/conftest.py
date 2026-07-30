@@ -9,6 +9,25 @@ from fastapi.testclient import TestClient
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.shared.config import settings
+from app.shared.database_bootstrap import bind_database_target
+from app.shared.database_target import (
+    DatabaseTargetError,
+    authorize_test_database,
+)
+
+try:
+    TEST_DATABASE_AUTHORIZATION = authorize_test_database(
+        test_database_url=os.getenv("TEST_DATABASE_URL"),
+        working_database_url=settings.database_url,
+        destructive_opt_in=os.getenv("WELDPASSPORT_ALLOW_DESTRUCTIVE_TESTS"),
+        confirmed_database_name=os.getenv("WELDPASSPORT_TEST_DB_CONFIRM"),
+        ownership_token=os.getenv("WELDPASSPORT_TEST_DB_OWNERSHIP_TOKEN"),
+    )
+    bind_database_target(TEST_DATABASE_AUTHORIZATION.target)
+except DatabaseTargetError as exc:
+    raise pytest.UsageError(str(exc)) from None
+
 # Импортируем первым, до app.main: там регистрируется legacy app.workforce.models
 # (schema=POSTGRES_SCHEMA, обычно "test"), что иначе загрязняет Base.metadata до
 # проверки validate_canonical_metadata() и валит её на схеме "test". Сам workforce
@@ -72,10 +91,11 @@ from app.quality.models import (
     QualityFindingEvent,
     QualityFindingSequence,
 )
-from app.shared.config import settings
-from app.shared.db import SessionLocal, get_db
+from app.shared.db import SessionLocal, engine, get_db
+from app.shared.test_database_ownership import (
+    verify_test_database_ownership as verify_live_test_database_ownership,
+)
 from app.welding.models import Welder, WelderAdmission
-from tests.test_db_safety import assert_safe_test_database
 
 API_PREFIX = "/api/v1/ogs/welders"
 AUTH_HEADERS = {"X-User-Id": "1"}
@@ -83,16 +103,16 @@ TEST_COMPANY_ID = 99_999
 
 
 @pytest.fixture(scope="session")
-def _test_database_safety_interlock() -> None:
-    assert_safe_test_database(
-        settings.postgres_db,
-        destructive_opt_in=os.getenv("WELDPASSPORT_ALLOW_DESTRUCTIVE_TESTS"),
-        confirmed_database_name=os.getenv("WELDPASSPORT_TEST_DB_CONFIRM"),
-    )
+def _verify_test_database_ownership() -> None:
+    with engine.connect() as connection:
+        verify_live_test_database_ownership(
+            connection,
+            TEST_DATABASE_AUTHORIZATION,
+        )
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _apply_migrations(_test_database_safety_interlock: None) -> None:
+def _apply_migrations(_verify_test_database_ownership: None) -> None:
     from alembic import command
     from alembic.config import Config
 

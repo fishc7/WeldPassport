@@ -8,6 +8,7 @@ from sqlalchemy import create_engine, event, inspect, pool
 
 from app.shared.canonical_metadata import canonical_metadata
 from app.shared.config import settings
+from app.shared.database_bootstrap import get_or_bind_working_target
 from migrations.canonical_boundary import (
     include_name,
     include_object,
@@ -15,9 +16,11 @@ from migrations.canonical_boundary import (
 )
 
 config = context.config
+database_target = get_or_bind_working_target(settings.database_url)
+database_url = database_target.url.render_as_string(hide_password=False)
 # ConfigParser трактует '%' как синтаксис интерполяции, поэтому экранируем его.
 # Без этого любой alembic-вызов падает, если в пароле БД есть '%'.
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 target_metadata = canonical_metadata
 
@@ -40,7 +43,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = create_engine(settings.database_url, poolclass=pool.NullPool)
+    connectable = create_engine(database_url, poolclass=pool.NullPool)
 
     # search_path выставляем на сыром DBAPI-соединении при подключении, а не через
     # connection.execute(): иначе SQLAlchemy 2.0 открывает транзакцию до

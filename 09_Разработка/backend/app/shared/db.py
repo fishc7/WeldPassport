@@ -3,12 +3,16 @@ from collections.abc import Generator
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.shared.database_bootstrap import get_or_bind_working_target
 from app.shared.config import settings
 from app.shared.orm import Base
 
 SCHEMA = settings.postgres_schema
 
-engine = create_engine(settings.database_url)
+database_target = get_or_bind_working_target(settings.database_url)
+engine = create_engine(
+    database_target.url.render_as_string(hide_password=False)
+)
 
 
 @event.listens_for(engine, "connect")

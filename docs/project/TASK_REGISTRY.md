@@ -132,21 +132,21 @@ AS-02 в Task 10A не входит; отдельное архитектурно
 | B-04A-R18 | PostgreSQL 18 Re-verification | [[docs/project/ADR-030-postgresql-18-b04-evidence-versioning|ADR-030 (ACCEPTED)]] + [[docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_SPEC|Specification (ACCEPTED)]] + [[docs/project/TASK_B-04A_R18_POSTGRESQL_18_REVERIFICATION_IMPLEMENTATION_PLAN|Implementation Plan]] | `done / active_authorizing` | accepted 2026-07-29; implementation `f5245ba80698bdddfc64d2071061c2299a1c20f8`; evidence `b34538f5ddd4ed31d8094bc5d96f42ada7d1f28d`; PostgreSQL 18.3; fingerprint v2 `e9e5affd8544b10353f2139c6526bab819f6da2ed919eb279fc1357803e2649a`; report `B04A_VERIFIED`; `314 passed, 1 skipped`; working DB не подключалась |
 | B-04R | PostgreSQL 18 Restore-Roundtrip Evidence | [[docs/project/ADR-031-b04-dual-state-live-restore-evidence|ADR-031 (ACCEPTED)]] + [[docs/project/TASK_B-04R_RESTORE_ROUNDTRIP_EVIDENCE_SPEC|Specification (ACCEPTED)]] + [[docs/project/TASK_B-04R_RESTORE_ROUNDTRIP_EVIDENCE_IMPLEMENTATION_PLAN|Implementation Plan (ACCEPTED)]] + [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_SPEC|Candidate-State Test Remediation Spec (PROMOTED)]] + [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_IMPLEMENTATION_PLAN|Test Remediation Plan (PROMOTED)]] + [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_CLAUDE_CODE_PROMPT|Test Remediation Prompt (PROMOTED)]] | `done / active_restore_authorizing` | implementation SHA `1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b` accepted; evidence promoted 2026-07-29T08:55:32Z by `repository_owner`; report SHA `5480a2e4e02a085f8378ee9617da0b9ad4c04aca4a42fd0a52b933b4b75554be`; promotion commit `abaada5aad7e53d94c00395adb1a0ff742c27dd5` accepted; fresh readiness suite `379 passed, 1 skipped` |
 | B-04B | Repository Cut, Maintenance and Adoption | ADR-025 + ADR-030 + ADR-031 + [[docs/project/TASK_B-04B_CUT_MAINTENANCE_ADOPTION_IMPLEMENTATION_PLAN|Implementation Plan B-04B]] | `done / ADOPTION_ACCEPTED` | tooling `1a84d566311f1cb679a84e851596f95b1053e144`; `604 passed, 2 skipped`; backup `9c5e72aca5d0d95cf80d8dc4df4d7fe9d3ca458db3056e4e9ce9045a6856288c`; marker `canonical_baseline_v1`; owner acceptance 2026-07-30T03:34:25Z; freeze released |
-| RUNTIME-LEGACY-COMPATIBILITY-PROFILE | Canonical/Legacy Runtime Composition | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] | `not_designed / next` | B-04 принят; требуется отдельная Implementation Specification для `main.py` composition, config/profile switch, preflight и legacy router loading |
-| TEST-DB-FOUNDATION | Isolated PostgreSQL Test Database Foundation | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] | `not_designed / next` | B-04 принят; требуется отдельная Implementation Specification; application-test acceptance проектируется совместно с Runtime Compatibility Profile |
+| RUNTIME-LEGACY-COMPATIBILITY-PROFILE | Canonical/Legacy Runtime Composition | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] + [[docs/project/ADR-032-test-db-foundation-and-runtime-bootstrap-boundary|ADR-032 (ACCEPTED)]] + [[docs/project/TASK_RUNTIME_LEGACY_COMPATIBILITY_PROFILE_SPEC|Implementation Specification (ACCEPTED)]] | `designed / implementation not started` | canonical default, explicit fail-closed legacy profile, separate `LegacyBase.metadata`, marker/legacy preflight и conditional workforce router приняты 2026-07-30; pure implementation и isolated DB acceptance требуют отдельных gates |
+| TEST-DB-FOUNDATION | Isolated PostgreSQL Test Database Foundation | [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025 (ACCEPTED)]] + [[docs/project/ADR-029-test-db-safety-interlock|ADR-029 (ACCEPTED)]] + [[docs/project/ADR-032-test-db-foundation-and-runtime-bootstrap-boundary|ADR-032 (ACCEPTED)]] + [[docs/project/TASK_TEST_DB_FOUNDATION_SPEC|Implementation Specification (ACCEPTED)]] + [[docs/project/TASK_TEST_DB_FOUNDATION_IMPLEMENTATION_PLAN|Implementation Plan]] + [[docs/project/TASK_TEST_DB_FOUNDATION_CLAUDE_CODE_PROMPT|Cursor / Claude Code Prompt]] | `implemented_unverified / code accepted` | TEST-DB-F1 pure core реализован TDD и принят владельцем 2026-07-30; focused suite `83 passed`; full pure suite `677 passed, 2 skipped`; compile/diff checks успешны; PostgreSQL/application tests/CI create-drop не запускались; TEST-DB-F2 требует отдельного gate |
 
 Safety prerequisite: `ADR-029 → TEST-DB-SAFETY-INTERLOCK` блокирует опасный pytest,
 но не меняет основной execution gate.
 
-Основной execution gate: `ADR-025 → ADR-030 → ADR-031 → B-03 → B-04A-R18 → B-04R → B-04B → TEST-DB-FOUNDATION → Task 9D-4A-5A`.
-Параллельная ветвь: `ADR-025 → RUNTIME-LEGACY-COMPATIBILITY-PROFILE → canonical application
-acceptance / TEST-DB application tests`. Текущие статусы: B-03 — `done`, closure
+Основной execution gate: `ADR-025 → ADR-030 → ADR-031 → B-03 → B-04A-R18 → B-04R → B-04B → TEST-DB-F1 pure core → RUNTIME-COMPAT-1 pure implementation → TEST-DB-F2 / RUNTIME-COMPAT-2 isolated PostgreSQL acceptance → Task 9D-4A-5A`.
+Текущие статусы: B-03 — `done`, closure
 verified 2026-07-22; B-04A PG16 — historical non-authorizing, B-04A-R18 —
 `done / active_authorizing`, B-04R — `done / active_restore_authorizing`,
 B-04B — `done / ADOPTION_ACCEPTED`; migration freeze released;
-TEST-DB Foundation — `not_designed`;
-Runtime profile — `not_designed`. Code fix запрещён без отдельной Implementation Specification
-и приёмки предыдущих зависимостей.
+TEST-DB Foundation — `implemented_unverified / code accepted`;
+Runtime profile — `designed / implementation not started`. Runtime pure
+implementation, isolated PostgreSQL acceptance, commit и push требуют отдельных
+gates.
 
 ## Electronic Documentation Layer (ADR-018, Session 008-06)
 

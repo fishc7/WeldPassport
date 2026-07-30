@@ -4420,3 +4420,64 @@ Migration freeze снят. Новые migrations обязаны иметь
 `down_revision = "canonical_baseline_v1"` либо ссылаться на его актуального
 потомка. Следующая последовательность:
 `TEST-DB Foundation + Runtime Compatibility Profile → 9D-4A-5A → оставшийся Quality-контур`.
+
+---
+
+## ADR-032. TEST-DB Foundation and Runtime Bootstrap Boundary
+
+Дата: 2026-07-30
+
+Статус: **ACCEPTED**
+
+Полный текст:
+[[docs/project/ADR-032-test-db-foundation-and-runtime-bootstrap-boundary|ADR-032 — TEST-DB Foundation and Runtime Bootstrap Boundary]].
+
+После завершения B-04 принято совместное архитектурное решение для двух
+prerequisites перед Task 9D-4A-5A:
+
+- default `canonical` runtime не импортирует workforce router или legacy metadata;
+- explicit `legacy_compatibility` profile запускается только после read-only
+  проверки минимального исполняемого legacy contract и fail closed при любой
+  несовместимости;
+- workforce переводится на отдельную `LegacyBase.metadata`, которая никогда не
+  входит в canonical Alembic;
+- process-level `DatabaseTarget` выбирается до создания engine и не может быть
+  заменён после bind;
+- PostgreSQL application pytest требует отдельный `TEST_DATABASE_URL`, exact
+  opt-in/confirmation и server-side ownership marker без fallback на working DSN;
+- local pytest использует заранее созданную disposable DB, а create/drop
+  уникальной ephemeral DB принадлежит только CI.
+
+Delivery разделён на три gates: pure TEST-DB Foundation Core, pure Runtime
+Compatibility Profile и отдельно разрешаемую isolated PostgreSQL acceptance.
+До последнего gate обе реализации могут иметь только статус
+`IMPLEMENTED_UNVERIFIED`.
+
+Приняты отдельные Implementation Specification:
+
+- [[docs/project/TASK_TEST_DB_FOUNDATION_SPEC|TEST-DB-FOUNDATION]];
+- [[docs/project/TASK_RUNTIME_LEGACY_COMPATIBILITY_PROFILE_SPEC|RUNTIME-LEGACY-COMPATIBILITY-PROFILE]].
+
+Архитектурная приёмка не изменяет backend, tests, migrations или PostgreSQL и не
+разрешает implementation, DB run, commit или push без следующих отдельных gates.
+
+### TEST-DB-F1 pure implementation checkpoint
+
+Дата: 2026-07-30
+
+Статус: **IMPLEMENTED_UNVERIFIED / CODE ACCEPTED 2026-07-30**
+
+Pure Foundation Core реализует immutable `DatabaseTarget`, bind-once bootstrap,
+offline test authorization, live ownership verifier, единый Alembic target
+routing и provider-neutral exact-lease CI lifecycle. `tests/conftest.py`
+выбирает test target до импорта приложения и проверяет live ownership до
+`command.upgrade`.
+
+TDD evidence включает RED каждого компонента. Свежий полный
+`migration_contract_tests` завершён с `677 passed, 2 skipped`; focused
+Foundation suite — `83 passed`; changed Python
+compile и `git diff --check` успешны.
+
+PostgreSQL, application tests, `upgrade`/`stamp`, CI create/drop и isolated
+acceptance не выполнялись. Это не закрывает TEST-DB-F2 и не переводит Foundation
+в `ACCEPTED`. Stage, commit и push не выполнялись.

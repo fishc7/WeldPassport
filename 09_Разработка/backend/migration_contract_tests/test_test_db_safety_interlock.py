@@ -64,7 +64,7 @@ def test_conftest_orders_interlock_before_migrations_without_import_probe() -> N
         if isinstance(target, ast.Name)
     }
 
-    interlock = functions["_test_database_safety_interlock"]
+    interlock = functions["_verify_test_database_ownership"]
     apply_migrations = functions["_apply_migrations"]
 
     assert any(
@@ -74,6 +74,6 @@ def test_conftest_orders_interlock_before_migrations_without_import_probe() -> N
         for decorator in interlock.decorator_list
     )
     assert any(
-        argument.arg == "_test_database_safety_interlock"
+        argument.arg == "_verify_test_database_ownership"
         for argument in apply_migrations.args.args
     )

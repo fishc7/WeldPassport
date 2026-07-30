@@ -1396,6 +1396,35 @@ pytest по умолчанию fail-closed до первого соединен�
 явно подтвердить разрушительный запуск и точное имя отдельной БД с test-маркером. Этот
 interlock не создаёт тестовую БД, не заменяет B-04 и не разрешает fallback на рабочий DSN.
 
+Целевая bootstrap boundary принята в
+[[docs/project/ADR-032-test-db-foundation-and-runtime-bootstrap-boundary|ADR-032]].
+До создания engine независимо выбираются `RuntimeProfile` и `DatabasePurpose`.
+Runtime приложения всегда использует working target; PostgreSQL application pytest
+обязан выбрать отдельный test target до импорта `app.main` и `app.shared.db`.
+После bind process-level `DatabaseTarget` неизменяем.
+
+Default `canonical` profile не импортирует workforce и перед обслуживанием запросов
+read-only подтверждает current canonical marker. Explicit `legacy_compatibility`
+profile использует отдельные `WELDPASSPORT_LEGACY_SCHEMA` и `LegacyBase.metadata`;
+workforce router подключается только после успешного read-only preflight обязательных
+legacy relations, columns, constraints и privileges. Любая несовместимость блокирует
+startup целиком, без fallback и automatic repair.
+
+Полный TEST-DB Foundation требует `TEST_DATABASE_URL`, exact destructive opt-in,
+confirmation и server-side ownership marker. Локально используется заранее созданная
+disposable PostgreSQL database без автоматического create/drop; только CI создаёт и
+удаляет уникальную owned ephemeral DB. Реализация разбита на pure Foundation Core,
+pure Runtime Profile и отдельную isolated PostgreSQL acceptance. Спецификации:
+[[docs/project/TASK_TEST_DB_FOUNDATION_SPEC|TEST-DB-FOUNDATION]] и
+[[docs/project/TASK_RUNTIME_LEGACY_COMPATIBILITY_PROFILE_SPEC|RUNTIME-LEGACY-COMPATIBILITY-PROFILE]].
+
+TEST-DB-F1 Pure Foundation Core реализован 2026-07-30 со статусом
+`IMPLEMENTED_UNVERIFIED / CODE ACCEPTED 2026-07-30`; fresh pure suite —
+`677 passed, 2 skipped`; focused Foundation suite — `83 passed`. PostgreSQL и
+application tests не запускались.
+Runtime Compatibility Profile и isolated TEST-DB-F2 acceptance остаются
+отдельными следующими gates.
+
 ## 16. Статус backend-кода (обновлено 2026-07-06)
 
 `09_Разработка/backend` — основная архитектурная база MVP.
