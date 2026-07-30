@@ -288,3 +288,14 @@ def test_f2_worker_008_negative_fixture_removes_one_required_unique() -> None:
         for constraint in table.constraints
     )
     assert negative_uniques == compatible_uniques - 1
+
+
+def test_f2_worker_009_negative_snapshot_orders_tables_without_fk_resolution() -> None:
+    from app.testing.f2_worker import _ordered_legacy_runtime_tables
+
+    tables = _ordered_legacy_runtime_tables()
+
+    assert len(tables) == 7
+    assert tuple(table.fullname for table in tables) == tuple(
+        sorted(table.fullname for table in tables)
+    )

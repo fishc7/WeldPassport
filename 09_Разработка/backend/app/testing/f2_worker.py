@@ -212,12 +212,22 @@ class _BoundCommandExecutor(CommandExecutor):
         return completed.returncode
 
 
+def _ordered_legacy_runtime_tables():
+    """Return legacy tables deterministically without resolving external FKs."""
+    from app.workforce import models as _legacy_models  # noqa: F401
+    from app.workforce.legacy_orm import LegacyBase
+
+    return tuple(
+        sorted(
+            LegacyBase.metadata.tables.values(),
+            key=lambda table: table.fullname,
+        )
+    )
+
+
 def _build_legacy_fixture_metadata(*, negative: bool):
     """Build an isolated legacy fixture without mutating runtime metadata."""
     from sqlalchemy import Column, Integer, MetaData, Table, UniqueConstraint
-
-    from app.workforce import models as _legacy_models  # noqa: F401
-    from app.workforce.legacy_orm import LegacyBase
 
     metadata = MetaData()
     Table(
@@ -226,7 +236,7 @@ def _build_legacy_fixture_metadata(*, negative: bool):
         Column("ID_Объекта", Integer, primary_key=True),
         schema="test",
     )
-    for table in LegacyBase.metadata.tables.values():
+    for table in _ordered_legacy_runtime_tables():
         table.to_metadata(metadata)
 
     if negative:
@@ -344,7 +354,6 @@ def _default_role_handlers(
 
         from sqlalchemy import func, select
 
-        from app.workforce.legacy_orm import LegacyBase
         from app.workforce.legacy_preflight import (
             read_observed_legacy_contract,
         )
@@ -360,7 +369,7 @@ def _default_role_handlers(
                     ).scalar_one()
                 ),
             )
-            for table in LegacyBase.metadata.sorted_tables
+            for table in _ordered_legacy_runtime_tables()
         )
         material = f"{observed!r}\0{counts!r}".encode("utf-8")
         return sha256(material).hexdigest()
