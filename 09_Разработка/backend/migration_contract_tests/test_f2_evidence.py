@@ -8,7 +8,9 @@ from app.testing.f2_contract import F2Error, F2_PROTOCOL_VERSION
 from app.testing.f2_evidence import (
     canonical_json_bytes,
     publish_artifact,
+    reserve_named_namespace,
     reserve_run_namespace,
+    validate_external_evidence_root,
     verify_artifact,
 )
 
@@ -115,3 +117,55 @@ def test_f2_evidence_006_rejects_symlink_root(tmp_path: Path) -> None:
 
     with pytest.raises(F2Error):
         reserve_run_namespace(link, uuid4())
+
+
+def test_f2_evidence_007_accepts_only_external_evidence_root(
+    tmp_path: Path,
+) -> None:
+    repository_root = tmp_path / "repository"
+    repository_root.mkdir()
+    external_root = tmp_path / "evidence"
+    external_root.mkdir()
+
+    assert validate_external_evidence_root(
+        external_root,
+        repository_root,
+    ) == external_root.resolve()
+
+    with pytest.raises(F2Error):
+        validate_external_evidence_root(
+            repository_root / "evidence",
+            repository_root,
+        )
+    with pytest.raises(F2Error):
+        validate_external_evidence_root(repository_root, repository_root)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "../operator-preflight-12345678-1234-4234-8234-123456789abc",
+        "operator-preflight/not-allowed",
+        "operator-preflight-not-a-uuid",
+        "12345678-1234-4234-8234-123456789abc",
+    ],
+)
+def test_f2_evidence_008_rejects_unsafe_named_namespace(
+    tmp_path: Path,
+    name: str,
+) -> None:
+    with pytest.raises(F2Error):
+        reserve_named_namespace(tmp_path, name)
+
+
+def test_f2_evidence_009_reserves_operator_preflight_namespace_once(
+    tmp_path: Path,
+) -> None:
+    name = "operator-preflight-12345678-1234-4234-8234-123456789abc"
+
+    namespace = reserve_named_namespace(tmp_path, name)
+
+    assert namespace == tmp_path / name
+    assert namespace.is_dir()
+    with pytest.raises(F2Error):
+        reserve_named_namespace(tmp_path, name)

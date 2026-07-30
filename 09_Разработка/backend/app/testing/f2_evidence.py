@@ -7,6 +7,7 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import re
 import stat
 from typing import Mapping
 from uuid import UUID
@@ -41,6 +42,10 @@ _ARTIFACT_ROLES = {
     "20_legacy_compatible.json": "legacy_compatible",
     "30_legacy_negative.json": "legacy_negative",
 }
+_OPERATOR_PREFLIGHT_NAMESPACE = re.compile(
+    r"^operator-preflight-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-"
+    r"[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+)
 
 
 @dataclass(frozen=True)
@@ -110,6 +115,38 @@ def reserve_run_namespace(root: Path, run_id: UUID) -> Path:
         raise F2Error(*_UNSAFE_EVIDENCE)
     _assert_safe_existing_path(root)
     namespace = root / str(run_id)
+    try:
+        namespace.mkdir(mode=0o700, exist_ok=False)
+    except OSError:
+        raise F2Error(*_UNSAFE_EVIDENCE) from None
+    _assert_safe_existing_path(namespace)
+    return namespace
+
+
+def validate_external_evidence_root(
+    root: Path,
+    repository_root: Path,
+) -> Path:
+    try:
+        resolved_root = root.resolve(strict=True)
+        resolved_repository = repository_root.resolve(strict=True)
+    except OSError:
+        raise F2Error(*_UNSAFE_EVIDENCE) from None
+    if (
+        not resolved_root.is_dir()
+        or resolved_root == resolved_repository
+        or resolved_root.is_relative_to(resolved_repository)
+    ):
+        raise F2Error(*_UNSAFE_EVIDENCE)
+    _assert_safe_existing_path(root)
+    return resolved_root
+
+
+def reserve_named_namespace(root: Path, namespace_name: str) -> Path:
+    if _OPERATOR_PREFLIGHT_NAMESPACE.fullmatch(namespace_name) is None:
+        raise F2Error(*_UNSAFE_EVIDENCE)
+    _assert_safe_existing_path(root)
+    namespace = root / namespace_name
     try:
         namespace.mkdir(mode=0o700, exist_ok=False)
     except OSError:
