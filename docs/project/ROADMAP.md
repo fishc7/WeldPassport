@@ -63,6 +63,8 @@ active Alembic graph имеет один head `canonical_baseline_v1`, productio
   `60 passed`, полный pure suite `738 passed, 2 skipped`;
 - local TEST-DB-F2 architecture принята в
   [[docs/project/ADR-033-test-db-f2-local-rehearsal|ADR-033]];
+- TEST-DB-F2 Pure Runner Specification, Implementation Plan и Prompt приняты
+  2026-07-30; pure implementation ещё не начата;
 - следующий execution order:
   `RUNTIME-COMPAT-1 → TEST-DB-F2-PURE-RUNNER → operator preflight → отдельно
   разрешённый local PostgreSQL rehearsal → evidence review → owner acceptance`;

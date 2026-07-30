@@ -4564,3 +4564,31 @@ PostgreSQL, Alembic CLI и application suite не запускались. Ста
 operational acceptance; следующий gate —
 `TEST-DB-F2-PURE-RUNNER`, затем отдельно разрешаемый
 `TEST-DB-F2 / RUNTIME-COMPAT-2` isolated PostgreSQL rehearsal.
+
+### TEST-DB-F2-PURE-RUNNER delivery design checkpoint
+
+Дата: 2026-07-30
+
+Статус: **SPECIFICATION AND IMPLEMENTATION PLAN ACCEPTED**
+
+Приняты:
+
+- [[docs/project/TASK_TEST_DB_F2_PURE_RUNNER_SPEC|Pure Runner Specification]];
+- [[docs/project/TASK_TEST_DB_F2_PURE_RUNNER_IMPLEMENTATION_PLAN|Implementation Plan]];
+- [[docs/project/TASK_TEST_DB_F2_PURE_RUNNER_CLAUDE_CODE_PROMPT|Prompt for Cursor / Claude Code]].
+
+Выбран pure orchestration library с thin coordinator CLI и отдельным one-role
+worker entrypoint. Три secret-bearing target bundle поступают только через
+role-prefixed transient environment; coordinator генерирует UUIDv4, резервирует
+create-exclusive evidence namespace и до первого process call pure-проверяет
+всю тройку. Worker-процессы запускаются строго
+`canonical → legacy_compatible → legacy_negative`, без retry и продолжения
+после failure.
+
+Evidence — canonical JSON с SHA-256 chain. Evidence publication failure не
+может создать verified manifest. Runner не создаёт/удаляет/reset-ит DB и не
+присваивает `TEST_DB_F2_ACCEPTED`.
+
+Приёмка delivery design разрешает pure implementation и commits. PostgreSQL,
+Alembic CLI, application suite и operational rehearsal остаются отдельными
+gates. Push разрешён владельцем после полного pure closure.
