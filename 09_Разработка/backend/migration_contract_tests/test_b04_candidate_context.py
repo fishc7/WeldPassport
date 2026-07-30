@@ -194,13 +194,13 @@ def test_b04_context_009_imports_canonical_metadata_without_runtime_database_sta
 
         from app.shared import canonical_metadata
 
-        assert len(canonical_metadata.CANONICAL_MODEL_MODULES) == 12
+        assert len(canonical_metadata.CANONICAL_MODEL_MODULES) == 13
         assert all(name in sys.modules for name in canonical_metadata.CANONICAL_MODEL_MODULES)
         print(json.dumps({"tables": len(canonical_metadata.canonical_metadata.tables)}))
         """
     )
 
-    assert result == {"tables": 73}
+    assert result == {"tables": 76}
 
 
 def test_b04_context_010_runtime_db_reuses_orm_base_without_creating_an_engine() -> None:

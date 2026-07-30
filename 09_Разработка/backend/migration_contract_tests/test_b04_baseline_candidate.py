@@ -18,10 +18,15 @@ BASELINE_PATH = (
     BACKEND_ROOT / "migrations" / "versions" / "canonical_baseline_v1.py"
 )
 CANONICAL_SCHEMAS = ("hr", "welding", "project", "engineering", "quality")
-EXPECTED_TABLES = tuple((table.schema, table.name) for table in canonical_metadata.sorted_tables)
+EXPECTED_TABLES = tuple(
+    (table.schema, table.name)
+    for table in canonical_metadata.sorted_tables
+    if table.schema in CANONICAL_SCHEMAS
+)
 EXPECTED_INDEXES = tuple(
     (table.schema, table.name, index.name)
     for table in canonical_metadata.sorted_tables
+    if table.schema in CANONICAL_SCHEMAS
     for index in sorted(table.indexes, key=lambda item: item.name or "")
 )
 _CREATE_SCHEMAS = tuple(f'CREATE SCHEMA "{schema}"' for schema in CANONICAL_SCHEMAS)

@@ -7,10 +7,6 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.shared.canonical_metadata import (
-    CANONICAL_MODEL_MODULES,
-    canonical_metadata,
-)
 from migrations.b04.source_contract import (
     CANONICAL_MODEL_MODULE_COUNT,
     CANONICAL_TABLE_COUNT,
@@ -100,6 +96,8 @@ def test_b04_cut_001_constants_match_accepted_snapshot() -> None:
     assert HISTORICAL_ROOT == "20260702_02_hr_core"
     assert HISTORICAL_HEAD == "20260724_27_qd_rbac_sod"
     assert HISTORICAL_REVISION_COUNT == 31
+    assert CANONICAL_MODEL_MODULE_COUNT == 12
+    assert CANONICAL_TABLE_COUNT == 73
 
 
 def test_b04_cut_002_source_commit_has_accepted_provenance() -> None:
@@ -125,6 +123,25 @@ def test_b04_cut_003_archived_graph_matches_accepted_snapshot() -> None:
     assert len(revision_ids) == len(set(revision_ids))
 
 
-def test_b04_cut_004_canonical_metadata_matches_accepted_snapshot() -> None:
-    assert len(CANONICAL_MODEL_MODULES) == CANONICAL_MODEL_MODULE_COUNT
-    assert len(canonical_metadata.tables) == CANONICAL_TABLE_COUNT
+def test_b04_cut_004_baseline_revision_matches_accepted_snapshot() -> None:
+    baseline_path = (
+        Path(__file__).resolve().parents[1]
+        / "migrations"
+        / "versions"
+        / "canonical_baseline_v1.py"
+    )
+    tree = ast.parse(
+        baseline_path.read_text(encoding="utf-8"),
+        filename=str(baseline_path),
+    )
+    created_tables = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "op"
+        and node.func.attr == "create_table"
+    ]
+
+    assert len(created_tables) == CANONICAL_TABLE_COUNT
