@@ -255,3 +255,36 @@ def test_f2_worker_006_application_suite_runs_from_backend_root(
         str(backend_root / "tests"),
         "-q",
     )
+
+
+def test_f2_worker_007_compatible_fixture_resolves_external_legacy_fk() -> None:
+    from app.testing.f2_worker import _build_legacy_fixture_metadata
+
+    metadata = _build_legacy_fixture_metadata(negative=False)
+
+    assert len(metadata.tables) == 8
+    assert "test.ОБЪЕКТЫ" in metadata.tables
+    for table in metadata.tables.values():
+        for foreign_key in table.foreign_keys:
+            assert foreign_key.column.table in metadata.tables.values()
+
+
+def test_f2_worker_008_negative_fixture_removes_one_required_unique() -> None:
+    from sqlalchemy import UniqueConstraint
+
+    from app.testing.f2_worker import _build_legacy_fixture_metadata
+
+    compatible = _build_legacy_fixture_metadata(negative=False)
+    negative = _build_legacy_fixture_metadata(negative=True)
+
+    compatible_uniques = sum(
+        isinstance(constraint, UniqueConstraint)
+        for table in compatible.tables.values()
+        for constraint in table.constraints
+    )
+    negative_uniques = sum(
+        isinstance(constraint, UniqueConstraint)
+        for table in negative.tables.values()
+        for constraint in table.constraints
+    )
+    assert negative_uniques == compatible_uniques - 1

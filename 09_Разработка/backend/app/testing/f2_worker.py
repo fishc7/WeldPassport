@@ -212,51 +212,69 @@ class _BoundCommandExecutor(CommandExecutor):
         return completed.returncode
 
 
+def _build_legacy_fixture_metadata(*, negative: bool):
+    """Build an isolated legacy fixture without mutating runtime metadata."""
+    from sqlalchemy import Column, Integer, MetaData, Table, UniqueConstraint
+
+    from app.workforce import models as _legacy_models  # noqa: F401
+    from app.workforce.legacy_orm import LegacyBase
+
+    metadata = MetaData()
+    Table(
+        "ОБЪЕКТЫ",
+        metadata,
+        Column("ID_Объекта", Integer, primary_key=True),
+        schema="test",
+    )
+    for table in LegacyBase.metadata.tables.values():
+        table.to_metadata(metadata)
+
+    if negative:
+        removable = sorted(
+            (
+                (table, constraint)
+                for table in metadata.tables.values()
+                for constraint in table.constraints
+                if isinstance(constraint, UniqueConstraint)
+            ),
+            key=lambda item: (
+                item[0].fullname,
+                tuple(column.name for column in item[1].columns),
+            ),
+        )
+        if not removable:
+            raise F2Error(
+                "TEST-DB-F2-RUNTIME-FAILED",
+                "TEST-DB-F2 negative fixture could not be built",
+            )
+        removable_table, removable_constraint = removable[0]
+        removable_table.constraints.remove(removable_constraint)
+
+    return metadata
+
+
 def _default_role_handlers(
     connection_provider: Callable[[], object],
 ) -> dict[str, Callable[[], Mapping[str, object]]]:
     state: dict[str, object] = {}
 
     def create_legacy_fixture(*, negative: bool) -> Mapping[str, object]:
-        from sqlalchemy import MetaData, UniqueConstraint
-
-        from app.workforce import models as _legacy_models  # noqa: F401
-        from app.workforce.legacy_orm import (
-            LegacyBase,
-            bind_legacy_schema,
-        )
+        from app.workforce.legacy_orm import bind_legacy_schema
 
         connection = connection_provider()
         bind_legacy_schema("test")
         connection.execute(text('CREATE SCHEMA "test"'))
         connection.commit()
-        if not negative:
-            LegacyBase.metadata.create_all(bind=connection)
-            connection.commit()
-            return {"fixture": "compatible"}
-
-        incomplete = MetaData()
-        for table in LegacyBase.metadata.sorted_tables:
-            table.to_metadata(incomplete)
-        removable = next(
-            (
-                (table, constraint)
-                for table in incomplete.tables.values()
-                for constraint in table.constraints
-                if isinstance(constraint, UniqueConstraint)
-            ),
-            None,
-        )
-        if removable is None:
-            raise F2Error(
-                "TEST-DB-F2-RUNTIME-FAILED",
-                "TEST-DB-F2 negative fixture could not be built",
-            )
-        removable_table, removable_constraint = removable
-        removable_table.constraints.remove(removable_constraint)
-        incomplete.create_all(bind=connection)
+        fixture_metadata = _build_legacy_fixture_metadata(negative=negative)
+        fixture_metadata.create_all(bind=connection)
         connection.commit()
-        return {"fixture": "one_required_constraint_omitted"}
+        return {
+            "fixture": (
+                "one_required_constraint_omitted"
+                if negative
+                else "compatible"
+            )
+        }
 
     def runtime_start(*, expect_legacy: bool) -> Mapping[str, object]:
         from fastapi.testclient import TestClient
