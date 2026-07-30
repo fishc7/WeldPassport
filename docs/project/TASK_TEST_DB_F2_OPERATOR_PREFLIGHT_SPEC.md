@@ -1,6 +1,6 @@
 # TEST-DB-F2-OPERATOR-PREFLIGHT — Implementation Specification
 
-Статус: **ACCEPTED / IMPLEMENTATION PLAN ACCEPTED / IMPLEMENTATION NOT STARTED**
+Статус: **IMPLEMENTED_UNVERIFIED / PURE VERIFIED / REVIEW APPROVED**
 
 Дата: 2026-07-30
 
@@ -229,3 +229,35 @@ read-only review и remediation. Затем создаётся closure commit и
 
 PostgreSQL, Alembic CLI, application suite и DB lifecycle на всём этом этапе
 запрещены.
+
+## 12. Pure implementation closure
+
+Дата: 2026-07-30
+
+Результат: **IMPLEMENTED_UNVERIFIED / PURE VERIFIED / REVIEW APPROVED**.
+
+Implementation commits:
+
+- `6958bf3` — reusable offline target authorization;
+- `7b6493a` — external evidence boundary и named namespace;
+- `9b8dc29` — distinct authorization/source/prerequisite contract;
+- `e493308` — offline state machine, artifact и thin CLI;
+- `f1027e0` — governance и environment-name documentation;
+- `de656d5` — review remediation common repository containment.
+
+Evidence:
+
+- focused operator-preflight suite: `43 passed, 1 skipped`;
+- полный `migration_contract_tests`: `818 passed, 3 skipped`;
+- compile, `git diff --check` и scope/security audit успешны;
+- read-only review после remediation: `APPROVED`, открытых Critical/Important
+  findings нет.
+
+Проверка environment presence выполнена без чтения или печати значений:
+`0/13` required transient variables присутствуют. Поэтому CLI с operator inputs
+не запускался и `TEST_DB_F2_OPERATOR_PREFLIGHT_READY` не присваивался.
+
+PostgreSQL, Alembic CLI, application suite, worker и DB lifecycle не
+запускались. Для фактического offline preflight оператор должен отдельно
+установить полный transient environment; даже успешный `READY` после этого не
+разрешит PostgreSQL rehearsal без нового разрешения владельца.

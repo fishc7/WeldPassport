@@ -4642,3 +4642,25 @@ specification. План фиксирует пять последовательн
 commits, полный pure suite, read-only review/remediation и разрешённый push.
 Пользователь поручил пройти эти checkpoints самостоятельно без расширения
 scope до PostgreSQL rehearsal.
+
+### TEST-DB-F2-OPERATOR-PREFLIGHT implementation checkpoint
+
+Дата: 2026-07-30
+
+Статус: **IMPLEMENTED_UNVERIFIED / PURE VERIFIED / REVIEW APPROVED**
+
+Реализация зафиксирована commits `6958bf3`, `7b6493a`, `9b8dc29`, `e493308`,
+`f1027e0`, `de656d5`. Review remediation закрыла Important finding: evidence
+root теперь проверяется относительно common repository boundary, а не только
+текущего linked worktree.
+
+Evidence:
+
+- focused suite: `43 passed, 1 skipped`;
+- full pure suite: `818 passed, 3 skipped`;
+- compile/scope/diff audit успешны;
+- review: `APPROVED`, открытых Critical/Important findings нет.
+
+Required transient environment отсутствует (`0/13` variable names). Значения не
+читались и не печатались; CLI не запускался, `READY` не заявлен. PostgreSQL,
+Alembic CLI, application suite, worker и DB lifecycle не выполнялись.

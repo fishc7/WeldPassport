@@ -69,6 +69,10 @@ active Alembic graph имеет один head `canonical_baseline_v1`, productio
 - отдельная TEST-DB-F2 Operator Preflight Specification принята 2026-07-30;
   preflight остаётся полностью offline и предшествует новому разрешению на
   PostgreSQL rehearsal;
+- operator-preflight tooling реализован и прошёл pure-приёмку:
+  `43 passed, 1 skipped` focused, `818 passed, 3 skipped` full pure,
+  review `APPROVED`; transient environment отсутствует (`0/13`), поэтому
+  operational `READY` не присвоен;
 - следующий execution order:
   `RUNTIME-COMPAT-1 → TEST-DB-F2-PURE-RUNNER → operator preflight → отдельно
   разрешённый local PostgreSQL rehearsal → evidence review → owner acceptance`;
