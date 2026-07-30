@@ -75,6 +75,24 @@ def test_read_live_database_identity_maps_the_complete_catalog_row() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("catalog_address", "expected_address"),
+    [
+        ("127.0.0.1/32", "127.0.0.1"),
+        ("::1/128", "::1"),
+    ],
+)
+def test_read_live_database_identity_normalizes_postgresql_inet_cidr(
+    catalog_address: str,
+    expected_address: str,
+) -> None:
+    identity = read_live_database_identity(
+        _FakeConnection(_row(server_address=catalog_address))  # type: ignore[arg-type]
+    )
+
+    assert identity.server_address == expected_address
+
+
 def test_verify_test_database_ownership_accepts_exact_identity_and_marker() -> None:
     verify_test_database_ownership(
         _FakeConnection(_row()),  # type: ignore[arg-type]

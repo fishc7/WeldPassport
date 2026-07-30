@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from ipaddress import ip_interface
 import socket
 from typing import Any
 
@@ -44,7 +45,9 @@ def read_live_database_identity(
         row: Any = connection.execute(_LIVE_IDENTITY_SQL).mappings().one()
         return LiveDatabaseIdentity(
             database_name=str(row["database_name"]),
-            server_address=str(row["server_address"]),
+            server_address=str(
+                ip_interface(str(row["server_address"])).ip
+            ),
             server_port=int(row["server_port"]),
             database_comment=(
                 None
