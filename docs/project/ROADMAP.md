@@ -10,7 +10,7 @@
 План развития WeldPassport. Машиночитаемое состояние выполнения —
 `docs/project/PROJECT_STATUS.yaml`; постатейный статус — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]].
 
-## Текущий этап (обновлено 2026-07-29)
+## Текущий этап (обновлено 2026-07-30)
 
 **Инженерный контур, WeldOperation, термообработка и ядро контроля качества (Tasks 1–7,
 8A–8F, 9A–9C) реализованы.** Идёт **Task 9D — Quality / Defect Management**: блоки
@@ -27,19 +27,10 @@ Task 10A завершён commit `c1b551e` от 2026-07-24.
 2026-07-24. Revision 27, person-level SoD, evidence-bearing grant/snapshot и dual-role
 warning прошли PostgreSQL-приёмку и полный backend regression (`1590 passed`).
 
-**B-04A — Canonical Baseline Build & Verification** завершён и зафиксирован
-implementation commit `4487127a3042cf6a8ba003b85cffd143dc920f0e`
-(`done`). Для source commit
-`6c56f99edbd4e7346264ee14658d2076b5fd0775` на PostgreSQL 16.14 доказана
-эквивалентность historical, clean baseline и re-upgrade: 73 canonical tables,
-15 governed seeds, fingerprint
-`ce2cd0613eab20da8d0a93d8caf675aa32fce932d909dfa219533b0c12dfc9f6`;
-pure suite — `246 passed, 1 skipped`.
-
-По [[docs/project/ADR-030-postgresql-18-b04-evidence-versioning|ADR-030]] это evidence
-сохраняется как `historical_non_authorizing`. Целевая версия проекта — PostgreSQL
-18.x. B-04A-R18 с fingerprint v2 уже принят; до B-04B теперь требуется отдельный
-B-04R restore-roundtrip evidence по ADR-031.
+**B-04 — Canonical Baseline Adoption** завершён и принят 2026-07-30:
+active Alembic graph имеет один head `canonical_baseline_v1`, production marker
+перенесён в `public`, fingerprint PostgreSQL 18.3 неизменен, owner acceptance
+зафиксирован. Migration freeze снят.
 
 Реализовано и задокументировано (полный перечень — [[docs/project/TASK_REGISTRY|TASK_REGISTRY.md]]):
 
@@ -56,65 +47,19 @@ B-04R restore-roundtrip evidence по ADR-031.
 
 ## Следующий этап
 
-### 0. B-04A-R18 принят; B-04R restore evidence — следующий gate
+### 0. TEST-DB Foundation + Runtime Compatibility Profile
 
-- B-04A PG16 evidence опубликовано вне активного `migrations/versions` и сохраняется
-  неизменяемым как historical non-authorizing;
-- implementation commit: `4487127a3042cf6a8ba003b85cffd143dc920f0e`;
-- active migration graph, version marker и рабочая БД не изменены;
-- migration freeze остаётся активным;
-- B-04A-R18 принят 2026-07-29: implementation `f5245ba`, accepted evidence
-  `b34538f`, PostgreSQL 18.3, fingerprint v2
-  `e9e5affd8544b10353f2139c6526bab819f6da2ed919eb279fc1357803e2649a`;
-- PG18 evidence имеет статус `active_authorizing`; verification report —
-  `B04A_VERIFIED`; pure verification — `314 passed, 1 skipped`;
-- новый READ-ONLY Maintenance Readiness Review выявил стабильное отличие PostgreSQL
-  deparser после custom-format restore: live `e9e5affd...`, restore fixed point
-  `3a9e682c...`, exact diff 133 CHECK + 2 predicates;
-- [[docs/project/ADR-031-b04-dual-state-live-restore-evidence|ADR-031]] принят:
-  live и restore states получают отдельные exact authorizing contracts;
-- [[docs/project/TASK_B-04R_RESTORE_ROUNDTRIP_EVIDENCE_SPEC|B-04R Spec]] принята
-  2026-07-29;
-- [[docs/project/TASK_B-04R_RESTORE_ROUNDTRIP_EVIDENCE_IMPLEMENTATION_PLAN|B-04R
-  implementation plan]] принят 2026-07-29;
-- documentation commit `08bc6a09974e0272ff27938511af5d4d6ba33403` принят как
-  exact implementation base;
-- pure TDD implementation принята владельцем и зафиксирована commit
-  `2c1a0d9fc66683a1119b496f767f57156e7e3390`;
-- первый operator run остановился fail-closed до restore из-за неэкранированного
-  `%` в direct psycopg SQL; минимальная remediation `%` → `%%` реализована TDD:
-  focused `59 passed`, полный `379 passed, 1 skipped`, real read-only preflight
-  `B04R-PREFLIGHT-OK`;
-- remediation commit `65f3a28855eb0830077117fa26d9bbf789f50cb5` принят
-  владельцем 2026-07-29; повторный operator run завершён
-  `B04_RESTORE_ROUNDTRIP_VERIFIED`, candidate evidence опубликован как
-  `candidate_pending_acceptance`;
-- artifact review и secret scan прошли, но candidate-state focused suite дал
-  `44 passed, 15 failed`: тесты предполагают пустой pre-generation index и
-  fixture `copytree` наследует опубликованный restore-каталог; evidence
-  acceptance/promotion blocked до отдельной test-state remediation;
-- remediation option 1 принят 2026-07-29: live-only allowlist fixtures, exact
-  empty sandbox index и stage-exact repository assertion; письменная
-  [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_SPEC|Specification]]
-  принята; test-only
-  [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_IMPLEMENTATION_PLAN|Implementation Plan]]
-  и [[docs/project/TASK_B-04R_CANDIDATE_STATE_TEST_REMEDIATION_CLAUDE_CODE_PROMPT|Prompt]]
-  приняты 2026-07-29; два test-файла реализованы и дали focused
-  `59 passed`; full suite дал `378 passed, 1 skipped, 1 failed` на третьем
-  pre-restore directory assertion; scope amendment для
-  `test_b04_evidence_versioning.py` и continuation implementation приняты
-  2026-07-29; exact `1 passed`, three-file `98 passed`, full
-  `379 passed, 1 skipped`; implementation SHA
-  `1f4d5f7a265dc7bd86b999adb95ef7070bc2ae7b` принят 2026-07-29;
-  evidence promotion отдельно разрешён и выполнен в
-  `active_restore_authorizing` с `accepted_at_utc=2026-07-29T08:55:32Z`;
-- promotion commit `abaada5aad7e53d94c00395adb1a0ff742c27dd5` принят;
-- новый READ-ONLY Maintenance Readiness Review выполнен: frozen revisions 31/31,
-  zero revision diff since source cut, оба evidence resolver активны, full suite
-  `379 passed, 1 skipped`; verdict `READY` к B-04B-1 принят 2026-07-29;
-- B-04B-1 может начинаться только как отдельная pure implementation стадия.
-  Repository cut, marker transfer, production adoption и DB run этим verdict
-  не разрешены; migration freeze остаётся active.
+- B-04 закрыт со статусом `done / ADOPTION_ACCEPTED`;
+- tooling commit:
+  `1a84d566311f1cb679a84e851596f95b1053e144`;
+- pure verification: `604 passed, 2 skipped`;
+- production postflight SHA-256:
+  `405e82ae709b2cc051c25ad3bd139614f53996a2bcfcad1d50f6f11560fc2403`;
+- owner acceptance SHA-256:
+  `c257b1b4736ac53be731d7de8369d45808cd4eeba1af569534272a3a4dca3b56`;
+- следующий этап требует отдельных Specification/Decision для TEST-DB Foundation
+  и Runtime Compatibility Profile;
+- после их приёмки выполняется Task 9D-4A-5A, затем оставшийся Quality-контур.
 
 ### 1. Test DB Safety Interlock — завершён
 
@@ -123,7 +68,7 @@ B-04R restore-roundtrip evidence по ADR-031.
 - application regression намеренно не запускался;
 - реализация опубликована в commit `2046384`;
 - interlock не заменяет полный TEST-DB Foundation и не меняет зависимость ADR-025:
-  B-04A принят, а B-04B и runtime compatibility profile остаются отдельными этапами.
+  B-04 принят; Runtime Compatibility Profile остаётся отдельным следующим этапом.
 
 ### 2. Task 10A — завершён
 

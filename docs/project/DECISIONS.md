@@ -4275,9 +4275,9 @@ set и повторная equivalence verification на двух owned disposabl
 Source cut, 31 frozen revision, `canonical_baseline_v1`, active graph и marker state
 не меняются. Рабочая БД в R18 не подключается.
 
-B-04B остаётся `BLOCKED`, migration freeze остаётся active. Переход к B-04B возможен
-только после отдельной приёмки B-04A-R18 и нового READ-ONLY Maintenance Readiness
-Review с verdict `READY`.
+На дату решения B-04B оставался `BLOCKED`, а migration freeze — active. Переход
+требовал отдельной приёмки B-04A-R18 и нового READ-ONLY Maintenance Readiness
+Review с verdict `READY`; актуальный closure зафиксирован ниже.
 
 ---
 
@@ -4304,8 +4304,9 @@ Maintenance Readiness Review подтвердил, что migration-built workin
 
 Existing PG16/PG18 evidence остаётся byte-identical. B-04R добавляет только новые
 versioned artifacts и exact typed equivalence map без wildcard, regex-normalization
-или игнорирования CHECK/predicate. B-04B остаётся `BLOCKED` до отдельной приёмки B-04R
-и нового Maintenance Readiness verdict `READY`.
+или игнорирования CHECK/predicate. На дату решения B-04B оставался `BLOCKED` до
+отдельной приёмки B-04R и нового Maintenance Readiness verdict `READY`; актуальный
+closure зафиксирован ниже.
 
 ### B-04R candidate-state test harness decision
 
@@ -4395,3 +4396,27 @@ Standalone invocation без operator-approved adapters завершается
 `B04B-REHEARSAL-ADAPTERS-REQUIRED`. Приёмка pure tooling не разрешает создание,
 очистку, restore, подключение или изменение какой-либо PostgreSQL-БД и не
 разрешает переход к production maintenance adoption.
+
+### B-04 closure and migration freeze release
+
+Дата: 2026-07-30
+
+Статус: **ACCEPTED / DONE**
+
+B-04B pure tooling, isolated rehearsal, fresh backup/recovery rehearsal и один
+production marker transaction выполнены отдельными gates. Production postflight
+подтвердил `public.canonical_baseline_v1`, отсутствие historical marker,
+неизменный live fingerprint
+`e9e5affd8544b10353f2139c6526bab819f6da2ed919eb279fc1357803e2649a`,
+успешные `heads/current/history/check` и read-only smoke.
+
+Immutable postflight report SHA-256:
+`405e82ae709b2cc051c25ad3bd139614f53996a2bcfcad1d50f6f11560fc2403`.
+Repository owner подписал `ADOPTION_ACCEPTED` в `2026-07-30T03:34:25Z`;
+owner acceptance SHA-256:
+`c257b1b4736ac53be731d7de8369d45808cd4eeba1af569534272a3a4dca3b56`.
+
+Migration freeze снят. Новые migrations обязаны иметь
+`down_revision = "canonical_baseline_v1"` либо ссылаться на его актуального
+потомка. Следующая последовательность:
+`TEST-DB Foundation + Runtime Compatibility Profile → 9D-4A-5A → оставшийся Quality-контур`.

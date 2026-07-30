@@ -2,8 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status:** `BLOCKED`. Do not execute any task until B-04A-R18 and B-04R are
-> separately accepted and a subsequent Maintenance Readiness Review returns `READY`.
+> **Status:** `COMPLETED / ADOPTION_ACCEPTED` — 2026-07-30.
+> Owner acceptance SHA-256:
+> `c257b1b4736ac53be731d7de8369d45808cd4eeba1af569534272a3a4dca3b56`.
 
 **Goal:** Активировать принятый `canonical_baseline_v1` и атомарно принять
 существующую PostgreSQL-БД через перенос version marker в `public`.
@@ -68,7 +69,7 @@ $PythonExe = "D:\WeldPassport\.worktrees\project-control-center-mvp\09_Разр�
   - `AdoptionReport` dataclass;
   - `canonical_report_bytes(report: AdoptionReport) -> bytes`.
 
-- [ ] **Step 1: Write failing state tests**
+- [x] **Step 1: Write failing state tests**
 
 Exact states:
 
@@ -88,7 +89,7 @@ Required classification:
 - both tables, no tables, empty table, multiple rows or unexpected values → `AMBIGUOUS`;
 - accepted report is append-only and cannot be overwritten.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests/test_b04_adoption_state.py -q
@@ -96,18 +97,18 @@ Required classification:
 
 Expected: missing module/schema.
 
-- [ ] **Step 3: Implement immutable typed state**
+- [x] **Step 3: Implement immutable typed state**
 
 Use frozen dataclasses. Report serialization must reuse
 `migrations.b04.manifest.canonical_json_bytes`. The JSON schema must require adoption ID,
 database identity, source SHA, old/new marker, backup digest, manifest/fingerprint/seed
 digests, attempt status, timestamps and verification results.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run the focused test. Expected: all state and schema tests pass.
 
-- [ ] **Step 5: Review checkpoint**
+- [x] **Step 5: Review checkpoint**
 
 Provide diff and proposed commit:
 `feat(migrations): define B-04 adoption state`.
@@ -130,7 +131,7 @@ Do not commit without separate confirmation.
   - `run_preflight(connection: Connection, config: PreflightConfig) -> PreparedEvidence`;
   - `verify_backup_manifest(path: Path) -> BackupEvidence`.
 
-- [ ] **Step 1: Write failing preflight tests**
+- [x] **Step 1: Write failing preflight tests**
 
 Dependency-injected tests must reject:
 
@@ -147,7 +148,7 @@ Dependency-injected tests must reject:
 - active DDL/migration session or long transaction;
 - missing maintenance approval or stopped-writers evidence.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests/test_b04_preflight.py -q
@@ -155,7 +156,7 @@ Dependency-injected tests must reject:
 
 Expected: missing preflight module.
 
-- [ ] **Step 3: Implement read-only queries**
+- [x] **Step 3: Implement read-only queries**
 
 All object names are fixed literals or validated against the accepted fingerprint.
 Credentials, URL, host and usernames must never enter logs or reports.
@@ -176,11 +177,11 @@ Session checks must read `pg_stat_activity` and reject non-approved active migra
 sessions and long-running transactions according to exact bounded thresholds stored in
 `PreflightConfig`.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run focused tests. Expected: all failure paths stop before any mutating adapter call.
 
-- [ ] **Step 5: Review checkpoint**
+- [x] **Step 5: Review checkpoint**
 
 Provide query inventory and proposed commit:
 `feat(migrations): add B-04 maintenance preflight`.
@@ -213,7 +214,7 @@ Do not commit without separate confirmation.
 
 - Produces one active root/head and byte-identical immutable archive.
 
-- [ ] **Step 1: Write failing cut contracts before moving files**
+- [x] **Step 1: Write failing cut contracts before moving files**
 
 Require:
 
@@ -226,7 +227,7 @@ Require:
 - online/offline marker schema is literal `public`;
 - `version_table_pk=True`.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 & $PythonExe -m pytest `
@@ -238,7 +239,7 @@ Require:
 
 Expected: old active graph and marker configuration fail the new contracts.
 
-- [ ] **Step 3: Verify source hashes immediately before move**
+- [x] **Step 3: Verify source hashes immediately before move**
 
 ```powershell
 & $PythonExe -m migrations.b04.manifest `
@@ -248,12 +249,12 @@ Expected: old active graph and marker configuration fail the new contracts.
 
 Expected: all 31 hashes match. Any mismatch stops the cut.
 
-- [ ] **Step 4: Move files without rewriting bytes**
+- [x] **Step 4: Move files without rewriting bytes**
 
 Use Git-aware moves only after exact source/target lists are reviewed. Never move
 `__pycache__`, `.pyc` or unrelated files.
 
-- [ ] **Step 5: Activate baseline and configuration**
+- [x] **Step 5: Activate baseline and configuration**
 
 `alembic.ini`:
 
@@ -270,7 +271,7 @@ version_table_schema="public",
 version_table_pk=True,
 ```
 
-- [ ] **Step 6: Verify GREEN**
+- [x] **Step 6: Verify GREEN**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests -q
@@ -281,7 +282,7 @@ git diff --check
 
 Expected: one active revision/head, archive invisible, all pure contracts pass.
 
-- [ ] **Step 7: Review checkpoint**
+- [x] **Step 7: Review checkpoint**
 
 Provide exact rename detection and checksum proof. Proposed commit:
 `refactor(migrations): activate canonical baseline v1`.
@@ -304,7 +305,7 @@ Do not commit or deploy without separate confirmation.
   - no internal engine creation;
   - no internal commit outside the caller-owned transaction.
 
-- [ ] **Step 1: Write failing ordered-call tests**
+- [x] **Step 1: Write failing ordered-call tests**
 
 Use a recording fake connection and require this exact sequence:
 
@@ -326,7 +327,7 @@ SERIALIZABLE transaction
 
 Inject a failure at every boundary and prove no later command executes.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests/test_b04_adopt_transaction.py -q
@@ -334,7 +335,7 @@ Inject a failure at every boundary and prove no later command executes.
 
 Expected: missing transfer function.
 
-- [ ] **Step 3: Implement the transaction**
+- [x] **Step 3: Implement the transaction**
 
 Fixed marker DDL:
 
@@ -352,11 +353,11 @@ Use `pg_advisory_xact_lock` with one frozen B-04 lock key. Quote canonical table
 with SQLAlchemy dialect identifier preparer after verifying each pair belongs to the
 accepted fingerprint. Never concatenate unvalidated input.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run focused pure tests. Expected: all order/failure-injection cases pass.
 
-- [ ] **Step 5: Review checkpoint**
+- [x] **Step 5: Review checkpoint**
 
 Provide full SQL inventory and proposed commit:
 `feat(migrations): add atomic baseline adoption`.
@@ -378,27 +379,27 @@ Do not commit without separate confirmation.
   - statuses `COMMITTED_UNVERIFIED`, `ADOPTION_ACCEPTED`, `ADOPTION_FAILED`;
   - report digest without secrets.
 
-- [ ] **Step 1: Write failing postflight tests**
+- [x] **Step 1: Write failing postflight tests**
 
 Require exact public marker, absent historical marker, unchanged fingerprint, successful
 `heads/current/history/check`, read-only smoke and append-only report behavior.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run focused test. Expected: missing postflight module.
 
-- [ ] **Step 3: Implement postflight**
+- [x] **Step 3: Implement postflight**
 
 The report writer must use create-new semantics and fail if the target path already
 exists. It may write only to the operator-provided external report directory. Git receives
 only a sanitized digest record after acceptance.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run focused tests. Expected: failure after transaction produces
 `COMMITTED_UNVERIFIED`; it never retries marker transfer.
 
-- [ ] **Step 5: Review checkpoint**
+- [x] **Step 5: Review checkpoint**
 
 Proposed commit:
 `feat(migrations): add B-04 postflight evidence`.
@@ -432,7 +433,7 @@ Do not commit without separate confirmation.
   exact `server_version_num` matches the target DB.
 - Produces `B04B_REHEARSAL_ACCEPTED` report or a fail-closed finding.
 
-- [ ] **Step 1: Write failing orchestration tests**
+- [x] **Step 1: Write failing orchestration tests**
 
 Require:
 
@@ -447,20 +448,20 @@ backup checksum
 → immutable report
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run focused test. Expected: missing rehearsal runner.
 
-- [ ] **Step 3: Implement the runner**
+- [x] **Step 3: Implement the runner**
 
 The runner accepts explicit paths and DSN through approved environment variables,
 redacts credentials and refuses the working database identity.
 
-- [ ] **Step 4: Run pure GREEN**
+- [x] **Step 4: Run pure GREEN**
 
 Run focused tests. Expected: all orchestration/failure paths pass without DB.
 
-- [ ] **Step 5: Perform the rehearsal**
+- [x] **Step 5: Perform the rehearsal**
 
 Only against the approved isolated restored copy:
 
@@ -479,7 +480,7 @@ Expected:
 - recovery from a separately restored backup is demonstrated;
 - report status `B04B_REHEARSAL_ACCEPTED`.
 
-- [ ] **Step 6: Full code acceptance**
+- [x] **Step 6: Full code acceptance**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests -q
@@ -489,7 +490,7 @@ git diff --check
 
 Expected: zero failures.
 
-- [ ] **Step 7: Maintenance gate**
+- [x] **Step 7: Maintenance gate**
 
 Stop. Present all evidence and request a new explicit confirmation that identifies:
 
@@ -517,24 +518,24 @@ No agent may infer this confirmation from earlier general authorization.
 - Consumes the exact approved target and one-time adoption token.
 - Produces signed `ADOPTION_ACCEPTED` or restored pre-B-04 state.
 
-- [ ] **Step 1: Re-run read-only preflight**
+- [x] **Step 1: Re-run read-only preflight**
 
 Expected: exact target identity, old marker, fingerprint, backup and freeze all match.
 
-- [ ] **Step 2: Execute one marker transaction**
+- [x] **Step 2: Execute one marker transaction**
 
 Run the approved adoption command once. Do not retry on ambiguous output.
 
-- [ ] **Step 3: Run postflight**
+- [x] **Step 3: Run postflight**
 
 Expected: public baseline marker, absent historical marker, unchanged fingerprint,
 successful Alembic checks and read-only smoke.
 
-- [ ] **Step 4: Sign acceptance**
+- [x] **Step 4: Sign acceptance**
 
 The repository owner signs the immutable report as `ADOPTION_ACCEPTED`.
 
-- [ ] **Step 5: Failure handling**
+- [x] **Step 5: Failure handling**
 
 - before transaction: stop with no DB change;
 - transaction failure: verify rollback, otherwise restore backup;
@@ -561,17 +562,17 @@ The repository owner signs the immutable report as `ADOPTION_ACCEPTED`.
 - Consumes signed adoption report digest.
 - Produces canonical B-04 status `done` and explicit freeze release.
 
-- [ ] **Step 1: Record exact evidence**
+- [x] **Step 1: Record exact evidence**
 
 Record commits, source/adoption SHA, manifest/fingerprint/seed/backup/rehearsal/report
 digests, PostgreSQL version, test counts and maintenance timestamps without secrets.
 
-- [ ] **Step 2: Release migration freeze**
+- [x] **Step 2: Release migration freeze**
 
 Only after `ADOPTION_ACCEPTED`, record that future migrations must use
 `down_revision = "canonical_baseline_v1"` or its latest descendant.
 
-- [ ] **Step 3: Final verification**
+- [x] **Step 3: Final verification**
 
 ```powershell
 & $PythonExe -m pytest migration_contract_tests -q
@@ -582,8 +583,24 @@ git diff --check
 
 Expected: one graph, one head, no archived IDs active, no documentation contradiction.
 
-- [ ] **Step 4: Final review checkpoint**
+- [x] **Step 4: Final review checkpoint**
 
 Provide full diff and proposed closure commit:
 `docs(migrations): close B-04 canonical baseline adoption`.
 Do not commit or push without separate confirmation.
+
+### Closure result
+
+- repository cut head: `791f07f`;
+- final tooling commit:
+  `1a84d566311f1cb679a84e851596f95b1053e144`;
+- pure verification: `604 passed, 2 skipped`;
+- isolated rehearsal report:
+  `0092c5cde65dceb7bbcf3838ff94d65c2a71520778845c0d02f0ae6147e5a919`;
+- production backup:
+  `9c5e72aca5d0d95cf80d8dc4df4d7fe9d3ca458db3056e4e9ce9045a6856288c`;
+- production postflight:
+  `405e82ae709b2cc051c25ad3bd139614f53996a2bcfcad1d50f6f11560fc2403`;
+- `ADOPTION_ACCEPTED` at `2026-07-30T03:34:25Z`;
+- migration freeze released; next revisions descend from
+  `canonical_baseline_v1` or its latest descendant.

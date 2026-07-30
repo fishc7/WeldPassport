@@ -1368,38 +1368,27 @@ Baseline Adoption и TEST-DB Foundation. B-04 является единстве�
 переноса `alembic_version` и adoption. Runtime composition/profile switch вынесены в
 отдельную Task `RUNTIME-LEGACY-COMPATIBILITY-PROFILE`; B-03 runtime не меняет.
 
-По состоянию на 2026-07-28 B-04A Canonical Baseline Build & Verification
-завершён и зафиксирован implementation commit
-`4487127a3042cf6a8ba003b85cffd143dc920f0e` (`done`). Для source commit
-`6c56f99edbd4e7346264ee14658d2076b5fd0775` на PostgreSQL 16.14 подтверждена
-эквивалентность historical, clean baseline и re-upgrade: 73 canonical tables,
-15 governed seeds и единый fingerprint
-`ce2cd0613eab20da8d0a93d8caf675aa32fce932d909dfa219533b0c12dfc9f6`.
-Baseline-кандидат и семь immutable evidence artifacts находятся вне активного
-`migrations/versions`.
+B-04 Canonical Baseline Adoption завершён и принят 2026-07-30. B-04A PG16 evidence
+сохраняется как `historical_non_authorizing`; B-04A-R18 live evidence —
+`active_authorizing`; B-04R restore evidence — `active_restore_authorizing`.
+Repository cut оставил в active graph один root/head `canonical_baseline_v1`, а
+31 historical revision перенесены в byte-identical immutable archive.
 
-B-04A не выполняет repository cut и adoption: active migration graph, действующая
-конфигурация version marker и рабочая БД не изменены. B-04B заблокирован до
-maintenance readiness и отдельного решения о старте; migration freeze остаётся
-активным до принятого B-04B closure.
+Production PostgreSQL 18.3 adoption выполнил один атомарный перенос marker
+`test.alembic_version=20260724_27_qd_rbac_sod` →
+`public.alembic_version=canonical_baseline_v1`. Canonical fingerprint
+остался
+`e9e5affd8544b10353f2139c6526bab819f6da2ed919eb279fc1357803e2649a`;
+postflight `heads/current/history/check` и read-only smoke прошли. Immutable report
+SHA-256:
+`405e82ae709b2cc051c25ad3bd139614f53996a2bcfcad1d50f6f11560fc2403`;
+owner acceptance SHA-256:
+`c257b1b4736ac53be731d7de8369d45808cd4eeba1af569534272a3a4dca3b56`.
 
-[[docs/project/ADR-030-postgresql-18-b04-evidence-versioning|ADR-030]] сохраняет
-указанное PG16 evidence как `historical_non_authorizing` и вводит отдельный gate
-`B-04A-R18` для целевой PostgreSQL 18.x. `canonical_baseline_v1`, source cut,
-31 frozen revision и marker state не меняются. B-04A-R18 принят 2026-07-29:
-PostgreSQL 18.3, fingerprint v2 и PG18 evidence `active_authorizing`, accepted
-evidence commit `b34538f5ddd4ed31d8094bc5d96f42ada7d1f28d`. До нового READ-ONLY
-Maintenance Readiness Review с verdict `READY` B-04B остаётся `BLOCKED`, а
-migration freeze — active.
-
-[[docs/project/ADR-031-b04-dual-state-live-restore-evidence|ADR-031]] разделяет
-два exact authorizing состояния PostgreSQL 18.3: migration-built working DB
-проверяется по неизменному live fingerprint v2, а DB после custom-format restore —
-по отдельному versioned restore-roundtrip fingerprint. Принятые PG16/PG18 artifacts
-не переписываются; новый B-04R contract добавляется отдельными files и exact typed
-equivalence map без wildcard или expression normalization. B-04B требует одновременно
-`active_authorizing` live evidence, `active_restore_authorizing` restore evidence и
-новый Maintenance Readiness verdict `READY`.
+Migration freeze снят после `ADOPTION_ACCEPTED`. Новые revisions создаются только
+поверх `canonical_baseline_v1` или его актуального потомка. Следующие отдельные
+архитектурные gates: TEST-DB Foundation и
+`RUNTIME-LEGACY-COMPATIBILITY-PROFILE`; после их приёмки — Task 9D-4A-5A.
 
 До полного TEST-DB Foundation действует предварительный
 [[docs/project/ADR-029-test-db-safety-interlock|Test DB Safety Interlock]]. Integration

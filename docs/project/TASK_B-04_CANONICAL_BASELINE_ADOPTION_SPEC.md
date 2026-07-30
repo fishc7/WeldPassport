@@ -5,8 +5,9 @@
 > PostgreSQL 18.x как target major, сохраняет PG16 B-04A evidence как
 > `historical_non_authorizing` и вводит отдельный gate B-04A-R18. B-04A-R18 принят
 > 2026-07-29. [[docs/project/ADR-031-b04-dual-state-live-restore-evidence|ADR-031]]
-> добавляет отдельный B-04R restore-roundtrip evidence gate. До его приёмки и нового
-> Maintenance Readiness verdict `READY` B-04B остаётся `BLOCKED`.
+> добавляет отдельный B-04R restore-roundtrip evidence gate. B-04R, readiness,
+> repository cut, rehearsal и production adoption завершены; closure evidence
+> зафиксирован в разделе 21.
 
 Статус: **ACCEPTED**
 
@@ -706,9 +707,68 @@ Evidence опубликовано в
   fingerprint v2
   `e9e5affd8544b10353f2139c6526bab819f6da2ed919eb279fc1357803e2649a`,
   evidence status `active_authorizing`;
-- B-04B остаётся `BLOCKED`;
-- migration freeze остаётся active.
+- на дату realignment B-04B оставался `BLOCKED`, а migration freeze — active;
+- актуальный завершённый статус и release freeze зафиксированы в разделе 21.
 
 Следующий gate — новый READ-ONLY Maintenance Readiness Review. Принятое PG18
 evidence само по себе не разрешает repository cut/adoption; рабочая БД в B-04A-R18
 не подключалась.
+
+## 21. Closure evidence B-04B
+
+Дата фиксации: **2026-07-30**.
+
+Статус блока: **`done / ADOPTION_ACCEPTED`**.
+
+Repository cut и pure tooling:
+
+- adoption state `2f7efb1`, preflight `c716b01`, repository cut `791f07f`;
+- hardened marker transaction `9c36ba5`, hardened postflight `cf94c4e`;
+- rehearsal tooling commit
+  `1a84d566311f1cb679a84e851596f95b1053e144`;
+- active Alembic graph: один root/head `canonical_baseline_v1`;
+- archive: 31 byte-identical frozen revisions;
+- финальный pure suite: `604 passed, 2 skipped`;
+- `compileall`, `alembic heads`, `alembic history`, `git diff --check`: успешно.
+
+Isolated rehearsal:
+
+- restore fingerprint
+  `3a9e682cbb0546638a23aaf5ef27dc720daa32ce9a8c2dd466a6c47a91453038`;
+- remediation report SHA-256
+  `0092c5cde65dceb7bbcf3838ff94d65c2a71520778845c0d02f0ae6147e5a919`;
+- owner acceptance SHA-256
+  `2f09399e8b390065f4bc4073893739f41c61be848e596ddcbdba9ccb917bf130`.
+
+Production adoption:
+
+- adoption ID `b04b7-production-20260730T032915Z`;
+- PostgreSQL 18.3, `server_version_num=180003`;
+- source SHA `6c56f99edbd4e7346264ee14658d2076b5fd0775`;
+- manifest SHA-256
+  `8e791f4204b3b68b2dfb7ac8409f3b55124547a9df4e8c5487e128b66a22ec8d`;
+- live fingerprint SHA-256
+  `e9e5affd8544b10353f2139c6526bab819f6da2ed919eb279fc1357803e2649a`;
+- seed SHA-256
+  `64aa1533c00f940405ed7fd7cbee7a60d831f5f952ec56961034f0b5570b679d`;
+- backup SHA-256
+  `9c5e72aca5d0d95cf80d8dc4df4d7fe9d3ca458db3056e4e9ce9045a6856288c`;
+- transaction commit: `2026-07-30T03:32:53Z`;
+- postflight report SHA-256
+  `405e82ae709b2cc051c25ad3bd139614f53996a2bcfcad1d50f6f11560fc2403`;
+- machine verification SHA-256
+  `817ad20f468327b6b7f14bd317ed3834238bca858279b2a507bba357c99ebc8c`;
+- transaction receipt SHA-256
+  `1b5e6962f8e61db0095ebca3dae9718cafa8f2b9c4ad033e9d617045d3694c2a`;
+- owner acceptance: `repository_owner`, `2026-07-30T03:34:25Z`,
+  SHA-256
+  `c257b1b4736ac53be731d7de8369d45808cd4eeba1af569534272a3a4dca3b56`;
+- marker перенесён
+  `test.alembic_version=20260724_27_qd_rbac_sod` →
+  `public.alembic_version=canonical_baseline_v1`;
+- postflight `heads/current/history/check`, fingerprint и read-only smoke успешны.
+
+Migration freeze снят после `ADOPTION_ACCEPTED`. Любая следующая migration обязана
+использовать `down_revision = "canonical_baseline_v1"` либо актуального потомка.
+Следующий контур: **TEST-DB Foundation + Runtime Compatibility Profile**, затем
+Task **9D-4A-5A** и оставшийся Quality-контур.
