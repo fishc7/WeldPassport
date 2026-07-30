@@ -174,6 +174,11 @@ WeldPassport — внутренняя система для отдела гла�
   `224974992524dc53cd8bd06b6a602ab83e76e9e6d97fb4f6d54ff687f2cab009`.
   Следующий prerequisite для Task 9D-4A-5A —
   `AUTHENTICATION_BOUNDARY_ACCEPTED`.
+- **Authentication Boundary спроектирован и архитектурно принят 2026-07-30.**
+  ADR-034 вводит отдельный `identity` module, локальные account credentials,
+  opaque server-side sessions, CSRF и `AuthenticatedActor`. Production больше
+  не доверяет `X-User-Id`; роли/scope остаются в `hr.worker_roles`.
+  Implementation и isolated PostgreSQL acceptance ещё не выполнены.
 - **Инженерный контур реализован** (Tasks 1–7):
   `Project → Line → EngineeringDocument → DocumentRevision → Joint` (ADR-010/011).
 - **WeldOperation реализован** — Tasks **8A — 8E** (ADR-012, импорт — ADR-013).

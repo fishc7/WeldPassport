@@ -4756,3 +4756,28 @@ TEST-DB Foundation и Runtime Compatibility Profile переведены в `ACC
 Acceptance не разрешает удаление сохранённых rehearsal DB и не закрывает
 `AUTHENTICATION_BOUNDARY_ACCEPTED`. Поэтому Task 9D-4A-5A остаётся
 `blocked_by_authentication`.
+
+## ADR-034. Server-authenticated actor boundary
+
+Дата: 2026-07-30
+
+Статус: **ACCEPTED FOR IMPLEMENTATION**
+
+Принят локальный first-party authentication provider для первого production
+slice: `identity.user_accounts`, opaque server-side sessions, Argon2id,
+Secure/HttpOnly cookie, session-bound CSRF и immutable `AuthenticatedActor`.
+
+`user_account`, `hr.worker` и `hr.worker_roles` остаются раздельными. Identity
+подтверждает account/session, HR подтверждает действующего worker, существующий
+authorization-контур определяет роль и scope. Production fallback на
+`X-User-Id` запрещён; совместимость существующих tests обеспечивается только
+test-only FastAPI dependency override.
+
+Решение:
+[[docs/project/ADR-034-authentication-boundary|ADR-034]]. Полный дизайн:
+[[docs/superpowers/specs/2026-07-30-authentication-boundary-design|Authentication Boundary Design]].
+
+Эта запись принимает архитектуру, но не присваивает operational
+`AUTHENTICATION_BOUNDARY_ACCEPTED`. Далее отдельно принимаются Implementation
+Plan, Prompt, Domain Model, Migration, Service/API, Tests и isolated PostgreSQL
+evidence.

@@ -1451,6 +1451,27 @@ acceptance SHA-256 —
 TEST-DB Foundation и Runtime Compatibility Profile переведены в `ACCEPTED`.
 CI create/drop остаётся отдельным будущим `TEST-DB-F2-CI-BINDING`.
 
+### Authentication boundary
+
+Архитектура server-authenticated actor принята в
+[[docs/project/ADR-034-authentication-boundary|ADR-034]] и
+[[docs/superpowers/specs/2026-07-30-authentication-boundary-design|Authentication Boundary Design]].
+
+Production больше не должен доверять клиентскому `X-User-Id`. Канонический
+`app.identity` аутентифицирует локальную учётную запись, создаёт opaque
+server-side session и возвращает immutable `AuthenticatedActor`. Опциональная
+связь `identity.user_accounts.worker_id → hr.workers.id` не объединяет account и
+worker. Бизнес-роли и scope остаются в `hr.worker_roles`.
+
+Первый provider использует Argon2id, Secure/HttpOnly session cookie и
+session-bound CSRF. Header adapter допускается только в test dependency
+overrides вне production package. OIDC, MFA, frontend login UI и web account
+administration не входят в первый implementation slice.
+
+Архитектурный gate принят; Domain Model, Migration, Service/API, Tests и
+отдельная PostgreSQL acceptance должны пройти раздельно до присвоения
+operational `AUTHENTICATION_BOUNDARY_ACCEPTED`.
+
 ## 16. Статус backend-кода (обновлено 2026-07-06)
 
 `09_Разработка/backend` — основная архитектурная база MVP.

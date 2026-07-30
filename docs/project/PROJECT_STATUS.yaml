@@ -8,8 +8,8 @@ updated_at: 2026-07-30
 
 summary:
   total_progress: 78
-  current_focus: "TEST-DB Foundation + Runtime Compatibility Profile accepted"
-  next_action: "Закрыть AUTHENTICATION_BOUNDARY_ACCEPTED; затем Task 9D-4A-5A"
+  current_focus: "Authentication Boundary architecture accepted"
+  next_action: "Подготовить Authentication Boundary Implementation Plan и Prompt"
 
 modules:
   - code: constitution
@@ -54,6 +54,15 @@ modules:
     branch: codex/b04b-maintenance-readiness-review
     visible: true
     note: "Canonical, legacy-compatible и fail-closed legacy-negative roles verified и приняты через TEST_DB_F2_ACCEPTED."
+
+  - code: authentication_boundary
+    name: "Server-authenticated actor boundary"
+    owner: "Архитектура / identity"
+    status: architecture_accepted_implementation_pending
+    progress: 20
+    branch: codex/b04b-maintenance-readiness-review
+    visible: true
+    note: "ADR-034 и Authentication Boundary Design приняты 2026-07-30; local account + opaque session; production X-User-Id запрещён; Implementation Plan, Prompt и реализация pending."
 
   - code: canonical_baseline_b04a
     name: "B-04A → PostgreSQL 16 historical verification"

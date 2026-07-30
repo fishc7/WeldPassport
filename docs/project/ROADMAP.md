@@ -96,6 +96,12 @@ active Alembic graph имеет один head `canonical_baseline_v1`, productio
 - следующий незакрытый prerequisite — `AUTHENTICATION_BOUNDARY_ACCEPTED`;
   только после него может стартовать Task 9D-4A-5A, затем оставшийся
   Quality-контур.
+- архитектура Authentication Boundary принята 2026-07-30:
+  [[docs/project/ADR-034-authentication-boundary|ADR-034]] и
+  [[docs/superpowers/specs/2026-07-30-authentication-boundary-design|Architecture Design]];
+  выбран local account + opaque server session, production `X-User-Id`
+  запрещён; следующий шаг — Implementation Plan и Prompt, затем раздельные
+  Domain/Migration/Service/API/Tests gates.
 
 ### 1. Test DB Safety Interlock — завершён
 
