@@ -5,7 +5,11 @@ from datetime import date
 from sqlalchemy import Boolean, Date, ForeignKey, Integer, SmallInteger, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.shared.db import Base, SCHEMA
+from app.workforce.legacy_orm import LegacyBase, get_or_bind_legacy_schema
+
+
+SCHEMA = get_or_bind_legacy_schema()
+Base = LegacyBase
 
 
 class DolzhnostETKS(Base):

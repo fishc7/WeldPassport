@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -30,6 +31,7 @@ EXPECTED_CANONICAL_MODEL_MODULES = (
     "app.quality.quality_decision_models",
 )
 CANONICAL_PACKAGE_NAMES = ("hr", "welding", "projects", "engineering", "quality")
+BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 
 def _provider() -> ModuleType:
@@ -118,3 +120,27 @@ def test_metadata_006_project_line_inspection_types_use_text_array() -> None:
     ].c.required_inspection_types.type
 
     assert type(column_type.item_type) is Text
+
+
+def test_metadata_007_explicit_workforce_import_cannot_contaminate_canonical() -> None:
+    code = """
+from app.shared.canonical_metadata import canonical_metadata
+from app.shared.orm import Base
+before = tuple(sorted(canonical_metadata.tables))
+assert len(before) == 73
+import app.workforce.models
+after = tuple(sorted(canonical_metadata.tables))
+assert canonical_metadata is Base.metadata
+assert after == before
+assert len(after) == 73
+"""
+
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=BACKEND_DIR,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
