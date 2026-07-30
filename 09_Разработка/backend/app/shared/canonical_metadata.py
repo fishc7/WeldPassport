@@ -11,10 +11,11 @@ from app.shared.orm import Base
 
 
 CANONICAL_SCHEMAS: frozenset[str] = frozenset(
-    {"hr", "welding", "project", "engineering", "quality"}
+    {"identity", "hr", "welding", "project", "engineering", "quality"}
 )
 
 CANONICAL_MODEL_MODULES: tuple[str, ...] = (
+    "app.identity.models",
     "app.hr.models",
     "app.welding.models",
     "app.projects.models",
@@ -29,7 +30,7 @@ CANONICAL_MODEL_MODULES: tuple[str, ...] = (
     "app.quality.quality_decision_models",
 )
 
-_CURRENT_CANONICAL_TABLE_COUNT = 73
+_CURRENT_CANONICAL_TABLE_COUNT = 76
 
 
 for _module_name in CANONICAL_MODEL_MODULES:

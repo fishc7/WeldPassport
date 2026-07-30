@@ -14,9 +14,10 @@ from app.shared.db import Base
 
 
 EXPECTED_CANONICAL_SCHEMAS = frozenset(
-    {"hr", "welding", "project", "engineering", "quality"}
+    {"identity", "hr", "welding", "project", "engineering", "quality"}
 )
 EXPECTED_CANONICAL_MODEL_MODULES = (
+    "app.identity.models",
     "app.hr.models",
     "app.welding.models",
     "app.projects.models",
@@ -30,7 +31,14 @@ EXPECTED_CANONICAL_MODEL_MODULES = (
     "app.quality.defect_disposition_models",
     "app.quality.quality_decision_models",
 )
-CANONICAL_PACKAGE_NAMES = ("hr", "welding", "projects", "engineering", "quality")
+CANONICAL_PACKAGE_NAMES = (
+    "identity",
+    "hr",
+    "welding",
+    "projects",
+    "engineering",
+    "quality",
+)
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 
@@ -94,14 +102,14 @@ assert "app.workforce.models" not in sys.modules
     assert result.returncode == 0, result.stderr
 
 
-def test_metadata_003_registry_matches_filesystem_and_has_73_tables() -> None:
+def test_metadata_003_registry_matches_filesystem_and_has_76_tables() -> None:
     """TEST-B03-METADATA-003."""
     provider = _provider()
 
     assert provider.CANONICAL_MODEL_MODULES == EXPECTED_CANONICAL_MODEL_MODULES
-    assert len(provider.CANONICAL_MODEL_MODULES) == 12
+    assert len(provider.CANONICAL_MODEL_MODULES) == 13
     assert set(provider.CANONICAL_MODEL_MODULES) == _discover_model_modules()
-    assert len(provider.canonical_metadata.tables) == 73
+    assert len(provider.canonical_metadata.tables) == 76
     assert all(
         table.schema and table.key == f"{table.schema}.{table.name}"
         for table in provider.canonical_metadata.tables.values()
@@ -141,12 +149,12 @@ def test_metadata_007_explicit_workforce_import_cannot_contaminate_canonical() -
 from app.shared.canonical_metadata import canonical_metadata
 from app.shared.orm import Base
 before = tuple(sorted(canonical_metadata.tables))
-assert len(before) == 73
+assert len(before) == 76
 import app.workforce.models
 after = tuple(sorted(canonical_metadata.tables))
 assert canonical_metadata is Base.metadata
 assert after == before
-assert len(after) == 73
+assert len(after) == 76
 """
 
     result = subprocess.run(
