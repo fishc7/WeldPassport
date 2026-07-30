@@ -148,7 +148,7 @@ Runtime profile — `implemented_unverified / pure verified / review approved`;
 TEST-DB-F2 pure runner и operator-preflight tooling —
 `implemented_unverified / pure verified / review approved`; offline operator
 preflight — `TEST_DB_F2_OPERATOR_PREFLIGHT_READY` (evidence
-`623f7ca6-0c19-4a2c-b3c0-3177060ed4f0`).
+`4e434a78-965b-4819-9108-b278298a5b10`).
 Следующий gate: отдельно разрешаемый local PostgreSQL rehearsal; PostgreSQL и
 operational acceptance требуют нового разрешения.
 

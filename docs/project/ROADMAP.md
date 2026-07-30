@@ -74,8 +74,9 @@ active Alembic graph имеет один head `canonical_baseline_v1`, productio
   review `APPROVED`;
 - offline operator preflight выполнен 2026-07-30 и получил
   `TEST_DB_F2_OPERATOR_PREFLIGHT_READY`; evidence id
-  `623f7ca6-0c19-4a2c-b3c0-3177060ed4f0`, SHA-256
-  `6035733a67755b96e592b9cae50e5c8eae048710a94f88471cb3283bdeef679c`;
+  `4e434a78-965b-4819-9108-b278298a5b10`, source
+  `a2e1f0167054e9d00bd73667f74bd2299ccde88e`, SHA-256
+  `ec9ee5244d1d0f6c952429264aacb4120f52695d90baa4baaae2f04c8e31a137`;
   PostgreSQL и DB lifecycle не запускались;
 - следующий execution order:
   `RUNTIME-COMPAT-1 → TEST-DB-F2-PURE-RUNNER → operator preflight READY →

@@ -261,11 +261,12 @@ credentials и ownership tokens не печатались и не сохраня
 Operational evidence:
 
 - status: `TEST_DB_F2_OPERATOR_PREFLIGHT_READY`;
-- preflight id: `623f7ca6-0c19-4a2c-b3c0-3177060ed4f0`;
+- preflight id: `4e434a78-965b-4819-9108-b278298a5b10`;
+- source SHA: `a2e1f0167054e9d00bd73667f74bd2299ccde88e`;
 - artifact:
-  `operator-preflight-623f7ca6-0c19-4a2c-b3c0-3177060ed4f0/00_operator_preflight.json`;
+  `operator-preflight-4e434a78-965b-4819-9108-b278298a5b10/00_operator_preflight.json`;
 - SHA-256:
-  `6035733a67755b96e592b9cae50e5c8eae048710a94f88471cb3283bdeef679c`;
+  `ec9ee5244d1d0f6c952429264aacb4120f52695d90baa4baaae2f04c8e31a137`;
 - artifact digest, source SHA, role order, single-file namespace и отсутствие
   forbidden secret keys/patterns проверены повторно.
 
