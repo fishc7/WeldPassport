@@ -3,7 +3,7 @@
 Слой Application/Domain поверх ``HeatTreatmentRepo``: команды жизненного цикла
 цикла и операций, документы, отклонения, журнал и вычисление состояния требования
 термообработки по Joint. Права — через существующие permission-хелперы (RBAC со
-scope), новую систему разрешений не вводим (§32). Actor приходит из X-User-Id.
+scope), новую систему разрешений не вводим (§32). Actor приходит из server-authenticated actor worker id.
 """
 
 from __future__ import annotations

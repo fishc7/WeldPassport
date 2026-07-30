@@ -70,3 +70,22 @@
 - service accounts/API keys;
 - изменение бизнес-RBAC;
 - Task 9D-4A-5 implementation.
+
+## Implementation checkpoint 2026-07-30
+
+Статус реализации: **IMPLEMENTED_UNVERIFIED / PURE VERIFIED**.
+
+Реализованы канонические `identity.user_accounts`, `identity.sessions` и
+`identity.authentication_events`, additive revision `20260730_28_identity`,
+Argon2id/opaque-session service, cookie/CSRF HTTP boundary, test-only
+`X-User-Id` override и offline operator CLI.
+
+Свежая pure-проверка:
+
+- focused authentication contracts: `38 passed`;
+- полный `migration_contract_tests`: `863 passed, 3 skipped`;
+- compile/diff/secret checks выполняются в closure gate.
+
+PostgreSQL/Alembic/application suite не запускались. Этот checkpoint не
+присваивает `AUTHENTICATION_BOUNDARY_ACCEPTED`; Task 9D-4A-5A остаётся
+`blocked_by_authentication` до отдельной disposable PostgreSQL 18.3 acceptance.

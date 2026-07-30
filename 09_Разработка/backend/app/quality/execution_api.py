@@ -7,7 +7,7 @@
 результат response-моделью. `DomainError` (подкласс HTTPException) отдаётся FastAPI
 как есть — отдельный mapping не нужен.
 
-Actor берётся из X-User-Id (`get_current_user_id`), не из тела запроса.
+Actor берётся из server-authenticated actor worker id (`get_current_user_id`), не из тела запроса.
 """
 
 from __future__ import annotations

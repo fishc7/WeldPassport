@@ -326,7 +326,7 @@ def update_joint(
 
 
 # ── Стыки: команды жизненного цикла (Task 5B, §7 ADR-011) ─────────────────────
-# Актор — только из X-User-Id (§17 ADR-011); тело несёт причины/версии.
+# Актор — только из server-authenticated actor worker id (§17 ADR-011); тело несёт причины/версии.
 
 
 @router.post("/joints/{joint_id}/submit-for-review", response_model=JointRead)
@@ -519,7 +519,7 @@ def set_current_revision(
 
 
 # ── WeldOperation (Task 8A, ADR-012 / Session 005) ────────────────────────────
-# Актор — только из X-User-Id (§15 задания). Физического DELETE нет (§14). Команды
+# Актор — только из server-authenticated actor worker id (§15 задания). Физического DELETE нет (§14). Команды
 # complete/cancel — отдельные действия, а не универсальный update.
 
 
@@ -654,7 +654,7 @@ def cancel_weld_operation(
 
 
 # ── WeldOperation: подтверждение сварщика и review ОГС (Task 8C, ADR-012) ──────
-# Actor — только из X-User-Id (§6). Отдельные команды поверх завершённого факта;
+# Actor — только из server-authenticated actor worker id (§6). Отдельные команды поверх завершённого факта;
 # производственный факт не редактируется. Физического DELETE истории нет (§8).
 
 
@@ -748,7 +748,7 @@ def list_joint_weld_operations(
 
 
 # ── WeldOperation: корректировки и переварка (Task 8D, ADR-012) ────────────────
-# Actor — только из X-User-Id (§18). Завершённая операция неизменяема: исправление
+# Actor — только из server-authenticated actor worker id (§18). Завершённая операция неизменяема: исправление
 # выполняется через отдельную трассируемую корректировку. Статусы корректировки
 # меняются доменными командами, а не обычным PATCH. Физического DELETE нет.
 

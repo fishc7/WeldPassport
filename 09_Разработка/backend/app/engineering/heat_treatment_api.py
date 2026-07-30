@@ -1,7 +1,7 @@
 """HTTP-слой термической обработки (Task 8F).
 
 Отдельный роутер под существующим префиксом engineering (§26). Actor — только из
-X-User-Id. Бизнес-действия оформлены командами (plan/start/complete/review/close/
+server-authenticated actor worker id. Бизнес-действия оформлены командами (plan/start/complete/review/close/
 cancel), а не универсальным update. Физического DELETE нет.
 """
 

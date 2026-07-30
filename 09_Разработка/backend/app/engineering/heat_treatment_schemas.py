@@ -1,7 +1,7 @@
 """Pydantic-схемы термической обработки (Task 8F).
 
 Команды (`extra="forbid"`) отделены от read-моделей (`from_attributes=True`), как
-в остальном модуле engineering. Actor берётся только из X-User-Id, поэтому в телах
+в остальном модуле engineering. Actor берётся только из server-authenticated actor worker id, поэтому в телах
 его нет. Оптимистическая блокировка — необязательный `expected_version` в командах
 изменения (как `expected_record_version` у WeldOperation).
 """

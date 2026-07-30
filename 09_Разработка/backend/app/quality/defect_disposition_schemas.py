@@ -1,6 +1,6 @@
 """Pydantic-схемы HTTP-слоя DefectDisposition (Task 9D-4A-3/9D-4A-4, ADR-023).
 
-Вход с `extra="forbid"`; актор — из `X-User-Id`, не из тела. Статус через API
+Вход с `extra="forbid"`; актор — из `server-authenticated actor worker id`, не из тела. Статус через API
 напрямую не принимается: только команда `action` в transition. Доменные проверки —
 в сервисе/policy.
 """

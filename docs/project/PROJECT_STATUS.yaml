@@ -1,5 +1,5 @@
 project: WeldPassport
-current_stage: test_db_f2_accepted_authentication_pending
+current_stage: authentication_implemented_unverified
 current_branch: codex/b04b-maintenance-readiness-review
 updated_at: 2026-07-30
 
@@ -7,9 +7,9 @@ updated_at: 2026-07-30
 # Этот файл — машиночитаемая сводка по модулям для панелей/скриптов.
 
 summary:
-  total_progress: 78
-  current_focus: "Authentication Boundary implementation package accepted"
-  next_action: "Выполнить семь pure TDD-gates; отдельно запросить PostgreSQL acceptance"
+  total_progress: 82
+  current_focus: "Authentication Boundary IMPLEMENTED_UNVERIFIED / PURE VERIFIED"
+  next_action: "Отдельно авторизовать isolated PostgreSQL 18.3 acceptance; не присваивать AUTHENTICATION_BOUNDARY_ACCEPTED до live evidence"
 
 modules:
   - code: constitution
@@ -58,11 +58,11 @@ modules:
   - code: authentication_boundary
     name: "Server-authenticated actor boundary"
     owner: "Архитектура / identity"
-    status: design_complete_implementation_ready
-    progress: 30
+    status: implemented_unverified_pure_verified
+    progress: 80
     branch: codex/b04b-maintenance-readiness-review
     visible: true
-    note: "ADR-034, Design, Implementation Plan и Prompt приняты 2026-07-30; local account + opaque session; production X-User-Id запрещён; семь pure TDD-gates ready, operational PostgreSQL pending."
+    note: "Domain, canonical model, additive migration, services, cookie API/test adapter и operator CLI реализованы; focused 38 passed; полный migration_contract_tests 863 passed, 3 skipped. PostgreSQL/Alembic/application suite не запускались; AUTHENTICATION_BOUNDARY_ACCEPTED не присвоен."
 
   - code: canonical_baseline_b04a
     name: "B-04A → PostgreSQL 16 historical verification"

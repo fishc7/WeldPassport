@@ -404,7 +404,7 @@ class JointListResponse(BaseModel):
 
 
 # ── Команды жизненного цикла (Task 5B, §7-8 ADR-011 / §7-8 задания) ───────────
-# Актор (worker_id) берётся ТОЛЬКО из auth-контекста (X-User-Id), не из тела
+# Актор (worker_id) берётся ТОЛЬКО из auth-контекста (server-authenticated actor worker id), не из тела
 # (§17 ADR-011). Тело несёт причины/комментарии/ожидаемые версии. Ожидаемые версии
 # опциональны: при передаче сверяются и дают 409 с машинным кодом (§16).
 
@@ -521,7 +521,7 @@ class JointBlockRead(BaseModel):
 
 
 # ── История связей Joint ↔ DocumentRevision (Task 6) ──────────────────────────
-# Актор берётся из auth-контекста (X-User-Id), не из тела. ORIGIN/PRIMARY —
+# Актор берётся из auth-контекста (server-authenticated actor worker id), не из тела. ORIGIN/PRIMARY —
 # системные роли (при создании Joint и смене текущей ревизии), пользователем не
 # задаются: create-link принимает только пользовательские роли.
 
@@ -725,7 +725,7 @@ class JointBulkValidationError(BaseModel):
 
 # ── WeldOperation (Task 8A, ADR-012 / Session 005) ────────────────────────────
 # Актор (created_by/updated_by/completed_by/cancelled_by) берётся ТОЛЬКО из
-# X-User-Id (§15 задания), не из тела. sequence_no и lifecycle_status назначает
+# server-authenticated actor worker id (§15 задания), не из тела. sequence_no и lifecycle_status назначает
 # система: клиент их не передаёт (extra="forbid" даёт 422 при попытке).
 
 
@@ -972,7 +972,7 @@ class WeldOperationListResponse(BaseModel):
 
 
 # ── Task 8C: команды подтверждения сварщика и review ОГС ──────────────────────
-# Actor берётся только из X-User-Id (§6): actor-поля в теле запрещены. Optimistic
+# Actor берётся только из server-authenticated actor worker id (§6): actor-поля в теле запрещены. Optimistic
 # concurrency разделена по независимым осям (§11): confirmation и review проверяют
 # свою версию и производственную record_version.
 
@@ -1071,7 +1071,7 @@ class WeldOperationOgsReviewRead(BaseModel):
 
 
 # ── Task 8D: корректировки WeldOperation ──────────────────────────────────────
-# Actor берётся только из X-User-Id (§18): actor-поля в теле запрещены. Снимки,
+# Actor берётся только из server-authenticated actor worker id (§18): actor-поля в теле запрещены. Снимки,
 # changed_fields, field_changes и impact_level рассчитываются сервером — клиент их
 # не передаёт (§8). patch несёт только разрешённые поля производственного факта.
 

@@ -86,7 +86,7 @@ class Inspection(Base):
 
     Ссылки на работников (*_by_worker_id) — hr.workers.id типа Integer БЕЗ FK, в
     стиле существующих модулей (Joint/WeldOperation, «переходный период» Р-3
-    ADR-010): X-User-Id и hr.workers.id — целочисленные. FK на project.projects и
+    ADR-010): server-authenticated actor worker id и hr.workers.id — целочисленные. FK на project.projects и
     engineering.joints добавляются (обе стороны — UUID).
 
     Назначение методов, лаборатории, результаты, решения ОГС, отчёты и дефекты

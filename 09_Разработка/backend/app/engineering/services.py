@@ -1831,7 +1831,7 @@ class EngineeringService:
 #
 # Минимальное техническое ядро производственного факта сварки. Проверки допуска,
 # WPS, review ОГС, подтверждения сварщика, корректировок и импорта НЕ входят
-# (Tasks 8B–8E). Актор — только из X-User-Id (§15 задания). sequence_no выдаётся
+# (Tasks 8B–8E). Актор — только из server-authenticated actor worker id (§15 задания). sequence_no выдаётся
 # системой атомарно; клиент его не задаёт. Завершённая операция неизменяема.
 
 # Поля производственного факта, применяемые из create/PATCH к модели (без служебных).
@@ -2148,7 +2148,7 @@ class WeldOperationService:
         """Запуск/пересчёт автоматической проверки DRAFT-операции (§10.3).
 
         Доступна только для DRAFT: COMPLETED/CANCELLED дают conflict, так как их
-        результат — неизменяемый исторический снимок (§4.2). Актор из X-User-Id —
+        результат — неизменяемый исторический снимок (§4.2). Актор из server-authenticated actor worker id —
         только текущий актор API, не лицо, принявшее решение (§10.3). Lifecycle не
         меняется; record_version увеличивается."""
         op = self.get_operation(operation_id)
@@ -2562,7 +2562,7 @@ class WeldOperationService:
     # факта: подтверждение исполнителя (MASTER/FOREMAN) и технологическое решение
     # ОГС (OGS_ENGINEER/CHIEF_WELDER). Оси не объединяются между собой, с lifecycle
     # и с автоматическими validation-статусами Task 8B (§2-3). Actor — только из
-    # X-User-Id. Каждое решение атомарно: history insert + projection update +
+    # server-authenticated actor worker id. Каждое решение атомарно: history insert + projection update +
     # version increment в одной транзакции (§16).
 
     # --- общие guard'ы (§4.2, §6, §11) ---

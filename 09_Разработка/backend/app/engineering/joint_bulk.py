@@ -133,12 +133,12 @@ class JointBulkService(EngineeringService):
                 JointBulkValidationError(field=field, code=code, message=message)
             )
 
-        # created_by == X-User-Id: создание от имени другого работника запрещено.
+        # created_by == server-authenticated actor worker id: создание от имени другого работника запрещено.
         if payload.created_by != actor_worker_id:
             add(
                 jw.CREATED_BY_MISMATCH,
                 "created_by",
-                "created_by должен совпадать с X-User-Id",
+                "created_by должен совпадать с server-authenticated actor worker id",
             )
 
         project = self._projects.get_project(payload.project_id)

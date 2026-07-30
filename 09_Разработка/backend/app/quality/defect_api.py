@@ -1,14 +1,14 @@
 """HTTP-слой технической модели Defect и справочников (Task 9D-3C-3; Spec 9D-3C).
 
 Тонкий транспорт поверх `DefectService` (9D-3B/9D-3C-2): маршрутизация, Pydantic-валидация,
-сериализация ORM и извлечение актора из `X-User-Id`. Доменные проверки (CONFIRMED_DEFECT,
+сериализация ORM и извлечение актора из `server-authenticated actor worker id`. Доменные проверки (CONFIRMED_DEFECT,
 Joint-инвариант, lifecycle, supersede, version, RBAC, обязательность полей ACTIVE) — в сервисе;
 здесь не дублируются. `DomainError` наследует `HTTPException`, поэтому ошибки сервиса проходят
 без ручного remapping (в проекте нет exception_handler'ов).
 
 Маршруты монтируются под `/api/v1` в `app/main.py`; namespace `/quality/defects…` — в пути.
 Бизнес-действия оформлены командами (activate/supersede/cancel), а не универсальным PATCH статуса.
-Справочники — authenticated global read-only: требуют `X-User-Id`, но актор в reference-сервисы
+Справочники — authenticated global read-only: требуют `server-authenticated actor worker id`, но актор в reference-сервисы
 не передаётся (нет Joint-scope) — аутентификация выражена route-level `dependencies`.
 """
 

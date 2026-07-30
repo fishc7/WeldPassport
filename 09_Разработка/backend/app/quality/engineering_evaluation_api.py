@@ -3,7 +3,7 @@
 Маршруты монтируются под `/api/v1`. Namespace: `/quality/findings/{finding_id}/
 engineering-evaluation` (оценка по finding) и `/quality/engineering-evaluation-
 revisions/{id}` (ревизия и её дочерние сущности/переходы). Бизнес-действия — команды
-(не универсальный PATCH статуса). Актор — из `X-User-Id`; RBAC/scope — в сервисе.
+(не универсальный PATCH статуса). Актор — из `server-authenticated actor worker id`; RBAC/scope — в сервисе.
 """
 
 from __future__ import annotations

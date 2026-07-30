@@ -77,7 +77,7 @@ class Company(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="active"
     )
-    # created_by — hr.workers.id (X-User-Id). FK не добавляем (ADR-001, ограничение плана).
+    # created_by — hr.workers.id (server-authenticated actor worker id). FK не добавляем (ADR-001, ограничение плана).
     created_by: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -221,7 +221,7 @@ class Line(Base):
         nullable=False,
         server_default=text("'{}'::text[]"),
     )
-    # created_by — hr.workers.id (X-User-Id). FK не добавляем (ограничение плана).
+    # created_by — hr.workers.id (server-authenticated actor worker id). FK не добавляем (ограничение плана).
     created_by: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

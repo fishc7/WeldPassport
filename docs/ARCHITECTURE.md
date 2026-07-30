@@ -1644,3 +1644,15 @@ Specification; настоящий раздел таким основанием �
 - Производственные узлы: [[02_Процессы/Сварочные_операции|Сварочные операции]] · [[02_Процессы/Неразрушающий_контроль|НК]] · [[10_Проектирование_WeldPassport/09_Периодика_КСС/00_Периодика_КСС|Периодика КСС]] · [[10_Проектирование_WeldPassport/05_Исполнительная_документация/00_Исполнительная_документация|Исполнительная документация]] · [[10_Проектирование_WeldPassport/11_МТО_и_материалы/00_МТО_и_материалы|МТО и материалы]]
 - Отложенные модули (backlog): [[10_Проектирование_WeldPassport/10_Нормы_времени/00_Нормы_времени|Нормы времени]] — см. [[docs/project/DECISIONS#ADR-003. Исключение модуля нормирования из активного MVP|ADR-003]]
 - [[docs/project/ROADMAP|Дорожная карта]] · [[docs/project/PROJECT_SUMMARY|Сводка проекта]]
+
+## Authentication implementation checkpoint 2026-07-30
+
+Статус: **IMPLEMENTED_UNVERIFIED / PURE VERIFIED**.
+
+Активная Alembic head — `20260730_28_identity`; production actor извлекается
+только из opaque session cookie, а `X-User-Id` сохранён исключительно в test
+dependency override. Focused contracts: `38 passed`; полный
+`migration_contract_tests`: `863 passed, 3 skipped`.
+
+Live PostgreSQL/Alembic/application verification остаётся отдельным gate.
+`AUTHENTICATION_BOUNDARY_ACCEPTED` не присвоен.

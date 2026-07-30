@@ -32,7 +32,7 @@ class ProjectService:
     # --- временное правило доступа MVP (IP-03) ---
 
     def _require_active_worker(self, worker_id: int) -> None:
-        """Изменяющие endpoints Task 2: X-User-Id должен быть активным работником.
+        """Изменяющие endpoints Task 2: server-authenticated actor worker id должен быть активным работником.
 
         Роль ПТО/FOREMAN/MASTER на этом этапе не требуется; отдельная роль
         администратора не вводится (role-based управление — будущее решение).

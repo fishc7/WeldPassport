@@ -2,7 +2,7 @@
 
 Стиль 9A–9D-1: вход с `extra="forbid"` (служебные поля → 422); команды жизненного
 цикла несут обязательный `expected_version` (optimistic locking); актор — из
-`X-User-Id`, не из тела. Все переходы статуса и правки содержания оформлены командами
+`server-authenticated actor worker id`, не из тела. Все переходы статуса и правки содержания оформлены командами
 (п.5 доменных правил), универсального PATCH статуса нет.
 
 Границы 9D-2 (C01/C04): рекомендация `recommended_disposition` необязывающая, не
@@ -42,7 +42,7 @@ def _require_non_empty(value: str) -> str:
 class EvaluationCreateCommand(BaseModel):
     """Создание логической оценки + первой DRAFT-ревизии по finding.
 
-    Тело пустое: контекст (`finding_id`) — из пути, актор — из `X-User-Id`. Номер
+    Тело пустое: контекст (`finding_id`) — из пути, актор — из `server-authenticated actor worker id`. Номер
     `<CODE>-EE-<SEQUENCE>` выдаётся при создании. `extra="forbid"` — 422 на любые поля.
     """
 

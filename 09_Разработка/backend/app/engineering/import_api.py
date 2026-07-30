@@ -1,6 +1,6 @@
 """HTTP-слой контура импорта (Task 8E, §15).
 
-Идемпотентный ключ — заголовок `Idempotency-Key`; актор — `X-User-Id`. Все
+Идемпотентный ключ — заголовок `Idempotency-Key`; актор — `server-authenticated actor worker id`. Все
 write-команды проходят RBAC/scope/идемпотентность на уровне сервиса.
 """
 

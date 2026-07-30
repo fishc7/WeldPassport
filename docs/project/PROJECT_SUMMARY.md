@@ -468,3 +468,16 @@ Project Control Center**. Оно рассматривается только п�
 Joint lifecycle, WeldOperation, Heat Treatment, Inspection, Defect/Disposition/Repair и
 RBAC. Реализация **требует отдельного архитектурного решения**; Implementation Task не
 создаётся, код и схема БД не изменяются.
+
+## Authentication Boundary — pure checkpoint 2026-07-30
+
+Статус: `IMPLEMENTED_UNVERIFIED / PURE VERIFIED`.
+
+Реализованы identity schema и account/session/audit model, Argon2id, opaque
+cookie sessions, CSRF, immutable `AuthenticatedActor`, удаление production
+trust к `X-User-Id`, test-only adapter и offline operator CLI. Focused
+contracts: `38 passed`; полный `migration_contract_tests`:
+`863 passed, 3 skipped`.
+
+PostgreSQL/Alembic/application suite не запускались; operational
+`AUTHENTICATION_BOUNDARY_ACCEPTED` ещё не присвоен.

@@ -63,7 +63,7 @@ class InspectionUpdate(BaseModel):
         return value
 
 
-# ── Вход: команды жизненного цикла (актор — из X-User-Id, не из тела) ──────────
+# ── Вход: команды жизненного цикла (актор — из server-authenticated actor worker id, не из тела) ──────────
 
 
 class ConfirmProductionReadinessCommand(BaseModel):

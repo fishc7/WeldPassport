@@ -4,7 +4,7 @@
 `expected_version` в изменяющих командах; отдельные response-модели через
 `from_attributes`. ORM наружу не выносится; `DomainError` — на границе service/API.
 
-Actor-разделение: внутренние `*_by_worker_id` (Integer, X-User-Id, вне тела);
+Actor-разделение: внутренние `*_by_worker_id` (Integer, server-authenticated actor worker id, вне тела);
 внешние лица лаборатории — `*_person_id` (UUID `QualityExternalPerson`).
 """
 

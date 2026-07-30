@@ -204,3 +204,13 @@ Project Control Center.
 
 См. [[docs/superpowers/specs/2026-07-19-project-control-center-design|проектное предложение]]
 и [[docs/project/DECISIONS#ADR-020. Отдельный Project Control Center для контроля реализации|ADR-020]].
+
+## Authentication Boundary — следующий gate
+
+Pure-контур реализован со статусом
+`IMPLEMENTED_UNVERIFIED / PURE VERIFIED`: focused `38 passed`, полный
+`migration_contract_tests` `863 passed, 3 skipped`.
+
+Следующий обязательный шаг — отдельно авторизованная isolated PostgreSQL 18.3
+acceptance. До неё `AUTHENTICATION_BOUNDARY_ACCEPTED` не присваивается и Task
+9D-4A-5A остаётся заблокирован.

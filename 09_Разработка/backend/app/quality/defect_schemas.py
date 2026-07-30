@@ -3,7 +3,7 @@
 Продолжение канона Tasks 9A–9D-2 (`quality_finding_schemas`, `engineering_evaluation_schemas`,
 `execution_schemas`): вход с `extra="forbid"` (служебные/контекстные поля → 422); команды
 жизненного цикла несут обязательный `expected_version` (optimistic locking); актор — из
-`X-User-Id`, не из тела. Числовые характеристики — `Decimal` (колонки `Numeric`), количество —
+`server-authenticated actor worker id`, не из тела. Числовые характеристики — `Decimal` (колонки `Numeric`), количество —
 `int` (`Integer`). Enum — `Literal`-типы из `defect_workflow`; собственные Enum-классы не вводятся.
 
 Границы схем (Spec 9D-3C §5/§7): здесь только транспорт и формат. Доменные проверки
@@ -86,7 +86,7 @@ class DefectFieldsInput(BaseModel):
 class DefectCreateRequest(DefectFieldsInput):
     """Тело `POST /quality/defects`. Контекст (`joint_id`, `engineering_evaluation_id`) задаётся
     явно; `activate` выбирает конструктор сервиса (`create_draft` / `create_active`, Spec §8).
-    Технические поля наследуются от `DefectFieldsInput`. `extra="forbid"`; актор — из `X-User-Id`.
+    Технические поля наследуются от `DefectFieldsInput`. `extra="forbid"`; актор — из `server-authenticated actor worker id`.
     """
 
     joint_id: UUID

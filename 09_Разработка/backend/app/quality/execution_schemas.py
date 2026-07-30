@@ -6,7 +6,7 @@
 Доменные ошибки (`DomainError`) остаются на границе service/API и здесь не создаются.
 
 Actor-разделение (проверено по модели): внутренний исполнитель/регистратор —
-`*_by_worker_id` (Integer, X-User-Id, в тело запроса не входит); внешние лица
+`*_by_worker_id` (Integer, server-authenticated actor worker id, в тело запроса не входит); внешние лица
 лаборатории — `*_person_id` (UUID `QualityExternalPerson`).
 """
 

@@ -2,7 +2,7 @@
 
 Стиль Tasks 9A–9C: вход с `extra="forbid"` (служебные поля запрещены → 422), команды
 жизненного цикла с обязательным `expected_version` (optimistic locking), актор — из
-X-User-Id, не из тела. Инженерная оценка/дефекты/disposition (блоки 9D-2 …) в схемах
+server-authenticated actor worker id, не из тела. Инженерная оценка/дефекты/disposition (блоки 9D-2 …) в схемах
 ядра отсутствуют.
 """
 

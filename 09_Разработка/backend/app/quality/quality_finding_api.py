@@ -6,7 +6,7 @@ inspections), для нового ресурса используется явн
 
 Бизнес-действия оформлены командами (`register`/`acknowledge`/`cancel`), а не
 универсальным PATCH статуса (п.5 доменных правил: переходы — команды с проверкой
-условий). Актор — из X-User-Id; RBAC/scope проверяются на backend в сервисе.
+условий). Актор — из server-authenticated actor worker id; RBAC/scope проверяются на backend в сервисе.
 """
 
 from __future__ import annotations

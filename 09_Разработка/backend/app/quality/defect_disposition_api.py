@@ -1,6 +1,6 @@
 """HTTP-слой DefectDisposition (Task 9D-4A-3/9D-4A-4, ADR-023).
 
-Тонкий транспорт: маршрутизация, Pydantic, актор из `X-User-Id`. Переходы статуса —
+Тонкий транспорт: маршрутизация, Pydantic, актор из `server-authenticated actor worker id`. Переходы статуса —
 только через `POST …/transition` (команда `action`); прямого PATCH status нет.
 `SUPERSEDE` (Task 9D-4A-4) — отдельный эндпойнт `POST …/supersede`, т.к. создаёт
 новую версию (новую строку), а не только меняет статус текущей.

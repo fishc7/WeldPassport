@@ -4796,3 +4796,23 @@ evidence.
 План разделяет Domain primitives, Domain Model, Migration, Service,
 API/test-only adapter, Operator CLI и Pure closure. Live PostgreSQL acceptance
 не входит в implicit implementation authorization и остаётся отдельным gate.
+
+### ADR-034 pure implementation checkpoint
+
+Дата: 2026-07-30
+
+Статус: **IMPLEMENTED_UNVERIFIED / PURE VERIFIED**
+
+Реализованы семь согласованных gates: security/domain primitives, canonical
+identity model, additive Alembic revision `20260730_28_identity`,
+repository/services, cookie/CSRF API с test-only header adapter, offline
+operator lifecycle и pure closure.
+
+Свежие результаты: focused authentication contracts `38 passed`; полный
+`migration_contract_tests` `863 passed, 3 skipped`. Frozen B-04 baseline
+остаётся 73-табличным; текущая metadata расширена post-baseline identity head
+до 76 таблиц.
+
+PostgreSQL/Alembic/application suite не запускались. Решение не присваивает
+`AUTHENTICATION_BOUNDARY_ACCEPTED`; следующий gate требует отдельного разрешения
+и новой owned disposable PostgreSQL 18.3 DB.

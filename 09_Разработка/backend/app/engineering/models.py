@@ -236,7 +236,7 @@ class EngineeringDocument(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="DRAFT"
     )
-    # created_by / approved_by — hr.workers.id (X-User-Id). FK не добавляем
+    # created_by / approved_by — hr.workers.id (server-authenticated actor worker id). FK не добавляем
     # (переходный период; см. ограничения плана Engineering Joints MVP).
     created_by: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
