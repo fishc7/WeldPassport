@@ -1,6 +1,8 @@
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
+import sys
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -13,7 +15,11 @@ from app.testing.f2_contract import (
     F2WorkerRequest,
 )
 from app.testing.f2_evidence import publish_artifact
-from app.testing.f2_worker import WorkerDependencies, run_worker
+from app.testing.f2_worker import (
+    WorkerDependencies,
+    _BoundCommandExecutor,
+    run_worker,
+)
 
 
 RUN_ID = UUID("12345678-1234-4234-8234-123456789abc")
@@ -221,3 +227,31 @@ def test_f2_worker_005_rejects_adapter_secret_before_publication(
     assert exc_info.value.code == "TEST-DB-F2-EVIDENCE-UNSAFE"
     assert "publish" not in events
     assert events[-1] == "close"
+
+
+def test_f2_worker_006_application_suite_runs_from_backend_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def fake_run(argv: tuple[str, ...], **kwargs: object) -> object:
+        observed["argv"] = argv
+        observed["cwd"] = kwargs.get("cwd")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("app.testing.f2_worker.subprocess.run", fake_run)
+
+    exit_code = _BoundCommandExecutor().run(
+        (sys.executable, "-m", "pytest", "tests", "-q")
+    )
+
+    backend_root = Path(__file__).resolve().parents[1]
+    assert exit_code == 0
+    assert observed["cwd"] == backend_root
+    assert observed["argv"] == (
+        sys.executable,
+        "-m",
+        "pytest",
+        str(backend_root / "tests"),
+        "-q",
+    )

@@ -187,14 +187,21 @@ class _BoundCommandExecutor(CommandExecutor):
                 return 1
         safe_argv = argv
         if argv[:4] == (sys.executable, "-m", "pytest", "tests"):
+            backend_root = Path(__file__).resolve().parents[2]
             safe_argv = (
                 *argv[:3],
-                str(Path(__file__).resolve().parents[2] / "tests"),
+                str(backend_root / "tests"),
                 *argv[4:],
             )
         try:
             completed = subprocess.run(
                 safe_argv,
+                cwd=(
+                    backend_root
+                    if argv[:4]
+                    == (sys.executable, "-m", "pytest", "tests")
+                    else None
+                ),
                 shell=False,
                 check=False,
                 capture_output=True,
