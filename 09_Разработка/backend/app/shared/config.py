@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -19,6 +21,14 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="WELDPASSPORT_LEGACY_SCHEMA",
     )
+    deployment_environment: Literal["production", "development"] = "production"
+    auth_cookie_secure: bool = True
+    auth_session_idle_minutes: int = 30
+    auth_session_absolute_hours: int = 12
+    auth_session_touch_minutes: int = 5
+    auth_max_failed_logins: int = 5
+    auth_lock_minutes: int = 15
+    auth_password_min_length: int = 12
 
     # ── Импорт XLSX (Task 8E) ────────────────────────────────────────────────
     # Бэкенд файлового хранилища исходных XLSX: "local" (dev/тесты) или "s3".
