@@ -1422,8 +1422,9 @@ TEST-DB-F1 Pure Foundation Core реализован 2026-07-30 со стату�
 `IMPLEMENTED_UNVERIFIED / CODE ACCEPTED 2026-07-30`; fresh pure suite —
 `677 passed, 2 skipped`; focused Foundation suite — `83 passed`. PostgreSQL и
 application tests не запускались.
-Runtime Compatibility Profile и isolated TEST-DB-F2 acceptance остаются
-отдельными следующими gates.
+Runtime Compatibility Profile и isolated TEST-DB-F2 остаются отдельными gates.
+Local rehearsal выполнен 2026-07-30 на PostgreSQL 18.3 и получил machine status
+`TEST_DB_F2_REHEARSAL_VERIFIED`; отдельная owner acceptance ещё не зафиксирована.
 
 Детальная архитектура локального isolated rehearsal принята в
 [[docs/project/ADR-033-test-db-f2-local-rehearsal|ADR-033]].
@@ -1433,9 +1434,14 @@ Coordinator сначала pure-валидирует все targets, затем 
 три свежих bind-once worker-процесса. Local runner не создаёт и не удаляет DB,
 не меняет ownership markers и сохраняет все targets после успеха или ошибки.
 
-Operational gate заблокирован до принятой реализации `RUNTIME-COMPAT-1` и pure
-`TEST-DB-F2-PURE-RUNNER`. Worker evidence публикуется create-exclusive во внешнем
-append-only каталоге без DSN и connection coordinates. Machine status
+Принятые `RUNTIME-COMPAT-1`, `TEST-DB-F2-PURE-RUNNER` и operator preflight
+обеспечили local operational run. Worker evidence публикуется create-exclusive
+во внешнем append-only каталоге без DSN и connection coordinates. Успешный run
+`9e6c9986-c80d-4fee-81af-13cf9d906194` подтверждает canonical,
+legacy-compatible и legacy-negative roles на source
+`8148794495310ff2f7eed37948da3c64e08d1b23`; manifest SHA-256 —
+`5da388a47e7bbac7d56a0104d6bf3b6ce61128292976596f667bb4d78d8ea0ed`.
+Machine status
 `TEST_DB_F2_REHEARSAL_VERIFIED` не является приёмкой; только отдельная подпись
 владельца `TEST_DB_F2_ACCEPTED` переводит Foundation и Runtime Compatibility
 Profile в `ACCEPTED`. CI create/drop остаётся отдельным будущим

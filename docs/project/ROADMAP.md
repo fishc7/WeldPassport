@@ -77,11 +77,17 @@ active Alembic graph имеет один head `canonical_baseline_v1`, productio
   `4e434a78-965b-4819-9108-b278298a5b10`, source
   `a2e1f0167054e9d00bd73667f74bd2299ccde88e`, SHA-256
   `ec9ee5244d1d0f6c952429264aacb4120f52695d90baa4baaae2f04c8e31a137`;
-  PostgreSQL и DB lifecycle не запускались;
+  позднее этот checkpoint был потреблён отдельно разрешённым local rehearsal;
+- TEST-DB-F2 local rehearsal выполнен 2026-07-30 на PostgreSQL 18.3 и получил
+  machine status `TEST_DB_F2_REHEARSAL_VERIFIED`: run
+  `9e6c9986-c80d-4fee-81af-13cf9d906194`, source
+  `8148794495310ff2f7eed37948da3c64e08d1b23`, manifest SHA-256
+  `5da388a47e7bbac7d56a0104d6bf3b6ce61128292976596f667bb4d78d8ea0ed`;
+  canonical, legacy-compatible и legacy-negative roles verified, final pure
+  suite `825 passed, 3 skipped`; отдельная owner acceptance ещё не зафиксирована;
 - следующий execution order:
   `RUNTIME-COMPAT-1 → TEST-DB-F2-PURE-RUNNER → operator preflight READY →
-  отдельно разрешённый local PostgreSQL rehearsal → evidence review →
-  owner acceptance`;
+  local PostgreSQL rehearsal VERIFIED → evidence review → owner acceptance`;
 - после приёмки TEST-DB Foundation и Runtime Compatibility Profile выполняется
   Task 9D-4A-5A, затем оставшийся Quality-контур.
 

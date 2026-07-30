@@ -4697,3 +4697,37 @@ offline preflight выполнен повторно уже через direct-fil
 PostgreSQL connection, Alembic CLI, application suite, worker и DB lifecycle не
 выполнялись. `READY` разрешает только переход к запросу отдельного разрешения на
 local PostgreSQL rehearsal и сам по себе не является таким разрешением.
+
+### TEST-DB-F2-LOCAL-REHEARSAL machine verification checkpoint
+
+Дата: 2026-07-30
+
+Статус: **TEST_DB_F2_REHEARSAL_VERIFIED / OWNER ACCEPTANCE PENDING**
+
+После отдельного разрешения владельца local rehearsal выполнен на PostgreSQL
+18.3 с тремя новыми owned disposable DB для каждого run. Неуспешные runs
+сохранялись без retry/reuse и позволили TDD-устранить operational defects:
+
+- `53441c7` — нормализация server-side IPv4/IPv6 CIDR;
+- `1dd8d4e` — application suite запускается из backend root;
+- `fa42561` — defect migration tests согласованы с active canonical baseline;
+- `32d166a` — legacy fixture разрешает внешний FK без изменения runtime metadata;
+- `8148794` — negative snapshot не требует разрешения внешнего FK.
+
+Финальный успешный run:
+
+- run id: `9e6c9986-c80d-4fee-81af-13cf9d906194`;
+- source SHA: `8148794495310ff2f7eed37948da3c64e08d1b23`;
+- PostgreSQL: `server_version_num=180003`;
+- roles: `canonical`, `legacy_compatible`, `legacy_negative` — `verified`;
+- manifest SHA-256:
+  `5da388a47e7bbac7d56a0104d6bf3b6ce61128292976596f667bb4d78d8ea0ed`;
+- final pure suite: `825 passed, 3 skipped`.
+
+Независимый read-only review подтвердил digest chain, source SHA, отсутствие
+credential patterns в evidence и сохранность трёх ownership-marked DB. Успешная
+и все failed rehearsal DB сохранены; их cleanup требует отдельного разрешения.
+
+Machine verification не переводит TEST-DB Foundation и Runtime Compatibility
+Profile в `ACCEPTED`. Следующий отдельный gate — подпись владельца
+`TEST_DB_F2_ACCEPTED`.
