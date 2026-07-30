@@ -28,6 +28,7 @@ _RUNTIME_ALLOWLIST = (
 )
 _SECRET_KEYS = (
     "TEST_DATABASE_URL",
+    "WELDPASSPORT_F2_WORKING_DATABASE_URL",
     "WELDPASSPORT_TEST_DB_CONFIRM",
     "WELDPASSPORT_TEST_DB_OWNERSHIP_TOKEN",
 )
@@ -108,6 +109,9 @@ def build_worker_environment(
             "WELDPASSPORT_F2_ROLE": target.role.value,
             "WELDPASSPORT_F2_ARTIFACT_PATH": str(artifact_path),
             "WELDPASSPORT_F2_IDENTITY_DIGEST": target.identity_digest,
+            "WELDPASSPORT_F2_WORKING_DATABASE_URL": parent_environment[
+                "WELDPASSPORT_F2_WORKING_DATABASE_URL"
+            ],
             "TEST_DATABASE_URL": authorization.target.url.render_as_string(
                 hide_password=False
             ),

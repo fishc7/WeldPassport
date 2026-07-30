@@ -58,6 +58,9 @@ def test_f2_process_001_child_environment_is_minimal(
         "PATH": "C:\\Python",
         "UNRELATED_SENTINEL": "must-not-pass",
         "DATABASE_URL": "parent-secret",
+        "WELDPASSPORT_F2_WORKING_DATABASE_URL": (
+            "postgresql+psycopg://worker:secret@localhost/weldpassport_dev"
+        ),
     }
 
     child = build_worker_environment(
@@ -69,6 +72,9 @@ def test_f2_process_001_child_environment_is_minimal(
 
     assert "UNRELATED_SENTINEL" not in child
     assert "DATABASE_URL" not in child
+    assert child["WELDPASSPORT_F2_WORKING_DATABASE_URL"].endswith(
+        "/weldpassport_dev"
+    )
     assert child["TEST_DATABASE_URL"].endswith(f"/test_{role.value}")
     assert child["WELDPASSPORT_F2_ROLE"] == role.value
     if role is F2Role.CANONICAL:
