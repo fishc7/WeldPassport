@@ -105,15 +105,9 @@ def _identity_digest(identity: DatabaseIdentity) -> str:
     ).hexdigest()
 
 
-def build_offline_plan(
+def authorize_offline_targets(
     inputs: F2ParentInputs,
-    git_inspector: GitInspector,
-    uuid_factory: Callable[[], UUID],
-) -> F2OfflinePlan:
-    state = git_inspector.read_state()
-    if not state.tracked_clean or _SOURCE_SHA.fullmatch(state.source_sha) is None:
-        raise _source_error()
-
+) -> tuple[F2AuthorizedTarget, ...]:
     roles = tuple(target.role for target in inputs.targets)
     if roles != F2_ROLE_ORDER:
         raise F2Error(
@@ -145,12 +139,24 @@ def build_offline_plan(
                 identity_digest=_identity_digest(identity),
             )
         )
+    return tuple(authorized)
 
+
+def build_offline_plan(
+    inputs: F2ParentInputs,
+    git_inspector: GitInspector,
+    uuid_factory: Callable[[], UUID],
+) -> F2OfflinePlan:
+    state = git_inspector.read_state()
+    if not state.tracked_clean or _SOURCE_SHA.fullmatch(state.source_sha) is None:
+        raise _source_error()
+
+    authorized = authorize_offline_targets(inputs)
     run_id = uuid_factory()
     namespace = reserve_run_namespace(inputs.evidence_root, run_id)
     return F2OfflinePlan(
         run_id=run_id,
         source_sha=state.source_sha,
         namespace=namespace,
-        targets=tuple(authorized),
+        targets=authorized,
     )

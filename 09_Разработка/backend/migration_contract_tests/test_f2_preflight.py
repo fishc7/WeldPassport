@@ -10,7 +10,11 @@ from app.testing.f2_contract import (
     F2Role,
     F2TargetInput,
 )
-from app.testing.f2_preflight import GitState, build_offline_plan
+from app.testing.f2_preflight import (
+    GitState,
+    authorize_offline_targets,
+    build_offline_plan,
+)
 
 
 RUN_ID = UUID("12345678-1234-4234-8234-123456789abc")
@@ -61,6 +65,18 @@ def test_f2_preflight_001_builds_complete_offline_plan(tmp_path: Path) -> None:
     assert [target.role for target in plan.targets] == list(F2Role)
     assert all(len(target.identity_digest) == 64 for target in plan.targets)
     assert inspector.calls == 1
+
+
+def test_f2_preflight_006_authorizes_targets_without_reserving_namespace(
+    tmp_path: Path,
+) -> None:
+    inputs = _inputs(tmp_path)
+
+    targets = authorize_offline_targets(inputs)
+
+    assert tuple(target.role for target in targets) == tuple(F2Role)
+    assert len({target.identity_digest for target in targets}) == 3
+    assert not (tmp_path / str(RUN_ID)).exists()
 
 
 @pytest.mark.parametrize(
