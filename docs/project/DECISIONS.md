@@ -4616,3 +4616,23 @@ Evidence:
 PostgreSQL, Alembic CLI, application suite и DB lifecycle не запускались.
 Следующий отдельный gate — `TEST-DB-F2-OPERATOR-PREFLIGHT`; этот checkpoint не
 присваивает `TEST_DB_F2_ACCEPTED`.
+
+### TEST-DB-F2-OPERATOR-PREFLIGHT design checkpoint
+
+Дата: 2026-07-30
+
+Статус: **SPECIFICATION ACCEPTED**
+
+Принят отдельный offline operator-preflight модуль с thin CLI. Он не является
+режимом rehearsal coordinator и не может запускать PostgreSQL, worker,
+Alembic или application suite.
+
+Preflight требует отдельную exact authorization
+`I_AUTHORIZE_TEST_DB_F2_OPERATOR_PREFLIGHT`, проверяет clean source и ancestry
+принятых prerequisite commits, pure-валидирует три target bundle и collision,
+проверяет внешний evidence root и публикует create-exclusive redacted artifact
+в отдельном `operator-preflight-<UUIDv4>` namespace.
+
+Статус `TEST_DB_F2_OPERATOR_PREFLIGHT_READY` разрешает только запросить новое
+отдельное разрешение на `TEST-DB-F2-LOCAL-REHEARSAL`; он не является
+`TEST_DB_F2_REHEARSAL_VERIFIED` или `TEST_DB_F2_ACCEPTED`.
