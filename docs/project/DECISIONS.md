@@ -4636,3 +4636,9 @@ Preflight требует отдельную exact authorization
 Статус `TEST_DB_F2_OPERATOR_PREFLIGHT_READY` разрешает только запросить новое
 отдельное разрешение на `TEST-DB-F2-LOCAL-REHEARSAL`; он не является
 `TEST_DB_F2_REHEARSAL_VERIFIED` или `TEST_DB_F2_ACCEPTED`.
+
+Implementation Plan и Prompt для Cursor / Claude Code приняты одновременно со
+specification. План фиксирует пять последовательных TDD tasks, отдельные
+commits, полный pure suite, read-only review/remediation и разрешённый push.
+Пользователь поручил пройти эти checkpoints самостоятельно без расширения
+scope до PostgreSQL rehearsal.
