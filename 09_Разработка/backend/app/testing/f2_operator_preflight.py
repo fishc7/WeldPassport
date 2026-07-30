@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 import re
 import subprocess
-from typing import Mapping, Protocol
+import sys
+from typing import Callable, Mapping, Protocol
+from uuid import UUID, uuid4
 
 from app.testing.f2_contract import (
     F2Error,
@@ -15,6 +18,13 @@ from app.testing.f2_contract import (
     F2_OPERATOR_AUTHORIZATION,
     load_parent_inputs,
 )
+from app.testing.f2_evidence import (
+    PublishedArtifact,
+    publish_artifact,
+    reserve_named_namespace,
+    validate_external_evidence_root,
+)
+from app.testing.f2_preflight import authorize_offline_targets
 
 
 F2_OPERATOR_PREFLIGHT_PROTOCOL = "test-db-f2-operator-preflight/v1"
@@ -165,3 +175,142 @@ class SubprocessOperatorSourceInspector:
             tracked_clean=not status.stdout.strip(),
             prerequisites=tuple(ancestry),
         )
+
+
+@dataclass(frozen=True)
+class OperatorPreflightDependencies:
+    source_inspector: OperatorSourceInspector
+    uuid_factory: Callable[[], UUID]
+    clock: Callable[[], str]
+    publisher: Callable[
+        [Path, Mapping[str, object]],
+        PublishedArtifact,
+    ]
+
+
+@dataclass(frozen=True)
+class OperatorPreflightResult:
+    preflight_id: UUID | None
+    source_sha: str | None
+    status: F2OperatorPreflightStatus
+    artifact_digest: str | None
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _default_dependencies(
+    repository_root: Path,
+    environment: Mapping[str, str],
+) -> OperatorPreflightDependencies:
+    return OperatorPreflightDependencies(
+        source_inspector=SubprocessOperatorSourceInspector(
+            repository_root,
+            environment,
+        ),
+        uuid_factory=uuid4,
+        clock=_utc_now,
+        publisher=publish_artifact,
+    )
+
+
+def _result(
+    status: F2OperatorPreflightStatus,
+    *,
+    preflight_id: UUID | None = None,
+    source_sha: str | None = None,
+    artifact_digest: str | None = None,
+) -> OperatorPreflightResult:
+    return OperatorPreflightResult(
+        preflight_id=preflight_id,
+        source_sha=source_sha,
+        status=status,
+        artifact_digest=artifact_digest,
+    )
+
+
+def run_operator_preflight(
+    environment: Mapping[str, str],
+    dependencies: OperatorPreflightDependencies | None = None,
+) -> OperatorPreflightResult:
+    repository_root = Path(__file__).resolve().parents[4]
+    deps = (
+        _default_dependencies(repository_root, environment)
+        if dependencies is None
+        else dependencies
+    )
+    try:
+        inputs = load_operator_preflight_inputs(environment)
+        source = deps.source_inspector.read_state(
+            F2_OPERATOR_PREFLIGHT_PREREQUISITES
+        )
+        python_version = (
+            sys.version_info.major,
+            sys.version_info.minor,
+            sys.version_info.micro,
+        )
+        validate_operator_source(
+            source,
+            F2_OPERATOR_PREFLIGHT_PREREQUISITES,
+            python_version,
+        )
+        targets = authorize_offline_targets(inputs)
+        evidence_root = validate_external_evidence_root(
+            inputs.evidence_root,
+            repository_root,
+        )
+    except Exception:
+        return _result(F2OperatorPreflightStatus.FAILED)
+
+    preflight_id: UUID | None = None
+    try:
+        preflight_id = deps.uuid_factory()
+        namespace = reserve_named_namespace(
+            evidence_root,
+            f"operator-preflight-{preflight_id}",
+        )
+        artifact = deps.publisher(
+            namespace / "00_operator_preflight.json",
+            {
+                "protocol_version": F2_OPERATOR_PREFLIGHT_PROTOCOL,
+                "preflight_id": str(preflight_id),
+                "source_sha": source.source_sha,
+                "branch": source.branch,
+                "verified_at": deps.clock(),
+                "status": F2OperatorPreflightStatus.READY.value,
+                "python_version": list(python_version),
+                "prerequisites": [
+                    {"commit": sha, "ancestor": present}
+                    for sha, present in source.prerequisites
+                ],
+                "targets": [
+                    {
+                        "role": target.role.value,
+                        "identity_digest": target.identity_digest,
+                    }
+                    for target in targets
+                ],
+                "checks": {
+                    "source_clean": True,
+                    "branch_exact": True,
+                    "prerequisites_present": True,
+                    "python_supported": True,
+                    "targets_authorized_offline": True,
+                    "target_identities_unique": True,
+                    "evidence_root_external": True,
+                },
+            },
+        )
+    except Exception:
+        return _result(
+            F2OperatorPreflightStatus.EVIDENCE_FAILED,
+            preflight_id=preflight_id,
+            source_sha=source.source_sha,
+        )
+    return _result(
+        F2OperatorPreflightStatus.READY,
+        preflight_id=preflight_id,
+        source_sha=source.source_sha,
+        artifact_digest=artifact.digest,
+    )
