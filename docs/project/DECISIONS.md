@@ -4592,3 +4592,27 @@ Evidence — canonical JSON с SHA-256 chain. Evidence publication failure не
 Приёмка delivery design разрешает pure implementation и commits. PostgreSQL,
 Alembic CLI, application suite и operational rehearsal остаются отдельными
 gates. Push разрешён владельцем после полного pure closure.
+
+### TEST-DB-F2-PURE-RUNNER implementation checkpoint
+
+Дата: 2026-07-30
+
+Статус: **IMPLEMENTED_UNVERIFIED / PURE VERIFIED / REVIEW APPROVED**
+
+Реализованы immutable protocol, полный offline preflight трёх target bundle,
+create-exclusive evidence с SHA-256 chain, минимальный child environment,
+fixed-order coordinator, bind-once one-role worker и три operational role plan.
+Review remediation добавила recursive raw-secret guard, dotenv isolation,
+полные compatible/negative handlers и failure matrix для каждой роли.
+
+Evidence:
+
+- implementation commits: `5cee57a`, `dc85aec`, `a8bdd05`, `8b18f6b`,
+  `38f587a`, `048bcd9`, `e7ed0dc`;
+- focused TEST-DB-F2 suite: `52 passed, 1 skipped`;
+- full pure suite: `790 passed, 3 skipped`;
+- review: `APPROVED`, открытых Critical/Important findings нет.
+
+PostgreSQL, Alembic CLI, application suite и DB lifecycle не запускались.
+Следующий отдельный gate — `TEST-DB-F2-OPERATOR-PREFLIGHT`; этот checkpoint не
+присваивает `TEST_DB_F2_ACCEPTED`.

@@ -1,6 +1,6 @@
 # TEST-DB-F2-PURE-RUNNER — Implementation Specification
 
-Статус: **ACCEPTED / IMPLEMENTATION PLAN ACCEPTED / IMPLEMENTATION NOT STARTED**
+Статус: **IMPLEMENTED_UNVERIFIED / PURE VERIFIED / REVIEW APPROVED**
 
 Дата: 2026-07-30
 
@@ -169,6 +169,9 @@ Parent environment целиком не наследуется. Coordinator ст�
   `TEST_DATABASE_URL`, `WELDPASSPORT_TEST_DB_CONFIRM`,
   `WELDPASSPORT_TEST_DB_OWNERSHIP_TOKEN`,
   `WELDPASSPORT_ALLOW_DESTRUCTIVE_TESTS`;
+- `WELDPASSPORT_F2_WORKING_DATABASE_URL` только для повторного вызова exact F1
+  authorization внутри worker; значение остаётся transient, не попадает в
+  argv, output или evidence;
 - role-specific runtime profile.
 
 Для `canonical` переменная `WELDPASSPORT_RUNTIME_PROFILE` отсутствует, чтобы
@@ -417,3 +420,33 @@ IMPLEMENTED_UNVERIFIED / PURE VERIFIED / REVIEW APPROVED
 - Alembic/application suite не запускались;
 - Foundation и Runtime Compatibility Profile не `ACCEPTED`;
 - push выполняется только по отдельному разрешению.
+
+## 19. Pure implementation closure
+
+Дата: 2026-07-30
+
+Результат: **IMPLEMENTED_UNVERIFIED / PURE VERIFIED / REVIEW APPROVED**.
+
+Implementation commits:
+
+- `5cee57a` — immutable protocol и transient parent environment;
+- `dc85aec` — create-exclusive canonical evidence и digest chain;
+- `a8bdd05` — полный offline source/target preflight;
+- `8b18f6b` — minimal child environment и process isolation;
+- `38f587a` — fixed-order coordinator и thin CLI;
+- `048bcd9` — one-role worker и operational adapter boundary;
+- `e7ed0dc` — review remediation: secret guard, operational handlers,
+  dotenv isolation и expanded failure matrix.
+
+Evidence:
+
+- focused TEST-DB-F2 pure suite: `52 passed, 1 skipped`;
+- полный `migration_contract_tests`: `790 passed, 3 skipped`;
+- `compileall`, `git diff --check` и scope/security audit успешны;
+- read-only review после remediation: `APPROVED`, открытых Critical/Important
+  findings нет.
+
+Pure closure не запускал PostgreSQL, Alembic CLI или application suite, не
+создавал и не удалял БД и не является operational acceptance. Следующий
+отдельный gate — `TEST-DB-F2-OPERATOR-PREFLIGHT`, после него требуется новое
+разрешение на local PostgreSQL rehearsal.
