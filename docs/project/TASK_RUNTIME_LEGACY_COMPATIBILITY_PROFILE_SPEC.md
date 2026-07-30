@@ -1,12 +1,17 @@
 # RUNTIME-LEGACY-COMPATIBILITY-PROFILE — Implementation Specification
 
-Статус: **ACCEPTED / IMPLEMENTATION NOT STARTED**
+Статус: **ACCEPTED / IMPLEMENTATION PLAN ACCEPTED / IMPLEMENTATION NOT STARTED**
 
 Архитектурное основание:
 
 - [[docs/project/ADR-005-legacy-workforce-deprecation|ADR-005]];
 - [[docs/project/ADR-025-migration-governance-and-legacy-schema-boundary|ADR-025]];
 - [[docs/project/ADR-032-test-db-foundation-and-runtime-bootstrap-boundary|ADR-032]].
+
+Принятые delivery-документы:
+
+- [[docs/project/TASK_RUNTIME_LEGACY_COMPATIBILITY_PROFILE_IMPLEMENTATION_PLAN|Implementation Plan]];
+- [[docs/project/TASK_RUNTIME_LEGACY_COMPATIBILITY_PROFILE_CLAUDE_CODE_PROMPT|Prompt for Cursor / Claude Code]].
 
 ## 1. Цель
 

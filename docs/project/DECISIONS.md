@@ -4516,3 +4516,22 @@ preflight → отдельное PostgreSQL-разрешение → local rehea
 
 Архитектурная приёмка не разрешает backend implementation, PostgreSQL, Alembic,
 application tests, stage, commit или push.
+
+### RUNTIME-COMPAT-1 implementation plan checkpoint
+
+Дата: 2026-07-30
+
+Статус: **PLAN AND PROMPT ACCEPTED / IMPLEMENTATION NOT STARTED**
+
+Приняты:
+
+- [[docs/project/TASK_RUNTIME_LEGACY_COMPATIBILITY_PROFILE_IMPLEMENTATION_PLAN|RUNTIME-COMPAT-1 Implementation Plan]];
+- [[docs/project/TASK_RUNTIME_LEGACY_COMPATIBILITY_PROFILE_CLAUDE_CODE_PROMPT|Prompt for Cursor / Claude Code]].
+
+План фиксирует task-by-task TDD, физическую изоляцию `LegacyBase.metadata`,
+fail-closed application composition, read-only preflight contracts и полный
+pure verification gate без PostgreSQL и Alembic CLI.
+
+Эта приёмка не разрешает реализацию, PostgreSQL, Alembic, application tests,
+stage, commit или push. Для каждого следующего действия сохраняются отдельные
+разрешения владельца.
