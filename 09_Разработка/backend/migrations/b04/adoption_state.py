@@ -5,11 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 import hashlib
+import json
 from pathlib import Path
 import re
 
 from migrations.b04.disposable import DatabaseIdentity
 from migrations.b04.manifest import canonical_json_bytes
+from migrations.b04.restore_evidence import resolve_restore_authorizing_evidence
 from migrations.b04.source_contract import (
     BASELINE_REVISION,
     HISTORICAL_HEAD,
@@ -106,6 +108,29 @@ MANDATORY_VERIFICATION_RESULTS = (
 )
 
 _ADOPTION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
+_ARTIFACT_ROOT = (
+    Path(__file__).parents[1]
+    / "baselines"
+    / "canonical_baseline_v1"
+)
+
+
+def _restore_authorizing_digest() -> str:
+    try:
+        live_index = json.loads(
+            (_ARTIFACT_ROOT / "evidence-index.json").read_bytes()
+        )
+        restore_index = json.loads(
+            (_ARTIFACT_ROOT / "restore-evidence-index.json").read_bytes()
+        )
+        resolved = resolve_restore_authorizing_evidence(
+            restore_index,
+            _ARTIFACT_ROOT,
+            live_index,
+        )
+        return resolved.artifact_sha256["expected-fingerprint.json"]
+    except (OSError, KeyError, TypeError, ValueError):
+        raise PreparedEvidenceError("B04-PREPARED") from None
 
 
 class PreparedEvidenceError(ValueError):
@@ -120,6 +145,9 @@ def validate_prepared_evidence(evidence: PreparedEvidence) -> None:
         result_keys = tuple(key for key, _ in results)
     except (TypeError, ValueError):
         raise PreparedEvidenceError("B04-PREPARED") from None
+    observed_digest = evidence.observed_fingerprint_sha256
+    if observed_digest is not None and observed_digest != _restore_authorizing_digest():
+        raise PreparedEvidenceError("B04-PREPARED")
     if (
         not isinstance(evidence.adoption_id, str)
         or _ADOPTION_ID.fullmatch(evidence.adoption_id) is None
@@ -173,6 +201,7 @@ class PreparedEvidence:
     server_version_num: int
     prepared_at_utc: str
     verification_results: VerificationResults
+    observed_fingerprint_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

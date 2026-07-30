@@ -105,6 +105,7 @@ class PreflightConfig:
     max_transaction_seconds: int
     prepared_at_utc: str
     fingerprint_extractor: FingerprintExtractor
+    fingerprint_profile: str = "live"
 
 
 _SHA40 = re.compile(r"[0-9a-f]{40}\Z")
@@ -218,7 +219,9 @@ def verify_backup_manifest(path: Path) -> BackupEvidence:
     )
 
 
-def _load_active_evidence(config: PreflightConfig) -> Mapping[str, object]:
+def _load_active_evidence(
+    config: PreflightConfig,
+) -> tuple[Mapping[str, object], str]:
     if (
         config.live_evidence_index_path
         != config.artifact_root / "evidence-index.json"
@@ -234,7 +237,7 @@ def _load_active_evidence(config: PreflightConfig) -> Mapping[str, object]:
             config.restore_evidence_index_path, "EVIDENCE"
         )
         live = resolve_authorizing_evidence(live_index, config.artifact_root)
-        resolve_restore_authorizing_evidence(
+        restore = resolve_restore_authorizing_evidence(
             restore_index,
             config.artifact_root,
             live_index,
@@ -252,7 +255,13 @@ def _load_active_evidence(config: PreflightConfig) -> Mapping[str, object]:
         != config.expected_fingerprint_sha256
     ):
         _fail("DIGEST")
-    return live_contract
+    if config.fingerprint_profile == "live":
+        observed_digest = config.expected_fingerprint_sha256
+    elif config.fingerprint_profile == "restored_rehearsal":
+        observed_digest = restore.artifact_sha256["expected-fingerprint.json"]
+    else:
+        _fail("EVIDENCE")
+    return live_contract, observed_digest
 
 
 def _verify_repository_digests(
@@ -391,7 +400,7 @@ def run_preflight(connection: Any, config: PreflightConfig) -> PreparedEvidence:
 
     _verify_operational_evidence(config)
     backup = verify_backup_manifest(config.backup_manifest_path)
-    live_contract = _load_active_evidence(config)
+    live_contract, expected_observed_fingerprint = _load_active_evidence(config)
     _verify_repository_digests(config, live_contract)
     observed_identity, server_version_num = _identity(connection, config)
     if backup.restored_server_version_num != server_version_num:
@@ -406,7 +415,7 @@ def run_preflight(connection: Any, config: PreflightConfig) -> PreparedEvidence:
         observed_digest = fingerprint_digest(observed_fingerprint)
     except Exception:
         _fail("FINGERPRINT")
-    if observed_digest != config.expected_fingerprint_sha256:
+    if observed_digest != expected_observed_fingerprint:
         _fail("FINGERPRINT")
 
     return PreparedEvidence(
@@ -433,5 +442,10 @@ def run_preflight(connection: Any, config: PreflightConfig) -> PreparedEvidence:
         prepared_at_utc=config.prepared_at_utc,
         verification_results=tuple(
             (key, True) for key in MANDATORY_VERIFICATION_RESULTS
+        ),
+        observed_fingerprint_sha256=(
+            expected_observed_fingerprint
+            if config.fingerprint_profile == "restored_rehearsal"
+            else None
         ),
     )

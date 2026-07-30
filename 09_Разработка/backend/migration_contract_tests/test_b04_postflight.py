@@ -48,6 +48,15 @@ ACCEPTED_FINGERPRINT = json.loads(ACCEPTED_FINGERPRINT_PATH.read_bytes())
 ACCEPTED_FINGERPRINT_DIGEST = hashlib.sha256(
     ACCEPTED_FINGERPRINT_PATH.read_bytes()
 ).hexdigest()
+RESTORE_FINGERPRINT_PATH = (
+    ACCEPTED_FINGERPRINT_PATH.parent
+    / "restore-roundtrip-v1"
+    / "expected-fingerprint.json"
+)
+RESTORE_FINGERPRINT = json.loads(RESTORE_FINGERPRINT_PATH.read_bytes())
+RESTORE_FINGERPRINT_DIGEST = hashlib.sha256(
+    RESTORE_FINGERPRINT_PATH.read_bytes()
+).hexdigest()
 POSTFLIGHT_RESULT_KEYS = (
     "postflight_public_marker_verified",
     "postflight_historical_marker_absent",
@@ -143,6 +152,10 @@ def _fingerprint(_: _Connection) -> dict[str, object]:
     return ACCEPTED_FINGERPRINT
 
 
+def _restore_fingerprint(_: _Connection) -> dict[str, object]:
+    return RESTORE_FINGERPRINT
+
+
 @contextmanager
 def _external_report_directory() -> Any:
     with TemporaryDirectory(prefix="b04-postflight-") as raw_directory:
@@ -197,6 +210,29 @@ def test_b04b_postflight_001_success_stays_unverified_until_owner_signing(
     assert "db.internal.example" not in canonical_report_bytes(report).decode("utf-8")
     assert "maintenance_operator" not in canonical_report_bytes(report).decode("utf-8")
     assert fingerprint == ACCEPTED_FINGERPRINT
+
+
+def test_b04b_postflight_001a_restored_profile_verifies_restore_digest(
+) -> None:
+    connection = _Connection()
+    evidence = replace(
+        _prepared(),
+        fingerprint_sha256=ACCEPTED_FINGERPRINT_DIGEST,
+        observed_fingerprint_sha256=RESTORE_FINGERPRINT_DIGEST,
+    )
+
+    with _external_report_directory() as report_directory:
+        report = run_postflight(
+            lambda: _ConnectionContext(connection),
+            evidence,
+            fingerprint_extractor=_restore_fingerprint,
+            alembic_runner=lambda _command: True,
+            read_only_smoke=lambda _connection: True,
+            completed_at_utc="2026-07-29T10:05:00Z",
+            report_directory=report_directory,
+        )
+
+    assert report.verification_results[-1] == ("postflight_verified", True)
 
 
 def test_b04b_postflight_002_failed_postcommit_marker_check_never_retries_transfer(

@@ -40,6 +40,12 @@ RESTORE_INDEX = ARTIFACT_ROOT / "restore-evidence-index.json"
 FROZEN_MANIFEST = ARTIFACT_ROOT / "frozen-revision-manifest.json"
 SEED_MANIFEST = ARTIFACT_ROOT / "seed-manifest.json"
 LIVE_FINGERPRINT = ARTIFACT_ROOT / "postgresql-18" / "expected-fingerprint.json"
+RESTORE_FINGERPRINT = (
+    ARTIFACT_ROOT
+    / "postgresql-18"
+    / "restore-roundtrip-v1"
+    / "expected-fingerprint.json"
+)
 class _Result:
     def __init__(
         self,
@@ -208,6 +214,23 @@ def test_b04b_preflight_001_backup_manifest_verifies_custom_backup_and_restore(
     assert evidence.backup_sha256 == _sha(evidence.backup_path)
     assert evidence.pg_dump_version == "pg_dump (PostgreSQL) 18.3"
     assert evidence.restored_server_version_num == 180003
+
+
+def test_b04b_preflight_001a_restored_profile_uses_only_authorized_restore_digest(
+    tmp_path: Path,
+) -> None:
+    config = replace(
+        _config(tmp_path),
+        fingerprint_profile="restored_rehearsal",
+        fingerprint_extractor=lambda _connection: json.loads(
+            RESTORE_FINGERPRINT.read_bytes()
+        ),
+    )
+
+    evidence = run_preflight(_Connection(), config)
+
+    assert evidence.fingerprint_sha256 == _sha(LIVE_FINGERPRINT)
+    assert evidence.observed_fingerprint_sha256 == _sha(RESTORE_FINGERPRINT)
 
 
 @pytest.mark.parametrize(

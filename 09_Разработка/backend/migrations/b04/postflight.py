@@ -145,7 +145,11 @@ def _verify_fingerprint(
         observed_digest = fingerprint_digest(fingerprint_extractor(connection))
     except Exception as exc:
         raise PostflightError("B04-POSTFLIGHT-FINGERPRINT") from exc
-    if observed_digest != evidence.fingerprint_sha256:
+    expected = (
+        evidence.observed_fingerprint_sha256
+        or evidence.fingerprint_sha256
+    )
+    if observed_digest != expected:
         _fail("FINGERPRINT")
 
 

@@ -150,7 +150,11 @@ def _recheck_fingerprint(connection: Connection, evidence: PreparedEvidence) -> 
         actual = fingerprint_digest(extract_fingerprint(connection))
     except Exception as exc:
         raise MarkerTransferError("B04-ADOPT-FINGERPRINT") from exc
-    if actual != evidence.fingerprint_sha256:
+    expected = (
+        evidence.observed_fingerprint_sha256
+        or evidence.fingerprint_sha256
+    )
+    if actual != expected:
         _fail("FINGERPRINT")
 
 

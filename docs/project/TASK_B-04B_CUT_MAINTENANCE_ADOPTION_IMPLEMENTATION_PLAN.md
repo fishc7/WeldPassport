@@ -408,6 +408,18 @@ Do not commit without separate confirmation.
 
 ### Task 6: Restored-backup rehearsal
 
+> **Scope amendment accepted 2026-07-30.** Pure rehearsal tooling and the
+> isolated PostgreSQL rehearsal are separate gates. The pure stage implements a
+> fail-closed orchestration kernel with injected DB/process/file adapters and
+> must not connect to PostgreSQL or invoke `pg_restore`. `PreparedEvidence`
+> retains the live `active_authorizing` digest as its trust anchor; a restored
+> rehearsal additionally carries an observed fingerprint digest that must
+> resolve exactly to the physical `active_restore_authorizing` B-04R artifact
+> before any marker SQL. Preflight, marker transfer and postflight compare a
+> restored DB only with that bound restore digest. Standalone module invocation
+> without the operator-approved adapters fails closed. No isolated DB run is
+> authorized by acceptance of the pure tooling.
+
 **Files:**
 
 - Create: `09_Разработка/backend/migrations/b04/rehearse_adoption.py`

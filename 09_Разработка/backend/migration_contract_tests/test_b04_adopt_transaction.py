@@ -32,6 +32,12 @@ ARTIFACT_ROOT = (
 ACCEPTED_FINGERPRINT = (
     ARTIFACT_ROOT / "postgresql-18" / "expected-fingerprint.json"
 )
+RESTORE_FINGERPRINT = (
+    ARTIFACT_ROOT
+    / "postgresql-18"
+    / "restore-roundtrip-v1"
+    / "expected-fingerprint.json"
+)
 CREATE_PUBLIC_MARKER = """CREATE TABLE public.alembic_version (
     version_num VARCHAR(32) NOT NULL,
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
@@ -225,6 +231,11 @@ def _different_fingerprint(connection: _RecordingConnection) -> dict[str, object
     return value
 
 
+def _restore_fingerprint(connection: _RecordingConnection) -> dict[str, object]:
+    connection.record_fingerprint()
+    return json.loads(RESTORE_FINGERPRINT.read_bytes())
+
+
 def test_b04b_adopt_001_transfers_only_in_the_required_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -247,6 +258,39 @@ def test_b04b_adopt_001_transfers_only_in_the_required_order(
     connection.commit()
 
     assert connection.operations == [*_expected_operations(), "caller commit"]
+
+
+def test_b04b_adopt_001a_restored_profile_keeps_live_trust_and_checks_restore_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = _RecordingConnection()
+    monkeypatch.setattr(
+        "migrations.b04.adopt.extract_fingerprint",
+        _restore_fingerprint,
+    )
+    evidence = replace(
+        _prepared(),
+        observed_fingerprint_sha256=hashlib.sha256(
+            RESTORE_FINGERPRINT.read_bytes()
+        ).hexdigest(),
+    )
+
+    result = transfer_marker(connection, evidence)
+
+    assert result.fingerprint_sha256 == evidence.fingerprint_sha256
+    assert connection.operations == _expected_operations()
+
+
+def test_b04b_adopt_001b_rejects_unbound_restore_digest_before_sql() -> None:
+    connection = _RecordingConnection()
+
+    with pytest.raises(MarkerTransferError, match="B04-ADOPT-PREPARED"):
+        transfer_marker(
+            connection,
+            replace(_prepared(), observed_fingerprint_sha256="0" * 64),
+        )
+
+    assert connection.operations == []
 
 
 @pytest.mark.parametrize("fail_at", range(len(_expected_operations())))

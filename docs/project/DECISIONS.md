@@ -4372,3 +4372,26 @@ READ-ONLY review на этом HEAD подтвердил:
 Он не разрешает repository cut, marker transfer, production adoption, DB run,
 commit или push. Migration freeze остаётся active; последующие gates B-04B
 принимаются отдельно.
+
+### B-04B-6 pure rehearsal tooling boundary
+
+Дата: 2026-07-30
+
+Статус: **ARCHITECTURE ACCEPTED / PURE IMPLEMENTATION CHECKPOINT**
+
+B-04B-6 разделён на два независимых gate:
+
+1. pure rehearsal tooling без PostgreSQL и `pg_restore`;
+2. отдельно разрешаемый isolated DB rehearsal.
+
+Pure tooling реализует fail-closed orchestration с внедряемыми
+DB/process/file-adapters. Live `active_authorizing` fingerprint остаётся trust
+anchor `PreparedEvidence`. Для restored rehearsal отдельно фиксируется observed
+fingerprint, который до первого marker SQL обязан точно совпасть с физически
+проверенным `active_restore_authorizing` B-04R artifact. Произвольный digest,
+normalization, wildcard и подмена live/restore evidence запрещены.
+
+Standalone invocation без operator-approved adapters завершается
+`B04B-REHEARSAL-ADAPTERS-REQUIRED`. Приёмка pure tooling не разрешает создание,
+очистку, restore, подключение или изменение какой-либо PostgreSQL-БД и не
+разрешает переход к production maintenance adoption.
