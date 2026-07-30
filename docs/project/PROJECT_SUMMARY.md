@@ -165,6 +165,15 @@ WeldPassport — внутренняя система для отдела гла�
   ADR-019/021/022 в реализации не используется — см. ADR-023, раздел «Терминология»).
   **Остаток блока 9D-4** (`ProductionHold`/`ProductionHoldRelease`) и блоки **9D-5 — 9D-8** —
   **planned / not implemented**.
+- **TEST-DB Foundation и Runtime Compatibility Profile приняты 2026-07-30.**
+  PostgreSQL 18.3 run `9e6c9986-c80d-4fee-81af-13cf9d906194` завершён
+  `TEST_DB_F2_REHEARSAL_VERIFIED`; final manifest SHA-256
+  `5da388a47e7bbac7d56a0104d6bf3b6ce61128292976596f667bb4d78d8ea0ed`.
+  Отдельная owner signature `TEST_DB_F2_ACCEPTED` создана
+  `2026-07-30T07:17:11.636887Z`; acceptance SHA-256
+  `224974992524dc53cd8bd06b6a602ab83e76e9e6d97fb4f6d54ff687f2cab009`.
+  Следующий prerequisite для Task 9D-4A-5A —
+  `AUTHENTICATION_BOUNDARY_ACCEPTED`.
 - **Инженерный контур реализован** (Tasks 1–7):
   `Project → Line → EngineeringDocument → DocumentRevision → Joint` (ADR-010/011).
 - **WeldOperation реализован** — Tasks **8A — 8E** (ADR-012, импорт — ADR-013).

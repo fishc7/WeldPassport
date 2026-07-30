@@ -1424,7 +1424,8 @@ TEST-DB-F1 Pure Foundation Core реализован 2026-07-30 со стату�
 application tests не запускались.
 Runtime Compatibility Profile и isolated TEST-DB-F2 остаются отдельными gates.
 Local rehearsal выполнен 2026-07-30 на PostgreSQL 18.3 и получил machine status
-`TEST_DB_F2_REHEARSAL_VERIFIED`; отдельная owner acceptance ещё не зафиксирована.
+`TEST_DB_F2_REHEARSAL_VERIFIED`. Owner acceptance `TEST_DB_F2_ACCEPTED`
+зафиксирована 2026-07-30T07:17:11.636887Z и привязана к exact final manifest.
 
 Детальная архитектура локального isolated rehearsal принята в
 [[docs/project/ADR-033-test-db-f2-local-rehearsal|ADR-033]].
@@ -1441,11 +1442,14 @@ Coordinator сначала pure-валидирует все targets, затем 
 legacy-compatible и legacy-negative roles на source
 `8148794495310ff2f7eed37948da3c64e08d1b23`; manifest SHA-256 —
 `5da388a47e7bbac7d56a0104d6bf3b6ce61128292976596f667bb4d78d8ea0ed`.
-Machine status
-`TEST_DB_F2_REHEARSAL_VERIFIED` не является приёмкой; только отдельная подпись
-владельца `TEST_DB_F2_ACCEPTED` переводит Foundation и Runtime Compatibility
-Profile в `ACCEPTED`. CI create/drop остаётся отдельным будущим
-`TEST-DB-F2-CI-BINDING`.
+Machine status `TEST_DB_F2_REHEARSAL_VERIFIED` сам по себе не является
+приёмкой. Отдельная create-exclusive подпись владельца
+`TEST_DB_F2_ACCEPTED` создана для manifest
+`5da388a47e7bbac7d56a0104d6bf3b6ce61128292976596f667bb4d78d8ea0ed`;
+acceptance SHA-256 —
+`224974992524dc53cd8bd06b6a602ab83e76e9e6d97fb4f6d54ff687f2cab009`.
+TEST-DB Foundation и Runtime Compatibility Profile переведены в `ACCEPTED`.
+CI create/drop остаётся отдельным будущим `TEST-DB-F2-CI-BINDING`.
 
 ## 16. Статус backend-кода (обновлено 2026-07-06)
 

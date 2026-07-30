@@ -4731,3 +4731,28 @@ credential patterns в evidence и сохранность трёх ownership-mar
 Machine verification не переводит TEST-DB Foundation и Runtime Compatibility
 Profile в `ACCEPTED`. Следующий отдельный gate — подпись владельца
 `TEST_DB_F2_ACCEPTED`.
+
+### TEST-DB-F2 owner acceptance checkpoint
+
+Дата: 2026-07-30
+
+Статус: **TEST_DB_F2_ACCEPTED**
+
+Владелец отдельно разрешил переход к owner-acceptance gate после получения и
+read-only проверки `TEST_DB_F2_REHEARSAL_VERIFIED`. Create-exclusive artifact
+`TEST_DB_F2_ACCEPTED` создан вне repository/worktrees и связан с exact final
+manifest:
+
+- accepted at UTC: `2026-07-30T07:17:11.636887Z`;
+- accepted by: `repository_owner`;
+- run id: `9e6c9986-c80d-4fee-81af-13cf9d906194`;
+- source SHA: `8148794495310ff2f7eed37948da3c64e08d1b23`;
+- manifest SHA-256:
+  `5da388a47e7bbac7d56a0104d6bf3b6ce61128292976596f667bb4d78d8ea0ed`;
+- owner acceptance SHA-256:
+  `224974992524dc53cd8bd06b6a602ab83e76e9e6d97fb4f6d54ff687f2cab009`.
+
+TEST-DB Foundation и Runtime Compatibility Profile переведены в `ACCEPTED`.
+Acceptance не разрешает удаление сохранённых rehearsal DB и не закрывает
+`AUTHENTICATION_BOUNDARY_ACCEPTED`. Поэтому Task 9D-4A-5A остаётся
+`blocked_by_authentication`.

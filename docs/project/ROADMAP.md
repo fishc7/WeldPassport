@@ -84,12 +84,18 @@ active Alembic graph имеет один head `canonical_baseline_v1`, productio
   `8148794495310ff2f7eed37948da3c64e08d1b23`, manifest SHA-256
   `5da388a47e7bbac7d56a0104d6bf3b6ce61128292976596f667bb4d78d8ea0ed`;
   canonical, legacy-compatible и legacy-negative roles verified, final pure
-  suite `825 passed, 3 skipped`; отдельная owner acceptance ещё не зафиксирована;
+  suite `825 passed, 3 skipped`;
+- owner acceptance `TEST_DB_F2_ACCEPTED` зафиксирована
+  `2026-07-30T07:17:11.636887Z`; acceptance SHA-256
+  `224974992524dc53cd8bd06b6a602ab83e76e9e6d97fb4f6d54ff687f2cab009`;
+  TEST-DB Foundation и Runtime Compatibility Profile закрыты;
 - следующий execution order:
   `RUNTIME-COMPAT-1 → TEST-DB-F2-PURE-RUNNER → operator preflight READY →
-  local PostgreSQL rehearsal VERIFIED → evidence review → owner acceptance`;
-- после приёмки TEST-DB Foundation и Runtime Compatibility Profile выполняется
-  Task 9D-4A-5A, затем оставшийся Quality-контур.
+  local PostgreSQL rehearsal VERIFIED → evidence review → owner acceptance
+  ACCEPTED`;
+- следующий незакрытый prerequisite — `AUTHENTICATION_BOUNDARY_ACCEPTED`;
+  только после него может стартовать Task 9D-4A-5A, затем оставшийся
+  Quality-контур.
 
 ### 1. Test DB Safety Interlock — завершён
 

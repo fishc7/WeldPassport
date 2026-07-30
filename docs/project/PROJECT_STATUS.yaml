@@ -1,5 +1,5 @@
 project: WeldPassport
-current_stage: b04b_ready_for_task_1
+current_stage: test_db_f2_accepted_authentication_pending
 current_branch: codex/b04b-maintenance-readiness-review
 updated_at: 2026-07-30
 
@@ -8,8 +8,8 @@ updated_at: 2026-07-30
 
 summary:
   total_progress: 78
-  current_focus: "B-04 closure accepted; TEST-DB Foundation + Runtime Compatibility Profile"
-  next_action: "Спроектировать и отдельно принять TEST-DB Foundation и Runtime Compatibility Profile; затем Task 9D-4A-5A"
+  current_focus: "TEST-DB Foundation + Runtime Compatibility Profile accepted"
+  next_action: "Закрыть AUTHENTICATION_BOUNDARY_ACCEPTED; затем Task 9D-4A-5A"
 
 modules:
   - code: constitution
@@ -36,6 +36,24 @@ modules:
     branch: codex/test-db-safety
     visible: true
     note: "ADR-029, commit 2046384: guard до PostgreSQL/Alembic; focused 10 passed, migration contracts 45 passed. Полный TEST-DB Foundation остаётся после B-04."
+
+  - code: test_db_foundation
+    name: "Isolated PostgreSQL Test Database Foundation"
+    owner: "Архитектура / тестовая инфраструктура"
+    status: done_test_db_f2_accepted
+    progress: 100
+    branch: codex/b04b-maintenance-readiness-review
+    visible: true
+    note: "TEST_DB_F2_ACCEPTED 2026-07-30T07:17:11.636887Z; PostgreSQL 18.3 run 9e6c9986-c80d-4fee-81af-13cf9d906194; manifest SHA 5da388a47e7bbac7d56a0104d6bf3b6ce61128292976596f667bb4d78d8ea0ed; acceptance SHA 224974992524dc53cd8bd06b6a602ab83e76e9e6d97fb4f6d54ff687f2cab009."
+
+  - code: runtime_legacy_compatibility
+    name: "Canonical/Legacy Runtime Compatibility Profile"
+    owner: "Архитектура / backend"
+    status: done_test_db_f2_accepted
+    progress: 100
+    branch: codex/b04b-maintenance-readiness-review
+    visible: true
+    note: "Canonical, legacy-compatible и fail-closed legacy-negative roles verified и приняты через TEST_DB_F2_ACCEPTED."
 
   - code: canonical_baseline_b04a
     name: "B-04A → PostgreSQL 16 historical verification"
