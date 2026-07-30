@@ -9,8 +9,8 @@ from pathlib import Path
 
 VERSIONS_DIR = Path(__file__).resolve().parents[1] / "migrations" / "versions"
 EXPECTED_ROOT = "canonical_baseline_v1"
-EXPECTED_HEAD = "canonical_baseline_v1"
-EXPECTED_REVISION_COUNT = 1
+EXPECTED_HEAD = "20260730_28_identity"
+EXPECTED_REVISION_COUNT = 2
 
 
 @dataclass(frozen=True)

@@ -30,7 +30,7 @@ def test_runtime_marker_001_resolves_single_active_head_independent_of_cwd(
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
-    assert resolve_active_alembic_head() == "canonical_baseline_v1"
+    assert resolve_active_alembic_head() == "20260730_28_identity"
 
 
 @pytest.mark.parametrize("heads", [(), ("head_a", "head_b")])

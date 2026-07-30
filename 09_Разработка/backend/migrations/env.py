@@ -54,7 +54,7 @@ def run_migrations_online() -> None:
         cursor = dbapi_connection.cursor()
         cursor.execute(
             f'SET search_path TO "{settings.postgres_schema}", '
-            "project, engineering, hr, welding, quality, public"
+            "identity, project, engineering, hr, welding, quality, public"
         )
         cursor.close()
 

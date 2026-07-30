@@ -19,8 +19,7 @@ engine = create_engine(
 def _set_search_path(dbapi_connection, _record):
     cursor = dbapi_connection.cursor()
     cursor.execute(
-        f'SET search_path TO "{SCHEMA}", project, engineering, hr, welding, '
-        "quality, public"
+        f'SET search_path TO "{SCHEMA}", identity, project, engineering, hr, welding, quality, public'
     )
     cursor.close()
 
