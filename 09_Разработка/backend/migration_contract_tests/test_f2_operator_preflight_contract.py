@@ -9,6 +9,7 @@ from app.testing.f2_operator_preflight import (
     OperatorSourceState,
     SubprocessOperatorSourceInspector,
     load_operator_preflight_inputs,
+    resolve_repository_boundary,
     validate_operator_source,
 )
 
@@ -183,3 +184,20 @@ def test_f2_operator_contract_005_git_inspector_uses_exact_safe_commands(
     ]
     assert all(call[1]["shell"] is False for call in calls)
     assert all("SECRET_SENTINEL" not in call[1]["env"] for call in calls)
+
+
+def test_f2_operator_contract_006_resolves_common_repository_from_gitfile(
+    tmp_path: Path,
+) -> None:
+    common_root = tmp_path / "repository"
+    common_git = common_root / ".git"
+    worktree_root = common_root / ".worktrees" / "feature"
+    worktree_git = common_git / "worktrees" / "feature"
+    worktree_git.mkdir(parents=True)
+    worktree_root.mkdir(parents=True)
+    (worktree_root / ".git").write_text(
+        f"gitdir: {worktree_git}\n",
+        encoding="utf-8",
+    )
+
+    assert resolve_repository_boundary(worktree_root) == common_root.resolve()

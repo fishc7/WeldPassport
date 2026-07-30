@@ -118,6 +118,43 @@ def validate_operator_source(
         raise _source_error()
 
 
+def resolve_repository_boundary(worktree_root: Path) -> Path:
+    try:
+        resolved_worktree = worktree_root.resolve(strict=True)
+        marker = resolved_worktree / ".git"
+        if marker.is_dir():
+            return resolved_worktree
+        if not marker.is_file():
+            raise _source_error()
+        prefix, separator, raw_path = marker.read_text(
+            encoding="utf-8"
+        ).strip().partition(":")
+        if prefix.casefold() != "gitdir" or not separator or not raw_path.strip():
+            raise _source_error()
+        git_directory = Path(raw_path.strip())
+        if not git_directory.is_absolute():
+            git_directory = resolved_worktree / git_directory
+        resolved_git_directory = git_directory.resolve(strict=True)
+        common_git = next(
+            (
+                candidate
+                for candidate in (
+                    resolved_git_directory,
+                    *resolved_git_directory.parents,
+                )
+                if candidate.name == ".git" and candidate.is_dir()
+            ),
+            None,
+        )
+        if common_git is None:
+            raise _source_error()
+        return common_git.parent.resolve(strict=True)
+    except F2Error:
+        raise
+    except (OSError, UnicodeError):
+        raise _source_error() from None
+
+
 @dataclass(frozen=True)
 class SubprocessOperatorSourceInspector:
     repository_root: Path
@@ -242,6 +279,7 @@ def run_operator_preflight(
     )
     try:
         inputs = load_operator_preflight_inputs(environment)
+        repository_boundary = resolve_repository_boundary(repository_root)
         source = deps.source_inspector.read_state(
             F2_OPERATOR_PREFLIGHT_PREREQUISITES
         )
@@ -258,7 +296,7 @@ def run_operator_preflight(
         targets = authorize_offline_targets(inputs)
         evidence_root = validate_external_evidence_root(
             inputs.evidence_root,
-            repository_root,
+            repository_boundary,
         )
     except Exception:
         return _result(F2OperatorPreflightStatus.FAILED)
