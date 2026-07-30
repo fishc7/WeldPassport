@@ -57,9 +57,16 @@ active Alembic graph имеет один head `canonical_baseline_v1`, productio
   `405e82ae709b2cc051c25ad3bd139614f53996a2bcfcad1d50f6f11560fc2403`;
 - owner acceptance SHA-256:
   `c257b1b4736ac53be731d7de8369d45808cd4eeba1af569534272a3a4dca3b56`;
-- следующий этап требует отдельных Specification/Decision для TEST-DB Foundation
-  и Runtime Compatibility Profile;
-- после их приёмки выполняется Task 9D-4A-5A, затем оставшийся Quality-контур.
+- TEST-DB-F1 pure core реализован и зафиксирован commit `20c7ea7`;
+- Runtime Compatibility Profile спроектирован, `RUNTIME-COMPAT-1` ещё не
+  реализован;
+- local TEST-DB-F2 architecture принята в
+  [[docs/project/ADR-033-test-db-f2-local-rehearsal|ADR-033]];
+- следующий execution order:
+  `RUNTIME-COMPAT-1 → TEST-DB-F2-PURE-RUNNER → operator preflight → отдельно
+  разрешённый local PostgreSQL rehearsal → evidence review → owner acceptance`;
+- после приёмки TEST-DB Foundation и Runtime Compatibility Profile выполняется
+  Task 9D-4A-5A, затем оставшийся Quality-контур.
 
 ### 1. Test DB Safety Interlock — завершён
 

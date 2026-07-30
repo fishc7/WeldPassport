@@ -1425,6 +1425,22 @@ application tests не запускались.
 Runtime Compatibility Profile и isolated TEST-DB-F2 acceptance остаются
 отдельными следующими gates.
 
+Детальная архитектура локального isolated rehearsal принята в
+[[docs/project/ADR-033-test-db-f2-local-rehearsal|ADR-033]].
+`TEST-DB-F2-LOCAL-REHEARSAL` использует три заранее созданные owned disposable
+PostgreSQL 18.3 DB: `canonical`, `legacy_compatible` и `legacy_negative`.
+Coordinator сначала pure-валидирует все targets, затем последовательно запускает
+три свежих bind-once worker-процесса. Local runner не создаёт и не удаляет DB,
+не меняет ownership markers и сохраняет все targets после успеха или ошибки.
+
+Operational gate заблокирован до принятой реализации `RUNTIME-COMPAT-1` и pure
+`TEST-DB-F2-PURE-RUNNER`. Worker evidence публикуется create-exclusive во внешнем
+append-only каталоге без DSN и connection coordinates. Machine status
+`TEST_DB_F2_REHEARSAL_VERIFIED` не является приёмкой; только отдельная подпись
+владельца `TEST_DB_F2_ACCEPTED` переводит Foundation и Runtime Compatibility
+Profile в `ACCEPTED`. CI create/drop остаётся отдельным будущим
+`TEST-DB-F2-CI-BINDING`.
+
 ## 16. Статус backend-кода (обновлено 2026-07-06)
 
 `09_Разработка/backend` — основная архитектурная база MVP.

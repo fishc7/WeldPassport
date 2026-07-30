@@ -4481,3 +4481,38 @@ compile и `git diff --check` успешны.
 PostgreSQL, application tests, `upgrade`/`stamp`, CI create/drop и isolated
 acceptance не выполнялись. Это не закрывает TEST-DB-F2 и не переводит Foundation
 в `ACCEPTED`. Stage, commit и push не выполнялись.
+
+---
+
+## ADR-033. TEST-DB-F2 Local Isolated PostgreSQL Rehearsal
+
+Дата: 2026-07-30
+
+Статус: **ACCEPTED**
+
+Полный текст:
+[[docs/project/ADR-033-test-db-f2-local-rehearsal|ADR-033 — TEST-DB-F2 Local Isolated PostgreSQL Rehearsal]].
+
+Принят local operator-run вариант TEST-DB-F2. Каждый run использует три новые
+заранее созданные owned disposable PostgreSQL 18.3 DB: canonical,
+legacy-compatible и controlled negative legacy. Coordinator pure-проверяет все
+targets до первого соединения и последовательно запускает три независимых
+bind-once worker-процесса.
+
+Runner не создаёт и не удаляет DB, не меняет ownership markers и сохраняет все
+три DB после любого результата. Повторный run требует новую полную тройку.
+Evidence публикуется create-exclusive во внешнем append-only каталоге и не
+содержит DSN, connection coordinates, database names или ownership tokens.
+
+Machine result `TEST_DB_F2_REHEARSAL_VERIFIED` не является приёмкой. Только
+отдельная owner signature `TEST_DB_F2_ACCEPTED`, привязанная к exact manifest
+digest, может перевести Foundation и Runtime Compatibility Profile в
+`ACCEPTED`.
+
+Execution order:
+`RUNTIME-COMPAT-1 → TEST-DB-F2-PURE-RUNNER → review/remediation → operator
+preflight → отдельное PostgreSQL-разрешение → local rehearsal → evidence review
+→ owner acceptance`.
+
+Архитектурная приёмка не разрешает backend implementation, PostgreSQL, Alembic,
+application tests, stage, commit или push.
