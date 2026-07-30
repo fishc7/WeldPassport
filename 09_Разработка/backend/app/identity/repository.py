@@ -51,6 +51,9 @@ class IdentityRepository:
         )
         return self.db.scalars(statement).first()
 
+    def add_account(self, account: UserAccount) -> None:
+        self.db.add(account)
+
     def add_session(self, session: IdentitySession) -> None:
         self.db.add(session)
 

@@ -21,6 +21,11 @@ from app.shared.orm import Base
 IDENTITY_SCHEMA = "identity"
 
 _EVENT_TYPES = (
+    "ACCOUNT_CREATED",
+    "WORKER_BOUND",
+    "ACCOUNT_DISABLED",
+    "ACCOUNT_UNLOCKED",
+    "TEMPORARY_PASSWORD_SET",
     "LOGIN_SUCCEEDED",
     "LOGIN_FAILED",
     "ACCOUNT_LOCKED",

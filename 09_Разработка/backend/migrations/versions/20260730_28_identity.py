@@ -191,7 +191,9 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "event_type IN "
-            "('LOGIN_SUCCEEDED','LOGIN_FAILED','ACCOUNT_LOCKED',"
+            "('ACCOUNT_CREATED','WORKER_BOUND','ACCOUNT_DISABLED',"
+            "'ACCOUNT_UNLOCKED','TEMPORARY_PASSWORD_SET',"
+            "'LOGIN_SUCCEEDED','LOGIN_FAILED','ACCOUNT_LOCKED',"
             "'PASSWORD_CHANGED','LOGOUT','SESSION_REVOKED','SESSIONS_REVOKED')",
             name="ck_identity_authentication_events_type",
         ),
