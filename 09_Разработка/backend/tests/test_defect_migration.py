@@ -7,8 +7,10 @@ head, чтобы не сломать остальную сессию тесто�
 
 from __future__ import annotations
 
+import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from alembic.util import CommandError
 from sqlalchemy import text
 
 from app.quality.defect_seed import (
@@ -17,8 +19,8 @@ from app.quality.defect_seed import (
 )
 from app.shared.db import SessionLocal
 
-REVISION = "20260720_21_defect_model"
-DOWN_REVISION = "20260719_20_eng_evaluation_core"
+ACTIVE_REVISION = "canonical_baseline_v1"
+ARCHIVED_REVISION = "20260720_21_defect_model"
 QUALITY = "quality"
 
 DEFECT_TABLES = (
@@ -59,9 +61,12 @@ def test_single_head():
     assert len(_script().get_heads()) == 1
 
 
-def test_linear_down_revision():
-    rev = _script().get_revision(REVISION)
-    assert rev.down_revision == DOWN_REVISION
+def test_active_graph_uses_canonical_baseline_and_hides_archived_revision():
+    script = _script()
+
+    assert script.get_heads() == [ACTIVE_REVISION]
+    with pytest.raises(CommandError, match="Can't locate revision"):
+        script.get_revision(ARCHIVED_REVISION)
 
 
 # ── Таблицы / CHECK / индексы / FK ─────────────────────────────────────────────
@@ -300,24 +305,24 @@ def test_seed_idempotent_on_conflict():
     assert after_locs == len(DEFECT_LOCATION_TYPE_SEED)
 
 
-# ── Round-trip downgrade → upgrade (в конце; восстанавливает head) ─────────────
+# ── Повторный upgrade canonical baseline ───────────────────────────────────────
 
 
-def test_downgrade_then_upgrade_roundtrip():
+def test_repeated_upgrade_preserves_canonical_defect_contract():
     from alembic import command
 
     cfg = Config("alembic.ini")
-    command.downgrade(cfg, DOWN_REVISION)
-    assert _tables_present() == set()  # все defect-таблицы удалены
     command.upgrade(cfg, "head")
     assert set(DEFECT_TABLES) <= _tables_present()
-    # Seed восстановлен после re-upgrade (идемпотентно).
+    # Seed остаётся неизменным после повторного idempotent upgrade.
     s = SessionLocal()
     try:
-        assert (
-            s.execute(text(f"SELECT count(*) FROM {QUALITY}.defect_types")).scalar_one()
-            == len(DEFECT_TYPE_SEED)
+        actual_codes = set(
+            s.execute(
+                text(f"SELECT code FROM {QUALITY}.defect_types")
+            ).scalars()
         )
     finally:
         s.close()
+    assert {item["code"] for item in DEFECT_TYPE_SEED} <= actual_codes
     assert len(_script().get_heads()) == 1

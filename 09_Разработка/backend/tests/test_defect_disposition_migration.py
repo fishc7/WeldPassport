@@ -8,8 +8,10 @@
 
 from __future__ import annotations
 
+import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from alembic.util import CommandError
 from sqlalchemy import text
 
 from app.quality.defect_disposition_models import (
@@ -18,8 +20,8 @@ from app.quality.defect_disposition_models import (
 )
 from app.shared.db import SessionLocal
 
-REVISION = "20260721_22_defect_dispositions"
-DOWN_REVISION = "20260720_21_defect_model"
+ACTIVE_REVISION = "canonical_baseline_v1"
+ARCHIVED_REVISION = "20260721_22_defect_dispositions"
 QUALITY = "quality"
 TABLE = "defect_dispositions"
 
@@ -39,9 +41,12 @@ def _fetch(sql: str) -> list[tuple]:
 # ── Alembic структура ──────────────────────────────────────────────────────────
 
 
-def test_linear_down_revision():
-    rev = _script().get_revision(REVISION)
-    assert rev.down_revision == DOWN_REVISION
+def test_active_graph_uses_canonical_baseline_and_hides_archived_revision():
+    script = _script()
+
+    assert script.get_heads() == [ACTIVE_REVISION]
+    with pytest.raises(CommandError, match="Can't locate revision"):
+        script.get_revision(ARCHIVED_REVISION)
 
 
 # ── Таблица и колонки ──────────────────────────────────────────────────────────
