@@ -8,8 +8,8 @@ updated_at: 2026-07-30
 
 summary:
   total_progress: 78
-  current_focus: "Authentication Boundary architecture accepted"
-  next_action: "Подготовить Authentication Boundary Implementation Plan и Prompt"
+  current_focus: "Authentication Boundary implementation package accepted"
+  next_action: "Выполнить семь pure TDD-gates; отдельно запросить PostgreSQL acceptance"
 
 modules:
   - code: constitution
@@ -58,11 +58,11 @@ modules:
   - code: authentication_boundary
     name: "Server-authenticated actor boundary"
     owner: "Архитектура / identity"
-    status: architecture_accepted_implementation_pending
-    progress: 20
+    status: design_complete_implementation_ready
+    progress: 30
     branch: codex/b04b-maintenance-readiness-review
     visible: true
-    note: "ADR-034 и Authentication Boundary Design приняты 2026-07-30; local account + opaque session; production X-User-Id запрещён; Implementation Plan, Prompt и реализация pending."
+    note: "ADR-034, Design, Implementation Plan и Prompt приняты 2026-07-30; local account + opaque session; production X-User-Id запрещён; семь pure TDD-gates ready, operational PostgreSQL pending."
 
   - code: canonical_baseline_b04a
     name: "B-04A → PostgreSQL 16 historical verification"

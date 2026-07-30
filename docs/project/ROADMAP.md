@@ -100,8 +100,9 @@ active Alembic graph имеет один head `canonical_baseline_v1`, productio
   [[docs/project/ADR-034-authentication-boundary|ADR-034]] и
   [[docs/superpowers/specs/2026-07-30-authentication-boundary-design|Architecture Design]];
   выбран local account + opaque server session, production `X-User-Id`
-  запрещён; следующий шаг — Implementation Plan и Prompt, затем раздельные
-  Domain/Migration/Service/API/Tests gates.
+  запрещён; Implementation Plan и Prompt приняты; следующий шаг — раздельные
+  Domain/Migration/Service/API/Tests pure gates, затем отдельно разрешаемая
+  PostgreSQL acceptance.
 
 ### 1. Test DB Safety Interlock — завершён
 

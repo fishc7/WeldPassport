@@ -4781,3 +4781,18 @@ test-only FastAPI dependency override.
 `AUTHENTICATION_BOUNDARY_ACCEPTED`. Далее отдельно принимаются Implementation
 Plan, Prompt, Domain Model, Migration, Service/API, Tests и isolated PostgreSQL
 evidence.
+
+### ADR-034 implementation package checkpoint
+
+Дата: 2026-07-30
+
+Статус: **PLAN AND PROMPT ACCEPTED**
+
+Приняты:
+
+- [[docs/superpowers/plans/2026-07-30-authentication-boundary|Implementation Plan]];
+- [[docs/project/TASK_AUTHENTICATION_BOUNDARY_CLAUDE_CODE_PROMPT|Cursor / Claude Code Prompt]].
+
+План разделяет Domain primitives, Domain Model, Migration, Service,
+API/test-only adapter, Operator CLI и Pure closure. Live PostgreSQL acceptance
+не входит в implicit implementation authorization и остаётся отдельным gate.

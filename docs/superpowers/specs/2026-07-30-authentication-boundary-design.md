@@ -1,7 +1,7 @@
 # Authentication Boundary — архитектурный дизайн
 
 Дата: 2026-07-30
-Статус: **ACCEPTED FOR PLANNING**
+Статус: **ACCEPTED**
 Gate: `AUTHENTICATION_BOUNDARY_ACCEPTED`
 
 ## 1. Цель
@@ -97,12 +97,16 @@ Credentials, raw tokens, cookies и пароли в audit запрещены.
 - `worker_id: int | None`;
 - `authenticated_at: datetime`;
 - `auth_method: LOCAL_PASSWORD`;
+- `must_change_password: bool`.
 
 Основная dependency — `get_authenticated_actor`.
 
 Compatibility dependency `get_current_user_id` перестаёт читать header и
 извлекает `worker_id` только из `AuthenticatedActor`. Если worker отсутствует,
 неактивен или недоступен, производственная команда получает `403`.
+Если account использует временный пароль (`must_change_password=true`),
+разрешены только `/auth/me`, `/auth/change-password` и logout; бизнес-команды
+получают `403 PASSWORD_CHANGE_REQUIRED`.
 
 Новый код использует `AuthenticatedActor`; старые endpoints могут временно
 использовать server-derived `get_current_user_id` до отдельной механической
@@ -203,6 +207,7 @@ OIDC, MFA, service accounts, API keys и machine-to-machine authentication
 - `CSRF_VALIDATION_FAILED` — unsafe request не подтверждён, HTTP 403;
 - `ACTOR_WORKER_REQUIRED` — команда требует worker binding, HTTP 403;
 - `ACTOR_WORKER_INACTIVE` — worker неактивен, HTTP 403;
+- `PASSWORD_CHANGE_REQUIRED` — временный пароль должен быть заменён, HTTP 403;
 - `PASSWORD_POLICY_FAILED` — новый пароль не соответствует policy, HTTP 422;
 - `IDENTITY_CONFLICT` — optimistic/version conflict, HTTP 409.
 
