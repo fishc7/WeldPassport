@@ -370,7 +370,15 @@ endpoint or schema-default behavior change beyond registry/schema dependency.
 **Files:**
 
 - Create: `09_Разработка/backend/app/workforce/legacy_contract.py`
+- Modify: `09_Разработка/backend/app/workforce/models.py` only to declare the
+  existing `ДОПУСКИ_К_ОБЪЕКТУ.ID_Объекта` type explicitly as `Integer`.
 - Test: `09_Разработка/backend/migration_contract_tests/test_legacy_contract.py`
+
+Execution amendment accepted by the owner on 2026-07-30: the external
+`ОБЪЕКТЫ` FK left `ID_Объекта` as SQLAlchemy `NullType`, so the mandatory type
+contract could not be derived from `LegacyBase.metadata`. The explicit
+`Integer` declaration is metadata-completing and does not change the intended
+database type, migration graph or runtime behavior.
 
 **Interfaces:**
 

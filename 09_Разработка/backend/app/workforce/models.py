@@ -216,6 +216,7 @@ class DopuskKObektu(Base):
     )
     id_obekta: Mapped[int] = mapped_column(
         "ID_Объекта",
+        Integer,
         ForeignKey(f"{SCHEMA}.ОБЪЕКТЫ.ID_Объекта"),
         nullable=False,
     )
