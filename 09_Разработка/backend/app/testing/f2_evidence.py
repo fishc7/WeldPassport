@@ -36,6 +36,11 @@ _FAILED_EVIDENCE = (
     "TEST-DB-F2-EVIDENCE-FAILED",
     "TEST-DB-F2 evidence could not be published or verified",
 )
+_ARTIFACT_ROLES = {
+    "10_canonical.json": "canonical",
+    "20_legacy_compatible.json": "legacy_compatible",
+    "30_legacy_negative.json": "legacy_negative",
+}
 
 
 @dataclass(frozen=True)
@@ -168,6 +173,10 @@ def verify_artifact(
             or payload.get("source_sha") != expected_source_sha
             or payload.get("previous_digest") != expected_previous_digest
             or payload.get("status") != "verified"
+            or (
+                expected_name in _ARTIFACT_ROLES
+                and payload.get("role") != _ARTIFACT_ROLES[expected_name]
+            )
         ):
             raise ValueError
     except F2Error:
