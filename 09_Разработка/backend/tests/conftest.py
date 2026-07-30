@@ -86,9 +86,11 @@ from app.quality.models import (
     QualityFindingSequence,
 )
 from app.shared.db import SessionLocal, engine, get_db
+from app.shared.auth import get_current_user_id
 from app.shared.test_database_ownership import (
     verify_test_database_ownership as verify_live_test_database_ownership,
 )
+from tests.auth_support import test_current_user_id
 from app.welding.models import Welder, WelderAdmission
 
 API_PREFIX = "/api/v1/ogs/welders"
@@ -130,6 +132,7 @@ def client(db: Session) -> Generator[TestClient, None, None]:
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user_id] = test_current_user_id
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

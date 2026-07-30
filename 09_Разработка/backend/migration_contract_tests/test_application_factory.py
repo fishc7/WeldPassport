@@ -23,6 +23,26 @@ from app.shared.runtime_profile import (
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 
+def _route_paths(app) -> list[str]:
+    paths: list[str] = []
+    for route in app.routes:
+        path = getattr(route, "path", None)
+        if path is not None:
+            paths.append(path)
+            continue
+        original_router = getattr(route, "original_router", None)
+        include_context = getattr(route, "include_context", None)
+        if original_router is None or include_context is None:
+            continue
+        prefix = include_context.prefix
+        paths.extend(
+            f"{prefix}{child.path}"
+            for child in original_router.routes
+            if getattr(child, "path", None) is not None
+        )
+    return paths
+
+
 def _router(path: str) -> APIRouter:
     router = APIRouter()
 
@@ -165,7 +185,7 @@ def test_application_factory_004_legacy_failure_never_loads_router() -> None:
         "bind_legacy_schema",
         "legacy_contract",
     ]
-    assert all(route.path != "/api/v1/workers" for route in app.routes)
+    assert "/api/v1/workers" not in _route_paths(app)
     assert app.state.runtime_ready is False
 
 
@@ -180,9 +200,9 @@ def test_application_factory_005_repeated_lifespan_does_not_duplicate_routes() -
     )
 
     _run_lifespan(app)
-    first_count = sum(route.path == "/api/v1/workers" for route in app.routes)
+    first_count = _route_paths(app).count("/api/v1/workers")
     _run_lifespan(app)
-    second_count = sum(route.path == "/api/v1/workers" for route in app.routes)
+    second_count = _route_paths(app).count("/api/v1/workers")
 
     assert first_count == second_count == 1
     assert events.count("canonical_marker") == 2
@@ -196,7 +216,12 @@ import sys
 import app.main
 loaded = sorted(name for name in sys.modules if name.startswith("app.workforce"))
 assert loaded == [], loaded
-assert all(route.path != "/api/v1/workers" for route in app.main.app.routes)
+for route in app.main.app.routes:
+    assert getattr(route, "path", None) != "/api/v1/workers"
+    original = getattr(route, "original_router", None)
+    prefix = getattr(getattr(route, "include_context", None), "prefix", "")
+    if original is not None:
+        assert all(prefix + child.path != "/api/v1/workers" for child in original.routes)
 """
     result = subprocess.run(
         [sys.executable, "-c", code],

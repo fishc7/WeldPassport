@@ -8,6 +8,8 @@ from typing import cast
 
 from fastapi import APIRouter, FastAPI
 
+from app.identity.domain import validate_auth_configuration
+from app.shared.config import settings
 from app.shared.runtime_profile import (
     RuntimeConfiguration,
     RuntimeContractError,
@@ -16,6 +18,7 @@ from app.shared.runtime_profile import (
 
 
 CANONICAL_ROUTER_SPECS = (
+    ("app.identity.api", "router", "/api/v1"),
     ("app.hr.api", "router", "/api/v1"),
     ("app.welding.api", "router", "/api/v1"),
     ("app.projects.api", "router", "/api/v1"),
@@ -106,6 +109,10 @@ def create_app(
     dependencies: RuntimeDependencies | None = None,
 ) -> FastAPI:
     deps = _default_dependencies() if dependencies is None else dependencies
+    validate_auth_configuration(
+        deployment_environment=settings.deployment_environment,
+        cookie_secure=settings.auth_cookie_secure,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
