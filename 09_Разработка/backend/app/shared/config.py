@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,6 +11,14 @@ class Settings(BaseSettings):
     postgres_user: str = "postgres"
     postgres_password: str = ""
     postgres_schema: str = "test"
+    runtime_profile: str | None = Field(
+        default=None,
+        validation_alias="WELDPASSPORT_RUNTIME_PROFILE",
+    )
+    legacy_schema: str | None = Field(
+        default=None,
+        validation_alias="WELDPASSPORT_LEGACY_SCHEMA",
+    )
 
     # ── Импорт XLSX (Task 8E) ────────────────────────────────────────────────
     # Бэкенд файлового хранилища исходных XLSX: "local" (dev/тесты) или "s3".
