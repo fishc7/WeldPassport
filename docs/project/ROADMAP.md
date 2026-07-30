@@ -70,12 +70,17 @@ active Alembic graph имеет один head `canonical_baseline_v1`, productio
   preflight остаётся полностью offline и предшествует новому разрешению на
   PostgreSQL rehearsal;
 - operator-preflight tooling реализован и прошёл pure-приёмку:
-  `43 passed, 1 skipped` focused, `818 passed, 3 skipped` full pure,
-  review `APPROVED`; transient environment отсутствует (`0/13`), поэтому
-  operational `READY` не присвоен;
+  `44 passed, 1 skipped` focused, `819 passed, 3 skipped` full pure,
+  review `APPROVED`;
+- offline operator preflight выполнен 2026-07-30 и получил
+  `TEST_DB_F2_OPERATOR_PREFLIGHT_READY`; evidence id
+  `623f7ca6-0c19-4a2c-b3c0-3177060ed4f0`, SHA-256
+  `6035733a67755b96e592b9cae50e5c8eae048710a94f88471cb3283bdeef679c`;
+  PostgreSQL и DB lifecycle не запускались;
 - следующий execution order:
-  `RUNTIME-COMPAT-1 → TEST-DB-F2-PURE-RUNNER → operator preflight → отдельно
-  разрешённый local PostgreSQL rehearsal → evidence review → owner acceptance`;
+  `RUNTIME-COMPAT-1 → TEST-DB-F2-PURE-RUNNER → operator preflight READY →
+  отдельно разрешённый local PostgreSQL rehearsal → evidence review →
+  owner acceptance`;
 - после приёмки TEST-DB Foundation и Runtime Compatibility Profile выполняется
   Task 9D-4A-5A, затем оставшийся Quality-контур.
 

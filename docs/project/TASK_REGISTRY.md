@@ -146,10 +146,11 @@ B-04B — `done / ADOPTION_ACCEPTED`; migration freeze released;
 TEST-DB Foundation — `implemented_unverified / F2 architecture accepted`;
 Runtime profile — `implemented_unverified / pure verified / review approved`;
 TEST-DB-F2 pure runner и operator-preflight tooling —
-`implemented_unverified / pure verified / review approved`.
-Следующий gate: operator устанавливает полный transient environment и выполняет
-offline preflight; PostgreSQL rehearsal и operational acceptance требуют
-отдельного нового разрешения.
+`implemented_unverified / pure verified / review approved`; offline operator
+preflight — `TEST_DB_F2_OPERATOR_PREFLIGHT_READY` (evidence
+`623f7ca6-0c19-4a2c-b3c0-3177060ed4f0`).
+Следующий gate: отдельно разрешаемый local PostgreSQL rehearsal; PostgreSQL и
+operational acceptance требуют нового разрешения.
 
 ## Electronic Documentation Layer (ADR-018, Session 008-06)
 

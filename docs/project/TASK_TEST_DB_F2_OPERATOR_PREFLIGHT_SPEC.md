@@ -243,21 +243,32 @@ Implementation commits:
 - `9b8dc29` — distinct authorization/source/prerequisite contract;
 - `e493308` — offline state machine, artifact и thin CLI;
 - `f1027e0` — governance и environment-name documentation;
-- `de656d5` — review remediation common repository containment.
+- `de656d5` — review remediation common repository containment;
+- `527c4d3` — direct-script CLI bootstrap и regression test.
 
 Evidence:
 
-- focused operator-preflight suite: `43 passed, 1 skipped`;
-- полный `migration_contract_tests`: `818 passed, 3 skipped`;
+- focused operator-preflight suite: `44 passed, 1 skipped`;
+- полный `migration_contract_tests`: `819 passed, 3 skipped`;
 - compile, `git diff --check` и scope/security audit успешны;
 - read-only review после remediation: `APPROVED`, открытых Critical/Important
   findings нет.
 
-Проверка environment presence выполнена без чтения или печати значений:
-`0/13` required transient variables присутствуют. Поэтому CLI с operator inputs
-не запускался и `TEST_DB_F2_OPERATOR_PREFLIGHT_READY` не присваивался.
+Фактический offline operator preflight выполнен 2026-07-30 с transient inputs,
+сформированными в памяти процесса из игнорируемого Git backend `.env`. Значения
+credentials и ownership tokens не печатались и не сохранялись в репозитории.
+
+Operational evidence:
+
+- status: `TEST_DB_F2_OPERATOR_PREFLIGHT_READY`;
+- preflight id: `623f7ca6-0c19-4a2c-b3c0-3177060ed4f0`;
+- artifact:
+  `operator-preflight-623f7ca6-0c19-4a2c-b3c0-3177060ed4f0/00_operator_preflight.json`;
+- SHA-256:
+  `6035733a67755b96e592b9cae50e5c8eae048710a94f88471cb3283bdeef679c`;
+- artifact digest, source SHA, role order, single-file namespace и отсутствие
+  forbidden secret keys/patterns проверены повторно.
 
 PostgreSQL, Alembic CLI, application suite, worker и DB lifecycle не
-запускались. Для фактического offline preflight оператор должен отдельно
-установить полный transient environment; даже успешный `READY` после этого не
-разрешит PostgreSQL rehearsal без нового разрешения владельца.
+запускались. Полученный `READY` не разрешает PostgreSQL rehearsal без нового
+отдельного разрешения владельца.
