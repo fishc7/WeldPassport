@@ -58,8 +58,9 @@ active Alembic graph имеет один head `canonical_baseline_v1`, productio
 - owner acceptance SHA-256:
   `c257b1b4736ac53be731d7de8369d45808cd4eeba1af569534272a3a4dca3b56`;
 - TEST-DB-F1 pure core реализован и зафиксирован commit `20c7ea7`;
-- Runtime Compatibility Profile спроектирован; Implementation Plan и Prompt
-  `RUNTIME-COMPAT-1` приняты 2026-07-30, реализация ещё не начата;
+- Runtime Compatibility Profile реализован как `RUNTIME-COMPAT-1` и имеет статус
+  `IMPLEMENTED_UNVERIFIED / PURE VERIFIED / REVIEW APPROVED`; focused
+  `60 passed`, полный pure suite `738 passed, 2 skipped`;
 - local TEST-DB-F2 architecture принята в
   [[docs/project/ADR-033-test-db-f2-local-rehearsal|ADR-033]];
 - следующий execution order:

@@ -4535,3 +4535,32 @@ pure verification gate без PostgreSQL и Alembic CLI.
 Эта приёмка не разрешает реализацию, PostgreSQL, Alembic, application tests,
 stage, commit или push. Для каждого следующего действия сохраняются отдельные
 разрешения владельца.
+
+### RUNTIME-COMPAT-1 pure implementation checkpoint
+
+Дата: 2026-07-30
+
+Статус: **IMPLEMENTED_UNVERIFIED / PURE VERIFIED / REVIEW APPROVED**
+
+Реализация зафиксирована commits:
+
+- `0b3cbdd` — explicit runtime profile contract;
+- `d5dce3e` — isolated legacy workforce metadata;
+- `5751997` — deterministic legacy executable contract;
+- `8064517` — read-only legacy catalog/privilege preflight;
+- `f4ba488` — canonical marker preflight;
+- `b0cbe57` — fail-closed application composition;
+- `5df1278` — pure verification closure.
+
+Evidence:
+
+- focused RUNTIME-COMPAT-1 suite: `60 passed`;
+- full pure migration contracts: `738 passed, 2 skipped`;
+- compile, canonical import isolation, legacy repository import и
+  `git diff --check` успешны;
+- read-only review: `APPROVED`, Critical/Important findings отсутствуют.
+
+PostgreSQL, Alembic CLI и application suite не запускались. Статус не является
+operational acceptance; следующий gate —
+`TEST-DB-F2-PURE-RUNNER`, затем отдельно разрешаемый
+`TEST-DB-F2 / RUNTIME-COMPAT-2` isolated PostgreSQL rehearsal.
